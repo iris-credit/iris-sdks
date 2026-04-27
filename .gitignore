@@ -1,0 +1,9 @@
+node_modules/
+lib/
+out/
+forge-out/
+cache/
+.turbo/
+*.tsbuildinfo
+.worktrees/
+.claude.local.md

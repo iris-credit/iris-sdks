@@ -1,0 +1,39 @@
+{
+  "name": "@iris/test",
+  "version": "0.0.0",
+  "private": true,
+  "files": [
+    "lib"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js"
+    },
+    "./vitest": {
+      "types": "./lib/vitest.d.ts",
+      "import": "./lib/vitest.js"
+    },
+    "./fixtures": {
+      "types": "./lib/fixtures.d.ts",
+      "import": "./lib/fixtures.js"
+    }
+  },
+  "dependencies": {
+    "viem-deal": "^2.0.3",
+    "viem-tracer": "^1.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0"
+  },
+  "peerDependencies": {
+    "viem": "^2.21.10",
+    "vitest": ">=2.0.0 <5.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
+    }
+  }
+}

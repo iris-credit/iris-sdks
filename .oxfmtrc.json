@@ -1,0 +1,20 @@
+{
+  "sortImports": {
+    "groups": [
+      ["type-builtin", "type-external"],
+      { "newlinesBetween": false },
+      "type-internal",
+      { "newlinesBetween": false },
+      ["type-parent", "type-sibling", "type-index"],
+      ["value-builtin", "value-external"],
+      { "newlinesBetween": false },
+      "value-internal",
+      { "newlinesBetween": false },
+      ["value-parent", "value-sibling", "value-index"],
+      "unknown"
+    ],
+    "newlinesBetween": true,
+    "internalPattern": ["@iris/"],
+    "order": "asc"
+  }
+}

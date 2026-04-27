@@ -1,0 +1,6 @@
+{
+  "plugins": ["import"],
+  "rules": {
+    "import/consistent-type-specifier-style": ["error", "prefer-top-level"]
+  }
+}
