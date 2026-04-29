@@ -2,23 +2,53 @@
   "name": "@iris/test",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "files": [
     "lib"
   ],
   "type": "module",
+  "main": "src/index.ts",
   "exports": {
     ".": {
-      "types": "./lib/index.d.ts",
-      "import": "./lib/index.js"
+      "types": "./lib/esm/index.d.ts",
+      "import": "./lib/esm/index.js",
+      "require": "./lib/cjs/index.js"
     },
     "./vitest": {
-      "types": "./lib/vitest.d.ts",
-      "import": "./lib/vitest.js"
+      "types": "./lib/esm/vitest.d.ts",
+      "import": "./lib/esm/vitest.js",
+      "require": "./lib/cjs/vitest.js"
     },
     "./fixtures": {
-      "types": "./lib/fixtures.d.ts",
-      "import": "./lib/fixtures.js"
+      "types": "./lib/esm/fixtures.d.ts",
+      "import": "./lib/esm/fixtures.js",
+      "require": "./lib/cjs/fixtures.js"
     }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/esm/index.d.ts",
+        "import": "./lib/esm/index.js",
+        "require": "./lib/cjs/index.js"
+      },
+      "./vitest": {
+        "types": "./lib/esm/vitest.d.ts",
+        "import": "./lib/esm/vitest.js",
+        "require": "./lib/cjs/vitest.js"
+      },
+      "./fixtures": {
+        "types": "./lib/esm/fixtures.d.ts",
+        "import": "./lib/esm/fixtures.js",
+        "require": "./lib/cjs/fixtures.js"
+      }
+    }
+  },
+  "scripts": {
+    "prepublish": "$npm_execpath build",
+    "build": "tsgo --noEmit && $npm_execpath build:cjs && $npm_execpath build:esm",
+    "build:cjs": "tsgo --build tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > lib/cjs/package.json",
+    "build:esm": "tsgo --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json"
   },
   "dependencies": {
     "viem-deal": "^2.0.3",

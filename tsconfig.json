@@ -4,14 +4,19 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "moduleDetection": "force",
-    "strict": true,
-    "declaration": true,
     "skipLibCheck": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "declaration": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
     "forceConsistentCasingInFileNames": true,
     "noUncheckedIndexedAccess": true,
     "esModuleInterop": true,
-    "resolveJsonModule": true
-  },
-  "references": [{ "path": "packages/iris-ts" }, { "path": "packages/test" }],
-  "include": []
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "jsx": "preserve"
+  }
 }

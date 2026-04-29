@@ -1,0 +1,51 @@
+export enum ChainId {
+  EthMainnet = 1,
+  // BaseMainnet = 8453,
+}
+
+export interface ChainMetadata {
+  readonly name: string;
+  readonly id: ChainId;
+  readonly explorerUrl: string;
+  readonly nativeCurrency: {
+    readonly name: string;
+    readonly symbol: string;
+    readonly decimals: number;
+  };
+  readonly identifier: string;
+}
+
+export namespace ChainUtils {
+  export const toHexChainId = (chainId: ChainId) => {
+    return `0x${chainId.toString(16)}`;
+  };
+
+  export const getExplorerUrl = (chainId: ChainId) => {
+    return ChainUtils.CHAIN_METADATA[chainId].explorerUrl;
+  };
+
+  export const getExplorerAddressUrl = (chainId: ChainId, address: string) => {
+    return `${getExplorerUrl(chainId)}/address/${address}`;
+  };
+
+  export const getExplorerTransactionUrl = (chainId: ChainId, tx: string) => {
+    return `${getExplorerUrl(chainId)}/tx/${tx}`;
+  };
+
+  export const CHAIN_METADATA = {
+    [ChainId.EthMainnet]: {
+      name: "Ethereum",
+      id: ChainId.EthMainnet,
+      nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+      explorerUrl: "https://etherscan.io",
+      identifier: "mainnet",
+    },
+    // [ChainId.BaseMainnet]: {
+    //   name: "Base",
+    //   id: ChainId.BaseMainnet,
+    //   nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+    //   explorerUrl: "https://basescan.org",
+    //   identifier: "base",
+    // },
+  } satisfies Record<ChainId, ChainMetadata>;
+}

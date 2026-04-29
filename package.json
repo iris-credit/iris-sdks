@@ -1,5 +1,6 @@
 {
   "name": "iris-sdks",
+  "private": true,
   "description": "Collection of SDKs to ease interactions with the IRIS credit",
   "license": "MIT",
   "author": "IRIS Team <team@iris.credit>",
@@ -7,16 +8,15 @@
     "type": "git",
     "url": "https://github.com/246club/iris-sdks.git"
   },
-  "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsgo --build",
+    "prepare": "husky",
+    "build": "pnpm -r --if-present --workspace-concurrency=1 build",
     "clean": "rm -rf dist",
     "test": "turbo run test",
     "lint": "oxlint",
     "format": "oxfmt",
-    "format:check": "oxfmt --check",
-    "prepare": "husky"
+    "format:check": "oxfmt --check"
   },
   "devDependencies": {
     "@typescript/native-preview": "latest",
