@@ -1,7 +1,9 @@
-export enum ChainId {
-  EthMainnet = 1,
-  // BaseMainnet = 8453,
-}
+export const ChainId = {
+  EthMainnet: 1,
+  // BaseMainnet: 8453,
+} as const;
+
+export type ChainId = (typeof ChainId)[keyof typeof ChainId];
 
 export interface ChainMetadata {
   readonly name: string;
