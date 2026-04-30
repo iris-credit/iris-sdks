@@ -30,10 +30,10 @@
     "build:cjs": "tsgo --build tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > lib/cjs/package.json",
     "build:esm": "tsgo --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json"
   },
+  "dependencies": {
+    "@iris/iris-ts": "workspace:^"
+  },
   "devDependencies": {
     "viem": "^2.41.2"
-  },
-  "peerDependencies": {
-    "@iris/iris-ts": "workspace:^"
   }
 }
