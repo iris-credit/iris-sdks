@@ -1,3 +1,5 @@
+import { values } from "@iris/iris-ts";
+
 export const ChainId = {
   EthMainnet: 1,
   // BaseMainnet: 8453,
@@ -33,6 +35,8 @@ export namespace ChainUtils {
   export const getExplorerTransactionUrl = (chainId: ChainId, tx: string) => {
     return `${getExplorerUrl(chainId)}/tx/${tx}`;
   };
+
+  export const supportedChainIds = values(ChainId);
 
   export const CHAIN_METADATA = {
     [ChainId.EthMainnet]: {
