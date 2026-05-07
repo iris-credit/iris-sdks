@@ -1,4 +1,4 @@
-import { values } from "@iris/iris-ts";
+import { values } from "@iris-credit/iris-ts";
 
 export const ChainId = {
   EthMainnet: 1,

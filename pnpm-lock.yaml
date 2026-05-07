@@ -38,7 +38,7 @@ importers:
 
   packages/core-sdk:
     dependencies:
-      '@iris/iris-ts':
+      '@iris-credit/iris-ts':
         specifier: workspace:^
         version: link:../iris-ts
     devDependencies:

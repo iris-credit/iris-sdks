@@ -14,7 +14,7 @@
       "unknown"
     ],
     "newlinesBetween": true,
-    "internalPattern": ["@iris/"],
+    "internalPattern": ["@iris-credit/"],
     "order": "asc"
   }
 }
