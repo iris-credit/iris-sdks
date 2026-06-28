@@ -34,6 +34,7 @@
     "viem": "^2.41.2"
   },
   "peerDependencies": {
-    "@iris-credit/iris-ts": "workspace:^"
+    "@iris-credit/iris-ts": "workspace:^",
+    "viem": "^2"
   }
 }
