@@ -1,4 +1,0 @@
-# Generated contract ABIs (see packages/*/scripts/sync-abis.mjs).
-# These are emitted by a codegen script and must not be reformatted, or
-# every regeneration would diff against the formatter's output.
-**/src/abis/
