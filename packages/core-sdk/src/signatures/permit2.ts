@@ -50,8 +50,7 @@ export const getPermit2PermitTypedData = (
       details: {
         token: details.token,
         amount: MathLib.min(details.amount, MathLib.MAX_UINT_160),
-        // Use an unlimited expiration because it most closely mimics how a standard approval works.
-        expiration: MathLib.min(details.expiration ?? MathLib.MAX_UINT_48, MathLib.MAX_UINT_48),
+        expiration: MathLib.min(details.expiration, MathLib.MAX_UINT_48),
         nonce: details.nonce,
       },
       spender,
