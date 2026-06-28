@@ -1,10 +1,3 @@
-// Vendored from iris-core (Foundry build output).
-// Errors from contracts the SDK does not vendor a full ABI for, so their reverts can
-// still be decoded. Iris/Blm/WhitelistBlm errors are NOT here — they ship in
-// irisAbi/blmAbi/whitelistBlmAbi. Sources: IVenueAdapter, Aave v3-origin, solady.
-// Morpho Blue reverts with Error(string), decoded natively by viem.
-// Provenance: iris-core @ 22ea4d3 (solc 0.8.35+commit.47b9dedd)
-
 export const errorsAbi = [
   {
     type: "error",

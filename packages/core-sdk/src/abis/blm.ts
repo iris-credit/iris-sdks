@@ -1,7 +1,3 @@
-// Vendored from iris-core (Foundry build output).
-// Source: iris-core out/Blm.sol/Blm.json
-// Provenance: iris-core @ 22ea4d3 (solc 0.8.35+commit.47b9dedd)
-
 export const blmAbi = [
   {
     type: "constructor",
