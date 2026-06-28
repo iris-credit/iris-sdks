@@ -1,13 +1,12 @@
 // Vendored from iris-core (Foundry build output).
-// Merged custom errors for decoding reverts from the Iris stack.
-// Protocol + venue adapters: Iris, Blm, WhitelistBlm, AaveV3Adapter, MorphoBlueAdapter.
-// Dependency errors that propagate through the adapters:
-//   out/SafeTransferLib.sol/SafeTransferLib.json — solady transfer/approve/permit2 errors (9 errors)
-//   out/LibClone.sol/LibClone.json — solady clone (pod) deployment errors (3 errors)
-//   out/Errors.sol/Errors.json — Aave V3 (aave-v3-origin) protocol errors (92 errors)
-// Deduped by selector: 146 collected -> 133 unique.
-// Note: Morpho Blue reverts with Error(string) (decoded natively by viem), so it has
-// no custom-error ABI; Aave V3 (aave-v3-origin) uses custom errors, included above.
+// Merged custom errors for decoding any custom-error revert that reaches an SDK
+// caller from the Iris stack. Sources:
+//   Iris, Blm, WhitelistBlm (protocol contracts)
+//   IVenueAdapter (venue-adapter errors: CollateralTokenMismatch, DebtTokenMismatch, ZeroAddress)
+//   solady SafeTransferLib + LibClone (transfer/approve/permit2 + clone/pod-deploy errors)
+//   Aave V3 / aave-v3-origin Errors (protocol errors)
+// 133 unique errors, deduped by selector. Note: Morpho Blue reverts with Error(string),
+// decoded natively by viem, so it has no custom-error ABI.
 // Provenance: iris-core @ 22ea4d3 (solc 0.8.35+commit.47b9dedd)
 
 export const errorsAbi = [

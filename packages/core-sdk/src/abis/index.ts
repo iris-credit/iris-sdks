@@ -5,6 +5,4 @@
 export * from "./iris.js";
 export * from "./blm.js";
 export * from "./whitelist-blm.js";
-export * from "./aave-v3-adapter.js";
-export * from "./morpho-blue-adapter.js";
 export * from "./errors.js";
