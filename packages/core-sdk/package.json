@@ -25,7 +25,6 @@
     }
   },
   "scripts": {
-    "sync:abis": "node scripts/sync-abis.mjs",
     "prepublish": "$npm_execpath build",
     "build": "tsgo --noEmit && $npm_execpath build:cjs && $npm_execpath build:esm",
     "build:cjs": "tsgo --build tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > lib/cjs/package.json",
