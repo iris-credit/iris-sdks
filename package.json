@@ -6,7 +6,7 @@
   "author": "IRIS Team <team@iris.credit>",
   "repository": {
     "type": "git",
-    "url": "https://github.com/246club/iris-sdks.git"
+    "url": "https://github.com/iris-credit/iris-sdks.git"
   },
   "type": "module",
   "scripts": {
