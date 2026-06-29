@@ -1,0 +1,45 @@
+name: Publish
+
+# Auto-publishes @iris-credit/core-sdk and @iris-credit/iris-ts to GitHub Packages
+# on every merge to main that changes packages/. Versioning is intentionally
+# throwaway (0.0.<run_number>) — consumers track the `latest` tag. Switch to real
+# semver when publishing publicly to npm.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://npm.pkg.github.com
+          scope: "@iris-credit"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm -r build
+
+      # Stamp a unique, monotonically increasing version on every package so the
+      # registry never rejects a duplicate. Both publishable packages get the same
+      # version (lockstep), so core-sdk's `workspace:^` peer on iris-ts resolves.
+      - name: Stamp version
+        run: pnpm -r exec npm version "0.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
+
+      - name: Publish
+        run: pnpm -r publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

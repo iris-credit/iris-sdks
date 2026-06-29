@@ -1,8 +1,12 @@
 {
   "name": "@iris-credit/core-sdk",
   "version": "0.0.0",
-  "private": true,
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iris-credit/iris-sdks.git",
+    "directory": "packages/core-sdk"
+  },
   "files": [
     "lib"
   ],
@@ -16,6 +20,7 @@
     }
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "exports": {
       ".": {
         "types": "./lib/esm/index.d.ts",
