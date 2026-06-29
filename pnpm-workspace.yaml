@@ -1,2 +1,9 @@
 packages:
   - packages/*
+# Approve dependency build scripts (pnpm blocks them by default). Without explicit
+# true/false here, CI installs (CI=true) fail with ERR_PNPM_IGNORED_BUILDS. esbuild
+# needs its binary (for vitest); the others are optional native addons for ws.
+allowBuilds:
+  bufferutil: false
+  esbuild: true
+  utf-8-validate: false
