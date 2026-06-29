@@ -1,9 +1,9 @@
 name: Publish
 
-# Auto-publishes @iris-credit/core-sdk and @iris-credit/iris-ts to public npm
-# on every merge to main that changes packages/. Versioning is intentionally
-# throwaway (0.0.<run_number>) — consumers track the `latest` tag. Adopt
-# changesets/semver when the API stabilizes.
+# Auto-publishes @iris-credit/core-sdk and @iris-credit/iris-ts to public npm via
+# OIDC Trusted Publishing (no token), on every merge to main that changes packages/.
+# Versioning is intentionally throwaway (0.0.<run_number>) — consumers track the
+# `latest` tag. Adopt changesets/semver when the API stabilizes.
 on:
   push:
     branches: [main]
@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write # OIDC identity for token-free Trusted Publishing
 
 jobs:
   publish:
@@ -28,6 +29,10 @@ jobs:
           scope: "@iris-credit"
           cache: pnpm
 
+      # Trusted Publishing (OIDC) needs npm >= 11.5.1; the Node-bundled npm 10.x
+      # can't reliably self-upgrade to latest, so pin a known-good npm 11 release.
+      - run: npm install -g npm@11.11.0
+
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm -r build
@@ -38,7 +43,6 @@ jobs:
       - name: Stamp version
         run: pnpm -r exec npm version "0.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
 
+      # No token: authenticates to npm via GitHub OIDC (Trusted Publishing).
       - name: Publish
         run: pnpm -r publish --no-git-checks --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
