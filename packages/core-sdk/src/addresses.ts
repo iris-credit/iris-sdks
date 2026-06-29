@@ -9,7 +9,7 @@ import { ChainId } from "./chain.js";
 export const NATIVE_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
 // Permit2 is deployed at the same canonical address on every chain.
-const PERMIT2_ADDRESS: Address = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
 // Fields guaranteed on every supported chain. Chain-specific addresses
 // (protocol integrations, tokens) vary per chain and are inferred from
