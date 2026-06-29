@@ -1,0 +1,18 @@
+name: Bullfrog egress firewall
+description: Block all outbound traffic except a tight allowlist for the duration of the job.
+
+inputs:
+  allowed-domains:
+    description: Newline-separated list of domains to allow outbound connections to.
+    required: false
+    default: |
+      registry.npmjs.org
+      nodejs.org
+
+runs:
+  using: composite
+  steps:
+    - uses: bullfrogsec/bullfrog@7bc9b6e13e2dd9cbe5861f33bc26dc6bdb9d9ed2 # v0.10.0
+      with:
+        egress-policy: block
+        allowed-domains: ${{ inputs.allowed-domains }}
