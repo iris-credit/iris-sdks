@@ -15,6 +15,7 @@
     "clean": "rm -rf dist",
     "test": "turbo run test",
     "lint": "oxlint",
+    "lint:address": "node scripts/lint/checksum-address.js",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
@@ -27,12 +28,14 @@
     "oxlint": "latest",
     "turbo": "^2.8.0",
     "typescript": "^5.9.0",
+    "viem": "^2.46.2",
     "vitest": "^4.0.0"
   },
   "lint-staged": {
     "*.{ts,tsx}": [
       "oxlint",
-      "oxfmt"
+      "oxfmt",
+      "node scripts/lint/checksum-address.js"
     ]
   },
   "engines": {
