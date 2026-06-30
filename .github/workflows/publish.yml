@@ -5,6 +5,7 @@ name: Publish
 # Versioning is intentionally throwaway (0.0.<run_number>) — consumers track the
 # `latest` tag. Adopt changesets/semver when the API stabilizes.
 on:
+  workflow_dispatch: # allow manual runs (e.g. to publish without a packages/** change)
   push:
     branches: [main]
     paths:
