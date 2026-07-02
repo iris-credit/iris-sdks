@@ -1,7 +1,8 @@
 name: Publish
 
-# Auto-publishes @iris-credit/core-sdk and @iris-credit/iris-ts to public npm via
-# OIDC Trusted Publishing (no token), on every merge to main that changes packages/.
+# Auto-publishes @iris-credit/core-sdk, @iris-credit/iris-ts and @iris-credit/test to
+# public npm via OIDC Trusted Publishing (no token), on every merge to main that
+# changes packages/.
 # Versioning is intentionally throwaway (0.0.<run_number>) — consumers track the
 # `latest` tag. Adopt changesets/semver when the API stabilizes.
 on:
@@ -39,7 +40,7 @@ jobs:
       - run: pnpm -r build
 
       # Stamp a unique, monotonically increasing version on every package so the
-      # registry never rejects a duplicate. Both publishable packages get the same
+      # registry never rejects a duplicate. All publishable packages get the same
       # version (lockstep), so core-sdk's `workspace:^` peer on iris-ts resolves.
       - name: Stamp version
         run: pnpm -r exec npm version "0.0.${{ github.run_number }}" --no-git-tag-version --allow-same-version
