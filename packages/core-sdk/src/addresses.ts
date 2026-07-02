@@ -34,7 +34,7 @@ const defineChainAddresses = <const T extends Record<ChainId, ChainAddressesBase
 export const CHAIN_ADDRESSES = defineChainAddresses({
   [ChainId.EthMainnet]: {
     // Iris protocol contracts.
-    iris: "0x25d82E76f94d2C3e4F33EbE883199EBf8019f969",
+    iris: "0xF3545Eb175b94cb277D94892c90DbD9c08281E15",
     blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",

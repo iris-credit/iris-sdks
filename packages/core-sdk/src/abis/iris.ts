@@ -1280,6 +1280,18 @@ export const irisAbi = [
         internalType: "uint256",
       },
       {
+        name: "venueCollateral",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "venueDebt",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
         name: "badDebt",
         type: "uint256",
         indexed: false,
@@ -1315,6 +1327,18 @@ export const irisAbi = [
         type: "address",
         indexed: false,
         internalType: "address",
+      },
+      {
+        name: "newCollateralIndex",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "newDebtIndex",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
       {
         name: "data",
@@ -1638,6 +1662,18 @@ export const irisAbi = [
             internalType: "bytes",
           },
         ],
+      },
+      {
+        name: "collateralIndex",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "debtIndex",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,
