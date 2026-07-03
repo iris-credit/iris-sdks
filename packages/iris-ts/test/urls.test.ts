@@ -19,7 +19,7 @@ describe("urls", () => {
   });
 
   test("should have correct CDN URL", () => {
-    expect(CDN_BASE_URL).toBe("https://cdn.iris.credit");
+    expect(CDN_BASE_URL).toBe("https://cdn.morpho.org");
   });
 
   test("should have correct docs URL", () => {
