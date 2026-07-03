@@ -1,21 +1,28 @@
 import { createPublicClient, erc20Abi, http } from "viem";
 import { describe, expect, test } from "vitest";
+import { entries, fromEntries, values } from "@iris-credit/iris-ts";
 import { CHAIN_ADDRESSES, CHAIN_TOKENS, ChainId, LOGO_BASE_URL, getToken } from "../src/index.js";
 
 const mainnetTokens = CHAIN_TOKENS[ChainId.EthMainnet];
 
 describe("tokens", () => {
   test("should have exactly one entry per CHAIN_ADDRESSES token", () => {
-    const bySymbol = Object.fromEntries(
-      mainnetTokens.map(({ symbol, address }) => [symbol, address]),
+    const bySymbol = fromEntries(
+      values(mainnetTokens).map(({ symbol, address }) => [symbol, address]),
     );
 
     expect(bySymbol).toEqual(CHAIN_ADDRESSES[ChainId.EthMainnet].tokens);
   });
 
+  test("should be keyed by symbol", () => {
+    for (const [key, { symbol }] of entries(mainnetTokens)) {
+      expect(symbol).toBe(key);
+    }
+  });
+
   test("should have expected decimals", () => {
-    const bySymbol = Object.fromEntries(
-      mainnetTokens.map(({ symbol, decimals }) => [symbol, decimals]),
+    const bySymbol = fromEntries(
+      values(mainnetTokens).map(({ symbol, decimals }) => [symbol, decimals]),
     );
 
     expect(bySymbol).toEqual({
@@ -30,13 +37,13 @@ describe("tokens", () => {
   });
 
   test("should build logoURI from the lowercased symbol", () => {
-    for (const { symbol, logoURI } of mainnetTokens) {
+    for (const { symbol, logoURI } of values(mainnetTokens)) {
       expect(logoURI).toBe(`${LOGO_BASE_URL}/${symbol.toLowerCase()}.svg`);
     }
   });
 
   test("should look up tokens case-insensitively on address", () => {
-    for (const token of mainnetTokens) {
+    for (const token of values(mainnetTokens)) {
       expect(getToken(ChainId.EthMainnet, token.address)).toBe(token); // checksummed
       expect(getToken(ChainId.EthMainnet, token.address.toLowerCase())).toBe(token);
       expect(getToken(ChainId.EthMainnet, token.address.toUpperCase())).toBe(token);
@@ -59,7 +66,7 @@ describe.runIf(rpcUrl)("tokens drift check", () => {
   test("should match on-chain symbol, name & decimals", { timeout: 60_000 }, async () => {
     const client = createPublicClient({ transport: http(rpcUrl) });
 
-    for (const token of mainnetTokens) {
+    for (const token of values(mainnetTokens)) {
       const abi = erc20Abi;
       const { address } = token;
 
@@ -79,7 +86,7 @@ describe.runIf(rpcUrl)("tokens drift check", () => {
   });
 
   test("should serve every logoURI", { timeout: 60_000 }, async () => {
-    for (const { logoURI } of mainnetTokens) {
+    for (const { logoURI } of values(mainnetTokens)) {
       const { status } = await fetch(logoURI, { method: "HEAD" });
 
       expect({ logoURI, status }).toEqual({ logoURI, status: 200 });

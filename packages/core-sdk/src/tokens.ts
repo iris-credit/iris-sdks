@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 
+import { fromEntries, values } from "@iris-credit/iris-ts";
 import { CHAIN_ADDRESSES } from "./addresses.js";
 import { ChainId } from "./chain.js";
 
@@ -21,31 +22,63 @@ export interface Token {
 // this one constant.
 export const LOGO_BASE_URL = "https://cdn.morpho.org/assets/logos";
 
-const defineToken = (address: Address, symbol: string, name: string, decimals: number): Token => ({
-  address,
-  symbol,
-  name,
-  decimals,
-  logoURI: `${LOGO_BASE_URL}/${symbol.toLowerCase()}.svg`,
-});
-
-const mainnetTokens = CHAIN_ADDRESSES[ChainId.EthMainnet].tokens;
-
 export const CHAIN_TOKENS = {
-  [ChainId.EthMainnet]: [
-    defineToken(mainnetTokens.USDC, "USDC", "USD Coin", 6),
-    defineToken(mainnetTokens.USDT, "USDT", "Tether USD", 6),
-    defineToken(mainnetTokens.WBTC, "WBTC", "Wrapped BTC", 8),
-    defineToken(mainnetTokens.cbBTC, "cbBTC", "Coinbase Wrapped BTC", 8),
-    defineToken(mainnetTokens.WETH, "WETH", "Wrapped Ether", 18),
-    defineToken(mainnetTokens.stETH, "stETH", "Liquid staked Ether 2.0", 18),
-    defineToken(mainnetTokens.wstETH, "wstETH", "Wrapped liquid staked Ether 2.0", 18),
-  ],
-} satisfies Record<ChainId, readonly Token[]>;
+  [ChainId.EthMainnet]: {
+    USDC: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDC,
+      symbol: "USDC",
+      name: "USD Coin",
+      decimals: 6,
+      logoURI: `${LOGO_BASE_URL}/usdc.svg`,
+    },
+    USDT: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDT,
+      symbol: "USDT",
+      name: "Tether USD",
+      decimals: 6,
+      logoURI: `${LOGO_BASE_URL}/usdt.svg`,
+    },
+    WBTC: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WBTC,
+      symbol: "WBTC",
+      name: "Wrapped BTC",
+      decimals: 8,
+      logoURI: `${LOGO_BASE_URL}/wbtc.svg`,
+    },
+    cbBTC: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.cbBTC,
+      symbol: "cbBTC",
+      name: "Coinbase Wrapped BTC",
+      decimals: 8,
+      logoURI: `${LOGO_BASE_URL}/cbbtc.svg`,
+    },
+    WETH: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH,
+      symbol: "WETH",
+      name: "Wrapped Ether",
+      decimals: 18,
+      logoURI: `${LOGO_BASE_URL}/weth.svg`,
+    },
+    stETH: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
+      symbol: "stETH",
+      name: "Liquid staked Ether 2.0",
+      decimals: 18,
+      logoURI: `${LOGO_BASE_URL}/steth.svg`,
+    },
+    wstETH: {
+      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH,
+      symbol: "wstETH",
+      name: "Wrapped liquid staked Ether 2.0",
+      decimals: 18,
+      logoURI: `${LOGO_BASE_URL}/wsteth.svg`,
+    },
+  },
+} satisfies Record<ChainId, Record<string, Token>>;
 
 const TOKENS_BY_ADDRESS = {
-  [ChainId.EthMainnet]: Object.fromEntries(
-    CHAIN_TOKENS[ChainId.EthMainnet].map((token) => [token.address.toLowerCase(), token]),
+  [ChainId.EthMainnet]: fromEntries(
+    values(CHAIN_TOKENS[ChainId.EthMainnet]).map((token) => [token.address.toLowerCase(), token]),
   ),
 } satisfies Record<ChainId, Record<string, Token>>;
 
