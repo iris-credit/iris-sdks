@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 
-import { fromEntries, values } from "@iris-credit/iris-ts";
+import { values } from "@iris-credit/iris-ts";
 import { CHAIN_ADDRESSES } from "./addresses.js";
 import { ChainId } from "./chain.js";
 
@@ -57,18 +57,11 @@ export const CHAIN_TOKENS = {
   },
 } satisfies Record<ChainId, Record<string, Token>>;
 
-const TOKENS_BY_ADDRESS = {
-  [ChainId.EthMainnet]: fromEntries(
-    values(CHAIN_TOKENS[ChainId.EthMainnet]).map((token) => [
-      token.address.toLowerCase() as Address,
-      token,
-    ]),
-  ),
-} satisfies Record<ChainId, Record<Address, Token>>;
-
 /** Looks up a token by chain id and address, case-insensitive on address
  * (indexers typically hold lowercase hex while `CHAIN_ADDRESSES` stores
  * checksummed addresses). */
 export const getTokenMetadata = (chainId: ChainId, address: Address): Token | undefined => {
-  return TOKENS_BY_ADDRESS[chainId][address.toLowerCase() as Address];
+  const lowercased = address.toLowerCase();
+
+  return values(CHAIN_TOKENS[chainId]).find((token) => token.address.toLowerCase() === lowercased);
 };
