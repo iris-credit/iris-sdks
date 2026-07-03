@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { MAX_BOND_LIF, MAX_LIF, SECONDS_PER_YEAR } from "../../constants.js";
+import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { PositionUtils } from "./PositionUtils.js";
 
@@ -208,6 +209,30 @@ describe("PositionUtils", () => {
           1_000_150n,
         ).fixedLeg,
       ).toBe(15_000_000_000_000_000_000n);
+    });
+
+    test("should throw when the timestamp is prior to the last update", () => {
+      expect(() =>
+        PositionUtils.getAccruedLegs(
+          { ...emptyPosition, lastUpdate: 2_000n },
+          loan,
+          2n * MathLib.WAD,
+          2n * MathLib.WAD,
+          1_000n,
+        ),
+      ).toThrow(IrisCoreErrors.InvalidInterestAccrual);
+    });
+
+    test("should throw when a venue index is prior to the stored index", () => {
+      // Stored indices are 1.5 / 1.2 WAD.
+      const position = { ...emptyPosition, lastUpdate: 1_000n };
+
+      expect(() =>
+        PositionUtils.getAccruedLegs(position, loan, MathLib.WAD, 2n * MathLib.WAD, 2_000n),
+      ).toThrow(IrisCoreErrors.InvalidVenueIndex);
+      expect(() =>
+        PositionUtils.getAccruedLegs(position, loan, 2n * MathLib.WAD, MathLib.WAD, 2_000n),
+      ).toThrow(IrisCoreErrors.InvalidVenueIndex);
     });
   });
 

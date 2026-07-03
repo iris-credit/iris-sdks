@@ -7,6 +7,7 @@ import {
   SECONDS_PER_YEAR,
   TIME_TO_MAX_LIF,
 } from "../../constants.js";
+import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 
 /**
@@ -23,7 +24,8 @@ export namespace PositionUtils {
    *
    * Legs are returned as increments to add to the stored legs. When the position was never
    * updated or no time has elapsed, the stored indices are returned with zero increments.
-   * Venue indices older than the last update yield negative increments.
+   * Throws when the timestamp is prior to the last update or a venue index is prior to the
+   * stored one (both revert onchain).
    *
    * @param position.collateral The position's collateral before accrual.
    * @param position.debt The position's debt (principal).
@@ -104,6 +106,17 @@ export namespace PositionUtils {
         surplus: 0n,
       };
     }
+
+    if (elapsed < 0n)
+      throw new IrisCoreErrors.InvalidInterestAccrual(timestamp, position.lastUpdate);
+    if (newCollateralIndex < position.collateralIndex)
+      throw new IrisCoreErrors.InvalidVenueIndex(
+        "collateral",
+        newCollateralIndex,
+        position.collateralIndex,
+      );
+    if (newDebtIndex < position.debtIndex)
+      throw new IrisCoreErrors.InvalidVenueIndex("debt", newDebtIndex, position.debtIndex);
 
     let fixedLeg = MathLib.mulDivDown(
       position.debt,
