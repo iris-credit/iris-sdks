@@ -1,7 +1,15 @@
+import type { Address } from "viem";
+
 import { createPublicClient, erc20Abi, http } from "viem";
 import { describe, expect, test } from "vitest";
-import { entries, fromEntries, values } from "@iris-credit/iris-ts";
-import { CHAIN_ADDRESSES, CHAIN_TOKENS, ChainId, LOGO_BASE_URL, getToken } from "../src/index.js";
+import { ZERO_ADDRESS, entries, fromEntries, values } from "@iris-credit/iris-ts";
+import {
+  CHAIN_ADDRESSES,
+  CHAIN_TOKENS,
+  ChainId,
+  LOGO_BASE_URL,
+  getTokenMetadata,
+} from "../src/index.js";
 
 const mainnetTokens = CHAIN_TOKENS[ChainId.EthMainnet];
 
@@ -44,16 +52,18 @@ describe("tokens", () => {
 
   test("should look up tokens case-insensitively on address", () => {
     for (const token of values(mainnetTokens)) {
-      expect(getToken(ChainId.EthMainnet, token.address)).toBe(token); // checksummed
-      expect(getToken(ChainId.EthMainnet, token.address.toLowerCase())).toBe(token);
-      expect(getToken(ChainId.EthMainnet, token.address.toUpperCase())).toBe(token);
+      expect(getTokenMetadata(ChainId.EthMainnet, token.address)).toBe(token); // checksummed
+      expect(getTokenMetadata(ChainId.EthMainnet, token.address.toLowerCase() as Address)).toBe(
+        token,
+      );
+      expect(
+        getTokenMetadata(ChainId.EthMainnet, `0x${token.address.slice(2).toUpperCase()}`),
+      ).toBe(token);
     }
   });
 
   test("should return undefined for an unknown address", () => {
-    expect(
-      getToken(ChainId.EthMainnet, "0x0000000000000000000000000000000000000000"),
-    ).toBeUndefined();
+    expect(getTokenMetadata(ChainId.EthMainnet, ZERO_ADDRESS)).toBeUndefined();
   });
 });
 

@@ -59,13 +59,16 @@ export const CHAIN_TOKENS = {
 
 const TOKENS_BY_ADDRESS = {
   [ChainId.EthMainnet]: fromEntries(
-    values(CHAIN_TOKENS[ChainId.EthMainnet]).map((token) => [token.address.toLowerCase(), token]),
+    values(CHAIN_TOKENS[ChainId.EthMainnet]).map((token) => [
+      token.address.toLowerCase() as Address,
+      token,
+    ]),
   ),
-} satisfies Record<ChainId, Record<string, Token>>;
+} satisfies Record<ChainId, Record<Address, Token>>;
 
 /** Looks up a token by chain id and address, case-insensitive on address
  * (indexers typically hold lowercase hex while `CHAIN_ADDRESSES` stores
  * checksummed addresses). */
-export const getToken = (chainId: ChainId, address: string): Token | undefined => {
-  return TOKENS_BY_ADDRESS[chainId][address.toLowerCase()];
+export const getTokenMetadata = (chainId: ChainId, address: Address): Token | undefined => {
+  return TOKENS_BY_ADDRESS[chainId][address.toLowerCase() as Address];
 };
