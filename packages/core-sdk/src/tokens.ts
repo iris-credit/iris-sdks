@@ -22,57 +22,38 @@ export interface Token {
 // this one constant.
 export const LOGO_BASE_URL = "https://cdn.morpho.org/assets/logos";
 
+const defineToken = (address: Address, symbol: string, name: string, decimals: number): Token => ({
+  address,
+  symbol,
+  name,
+  decimals,
+  logoURI: `${LOGO_BASE_URL}/${symbol.toLowerCase()}.svg`,
+});
+
 export const CHAIN_TOKENS = {
   [ChainId.EthMainnet]: {
-    USDC: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDC,
-      symbol: "USDC",
-      name: "USD Coin",
-      decimals: 6,
-      logoURI: `${LOGO_BASE_URL}/usdc.svg`,
-    },
-    USDT: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDT,
-      symbol: "USDT",
-      name: "Tether USD",
-      decimals: 6,
-      logoURI: `${LOGO_BASE_URL}/usdt.svg`,
-    },
-    WBTC: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WBTC,
-      symbol: "WBTC",
-      name: "Wrapped BTC",
-      decimals: 8,
-      logoURI: `${LOGO_BASE_URL}/wbtc.svg`,
-    },
-    cbBTC: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.cbBTC,
-      symbol: "cbBTC",
-      name: "Coinbase Wrapped BTC",
-      decimals: 8,
-      logoURI: `${LOGO_BASE_URL}/cbbtc.svg`,
-    },
-    WETH: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH,
-      symbol: "WETH",
-      name: "Wrapped Ether",
-      decimals: 18,
-      logoURI: `${LOGO_BASE_URL}/weth.svg`,
-    },
-    stETH: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
-      symbol: "stETH",
-      name: "Liquid staked Ether 2.0",
-      decimals: 18,
-      logoURI: `${LOGO_BASE_URL}/steth.svg`,
-    },
-    wstETH: {
-      address: CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH,
-      symbol: "wstETH",
-      name: "Wrapped liquid staked Ether 2.0",
-      decimals: 18,
-      logoURI: `${LOGO_BASE_URL}/wsteth.svg`,
-    },
+    USDC: defineToken(CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDC, "USDC", "USD Coin", 6),
+    USDT: defineToken(CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDT, "USDT", "Tether USD", 6),
+    WBTC: defineToken(CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WBTC, "WBTC", "Wrapped BTC", 8),
+    cbBTC: defineToken(
+      CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.cbBTC,
+      "cbBTC",
+      "Coinbase Wrapped BTC",
+      8,
+    ),
+    WETH: defineToken(CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH, "WETH", "Wrapped Ether", 18),
+    stETH: defineToken(
+      CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
+      "stETH",
+      "Liquid staked Ether 2.0",
+      18,
+    ),
+    wstETH: defineToken(
+      CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH,
+      "wstETH",
+      "Wrapped liquid staked Ether 2.0",
+      18,
+    ),
   },
 } satisfies Record<ChainId, Record<string, Token>>;
 
