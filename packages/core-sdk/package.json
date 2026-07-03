@@ -38,6 +38,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "viem": "^2.41.2"
   },
   "peerDependencies": {

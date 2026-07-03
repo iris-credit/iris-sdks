@@ -45,6 +45,9 @@ importers:
         specifier: workspace:^
         version: link:../iris-ts
     devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.11
       viem:
         specifier: ^2.41.2
         version: 2.46.2(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@4.3.6)
