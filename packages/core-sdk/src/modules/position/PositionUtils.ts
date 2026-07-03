@@ -1,0 +1,283 @@
+import type { BigIntish } from "../../types.js";
+
+import {
+  LIQUIDATION_CURSOR,
+  MAX_BOND_LIF,
+  MAX_LIF,
+  SECONDS_PER_YEAR,
+  TIME_TO_MAX_LIF,
+} from "../../constants.js";
+import { MathLib } from "../../math/index.js";
+
+/**
+ * Namespace of utility functions to ease position-related calculations.
+ *
+ * @dev Functions normalize BigIntish fields of input objects in place (obj.x = BigInt(obj.x)).
+ * This is deliberate (BigIntish values are bigint-representable by contract and BigInt() is idempotent)
+ * so callers may observe normalized (value-identical) fields. This is by design, not a mutation bug.
+ */
+export namespace PositionUtils {
+  /**
+   * Returns the new venue indices and the interest accrued on each leg of the given position
+   * since its last update, matching Iris's onchain accrual.
+   *
+   * Legs are returned as increments to add to the stored legs. When the position was never
+   * updated or no time has elapsed, the stored indices are returned with zero increments.
+   * Venue indices older than the last update yield negative increments.
+   *
+   * @param position.collateral The position's collateral before accrual.
+   * @param position.debt The position's debt (principal).
+   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed, which skips the surplus accrual).
+   * @param position.collateralIndex The venue's collateral index at the last update (scaled by WAD).
+   * @param position.debtIndex The venue's debt index at the last update (scaled by WAD).
+   * @param position.floatingLeg The position's floating leg before accrual.
+   * @param position.surplus The position's surplus before accrual.
+   * @param position.lastUpdate The timestamp of the last accrual (in seconds).
+   * @param loan.maturity The loan's maturity timestamp (in seconds).
+   * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
+   * @param loan.overdueRate The loan's annual overdue rate, added on top of the fixed rate past maturity (scaled by WAD).
+   * @param newCollateralIndex The venue's current collateral index, from `IVenueAdapter.indices` (scaled by WAD).
+   * @param newDebtIndex The venue's current debt index, from `IVenueAdapter.indices` (scaled by WAD).
+   * @param timestamp The timestamp at which to accrue interest (in seconds).
+   * @returns The new venue indices (scaled by WAD) and the `fixedLeg`, `floatingLeg` & `surplus` increments.
+   * @example
+   * ```ts
+   * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const { fixedLeg } = PositionUtils.getAccruedLegs(
+   *   {
+   *     collateral: 0n,
+   *     debt: MathLib.WAD,
+   *     bondRequirement: 0n,
+   *     collateralIndex: MathLib.WAD,
+   *     debtIndex: MathLib.WAD,
+   *     floatingLeg: 0n,
+   *     surplus: 0n,
+   *     lastUpdate: 1_000n,
+   *   },
+   *   { maturity: 40_000_000n, fixedRate: 10_0000000000000000n, overdueRate: 20_0000000000000000n },
+   *   MathLib.WAD,
+   *   MathLib.WAD,
+   *   1_000n + 31_536_000n,
+   * );
+   * // fixedLeg === 100000000000000000n
+   * ```
+   */
+  export const getAccruedLegs = (
+    position: {
+      collateral: BigIntish;
+      debt: BigIntish;
+      bondRequirement: BigIntish;
+      collateralIndex: BigIntish;
+      debtIndex: BigIntish;
+      floatingLeg: BigIntish;
+      surplus: BigIntish;
+      lastUpdate: BigIntish;
+    },
+    loan: { maturity: BigIntish; fixedRate: BigIntish; overdueRate: BigIntish },
+    newCollateralIndex: BigIntish,
+    newDebtIndex: BigIntish,
+    timestamp: BigIntish,
+  ) => {
+    position.collateral = BigInt(position.collateral);
+    position.debt = BigInt(position.debt);
+    position.bondRequirement = BigInt(position.bondRequirement);
+    position.collateralIndex = BigInt(position.collateralIndex);
+    position.debtIndex = BigInt(position.debtIndex);
+    position.floatingLeg = BigInt(position.floatingLeg);
+    position.surplus = BigInt(position.surplus);
+    position.lastUpdate = BigInt(position.lastUpdate);
+    loan.maturity = BigInt(loan.maturity);
+    loan.fixedRate = BigInt(loan.fixedRate);
+    loan.overdueRate = BigInt(loan.overdueRate);
+    newCollateralIndex = BigInt(newCollateralIndex);
+    newDebtIndex = BigInt(newDebtIndex);
+    timestamp = BigInt(timestamp);
+
+    const elapsed = timestamp - position.lastUpdate;
+    if (position.lastUpdate === 0n || elapsed === 0n) {
+      return {
+        collateralIndex: position.collateralIndex,
+        debtIndex: position.debtIndex,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        surplus: 0n,
+      };
+    }
+
+    let fixedLeg = MathLib.mulDivDown(
+      position.debt,
+      elapsed * loan.fixedRate,
+      SECONDS_PER_YEAR * MathLib.WAD,
+    );
+    const floatingLegDelta = MathLib.mulDivDown(
+      position.debt + position.floatingLeg,
+      newDebtIndex - position.debtIndex,
+      position.debtIndex,
+    );
+    const surplusDelta =
+      position.bondRequirement !== 0n
+        ? MathLib.mulDivDown(
+            position.collateral + position.surplus,
+            newCollateralIndex - position.collateralIndex,
+            position.collateralIndex,
+          )
+        : 0n;
+
+    if (timestamp > loan.maturity) {
+      const overdueStart = MathLib.max(loan.maturity, position.lastUpdate);
+      fixedLeg += MathLib.mulDivDown(
+        position.debt,
+        (timestamp - overdueStart) * loan.overdueRate,
+        SECONDS_PER_YEAR * MathLib.WAD,
+      );
+    }
+
+    return {
+      collateralIndex: newCollateralIndex,
+      debtIndex: newDebtIndex,
+      fixedLeg,
+      floatingLeg: floatingLegDelta,
+      surplus: surplusDelta,
+    };
+  };
+
+  /**
+   * Returns the fixed interest remaining from the given timestamp until maturity, credited to
+   * the fixed leg when a loan is settled early, matching Iris's onchain settlement. Returns zero
+   * at or after maturity.
+   *
+   * @param position.debt The position's debt (principal).
+   * @param loan.maturity The loan's maturity timestamp (in seconds).
+   * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
+   * @param timestamp The settlement timestamp (in seconds).
+   * @returns The residual fixed leg.
+   * @example
+   * ```ts
+   * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const residual = PositionUtils.getResidual(
+   *   { debt: MathLib.WAD },
+   *   { maturity: 17_768_000n, fixedRate: 10_0000000000000000n },
+   *   2_000_000n,
+   * );
+   * // residual === 50000000000000000n
+   * ```
+   */
+  export const getResidual = (
+    { debt }: { debt: BigIntish },
+    { maturity, fixedRate }: { maturity: BigIntish; fixedRate: BigIntish },
+    timestamp: BigIntish,
+  ) => {
+    timestamp = BigInt(timestamp);
+    maturity = BigInt(maturity);
+    fixedRate = BigInt(fixedRate);
+
+    if (timestamp >= maturity) return 0n;
+
+    const timeToMaturity = MathLib.zeroFloorSub(maturity, timestamp);
+
+    return MathLib.mulDivDown(debt, timeToMaturity * fixedRate, SECONDS_PER_YEAR * MathLib.WAD);
+  };
+
+  /**
+   * Returns whether the position's bond is healthy: the bond covers the bond requirement, and
+   * the drawdown of the floating leg over the fixed leg, relative to the bond, does not exceed
+   * the loan's bond LLTV. A closed loan (zero bond requirement) is always healthy.
+   *
+   * @param position.bond The position's bond.
+   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
+   * @returns Whether the bond is healthy.
+   * @example
+   * ```ts
+   * import { PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const healthy = PositionUtils.isHealthyBond(
+   *   { bond: 1_000n, bondRequirement: 1n, fixedLeg: 0n, floatingLeg: 500n },
+   *   { bondLltv: 50_0000000000000000n },
+   * );
+   * // healthy === true
+   * ```
+   */
+  export const isHealthyBond = (
+    position: {
+      bond: BigIntish;
+      bondRequirement: BigIntish;
+      fixedLeg: BigIntish;
+      floatingLeg: BigIntish;
+    },
+    { bondLltv }: { bondLltv: BigIntish },
+  ) => {
+    position.bond = BigInt(position.bond);
+    position.bondRequirement = BigInt(position.bondRequirement);
+    position.fixedLeg = BigInt(position.fixedLeg);
+    position.floatingLeg = BigInt(position.floatingLeg);
+    bondLltv = BigInt(bondLltv);
+
+    if (position.bondRequirement === 0n) return true;
+    if (position.bond < position.bondRequirement) return false;
+    if (position.floatingLeg <= position.fixedLeg) return true;
+
+    const negativeNet = position.floatingLeg - position.fixedLeg;
+    const drawdown = MathLib.mulDivUp(negativeNet, MathLib.WAD, position.bond);
+
+    return drawdown <= bondLltv;
+  };
+
+  /**
+   * Returns the liquidation incentive factor for an overdue loan, growing linearly from 0 at
+   * `maturity + overduePeriod` to `MAX_LIF` over `TIME_TO_MAX_LIF`. Returns 0 while the loan is
+   * not yet liquidatable (where Iris reverts with `HealthyLoan` instead).
+   *
+   * @param loan.maturity The loan's maturity timestamp (in seconds).
+   * @param loan.overduePeriod The loan's overdue period (in seconds).
+   * @param timestamp The liquidation timestamp (in seconds).
+   * @returns The liquidation incentive factor, scaled by WAD.
+   * @example
+   * ```ts
+   * import { PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const lif = PositionUtils.getLif({ maturity: 1_000_000n, overduePeriod: 86_400n }, 1_086_850n);
+   * // lif === 75000000000000000n
+   * ```
+   */
+  export const getLif = (
+    { maturity, overduePeriod }: { maturity: BigIntish; overduePeriod: BigIntish },
+    timestamp: BigIntish,
+  ) => {
+    maturity = BigInt(maturity);
+    overduePeriod = BigInt(overduePeriod);
+
+    const overdueElapsed = MathLib.zeroFloorSub(timestamp, maturity + overduePeriod);
+
+    return MathLib.min(MAX_LIF, MathLib.mulDivDown(MAX_LIF, overdueElapsed, TIME_TO_MAX_LIF));
+  };
+
+  /**
+   * Returns the liquidation incentive factor for a bond liquidation, i.e.
+   * `min(MAX_BOND_LIF, 1 / (1 - cursor * (1 - bondLltv)) - 1)`.
+   *
+   * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
+   * @returns The liquidation incentive factor, scaled by WAD.
+   * @example
+   * ```ts
+   * import { PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const lif = PositionUtils.getBondLif({ bondLltv: 95_0000000000000000n });
+   * // lif === 25641025641025641n
+   * ```
+   */
+  export const getBondLif = ({ bondLltv }: { bondLltv: BigIntish }) => {
+    bondLltv = BigInt(bondLltv);
+
+    const cursored = MathLib.mulDivDown(LIQUIDATION_CURSOR, MathLib.WAD - bondLltv, MathLib.WAD);
+
+    return MathLib.min(
+      MAX_BOND_LIF,
+      MathLib.mulDivDown(MathLib.WAD, MathLib.WAD, MathLib.WAD - cursored) - MathLib.WAD,
+    );
+  };
+}

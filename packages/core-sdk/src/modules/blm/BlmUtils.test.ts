@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { BlmUtils, MathLib } from "../src/index.js";
+import { MathLib } from "../../math/index.js";
+import { BlmUtils } from "./BlmUtils.js";
 
 const { WAD } = MathLib;
 
