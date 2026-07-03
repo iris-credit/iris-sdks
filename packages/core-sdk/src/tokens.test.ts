@@ -6,7 +6,7 @@ import { describe, expect, expectTypeOf, test } from "vitest";
 import { ZERO_ADDRESS, entries, fromEntries, values } from "@iris-credit/iris-ts";
 import { CHAIN_ADDRESSES } from "./addresses.js";
 import { ChainId } from "./chain.js";
-import { IrisCoreErrors } from "./errors.js";
+import { TokenMetadataNotFoundError } from "./errors.js";
 import { CHAIN_TOKENS_METADATA, LOGO_BASE_URL, getTokenMetadata } from "./tokens.js";
 
 const mainnetTokensMetadata = CHAIN_TOKENS_METADATA[ChainId.EthMainnet];
@@ -62,7 +62,7 @@ describe("tokens", () => {
 
   test("should throw for an unknown address", () => {
     expect(() => getTokenMetadata(ChainId.EthMainnet, ZERO_ADDRESS)).toThrow(
-      IrisCoreErrors.TokenMetadataNotFound,
+      TokenMetadataNotFoundError,
     );
   });
 

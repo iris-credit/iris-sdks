@@ -4,7 +4,7 @@ import { isAddressEqual } from "viem";
 import { keys } from "@iris-credit/iris-ts";
 import { CHAIN_ADDRESSES } from "./addresses.js";
 import { ChainId } from "./chain.js";
-import { IrisCoreErrors } from "./errors.js";
+import { TokenMetadataNotFoundError } from "./errors.js";
 
 /** Curated metadata for a token supported by the protocol.
  *
@@ -65,7 +65,7 @@ export const CHAIN_TOKENS_METADATA = {
  * case-insensitive on address (indexers typically hold lowercase hex while
  * `CHAIN_ADDRESSES` stores checksummed addresses).
  *
- * @throws `IrisCoreErrors.TokenMetadataNotFound` if the address has no entry.
+ * @throws `TokenMetadataNotFoundError` if the address has no entry.
  * @example
  * // Statically known address: returns the exact entry, e.g. `decimals` is typed `6`.
  * const usdc = getTokenMetadata(ChainId.EthMainnet, CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDC);
@@ -79,7 +79,7 @@ export function getTokenMetadata(chainId: ChainId, address: Address) {
   const chainTokensMetadata = CHAIN_TOKENS_METADATA[chainId];
   const key = keys(chainTokensMetadata).find((key) => isAddressEqual(key, address));
 
-  if (!key) throw new IrisCoreErrors.TokenMetadataNotFound(chainId, address);
+  if (!key) throw new TokenMetadataNotFoundError(chainId, address);
 
   return chainTokensMetadata[key];
 }
