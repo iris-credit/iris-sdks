@@ -1,4 +1,17 @@
+import type { Address } from "viem";
+import type { ChainId } from "./chain.js";
+
 export namespace IrisCoreErrors {
+  /** Error thrown when a token address has no curated metadata entry. */
+  export class TokenMetadataNotFound extends Error {
+    constructor(
+      public readonly chainId: ChainId,
+      public readonly address: Address,
+    ) {
+      super(`token metadata not found for address ${address} on chain ${chainId}`);
+    }
+  }
+
   /** Error thrown when position accrual is requested before `lastUpdate`. */
   export class InvalidInterestAccrual extends Error {
     constructor(
