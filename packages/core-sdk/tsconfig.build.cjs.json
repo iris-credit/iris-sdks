@@ -7,5 +7,6 @@
     "outDir": "./lib/cjs",
     "tsBuildInfoFile": "tsconfig.cjs.tsbuildinfo"
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": ["src/**/*.test.ts"]
 }

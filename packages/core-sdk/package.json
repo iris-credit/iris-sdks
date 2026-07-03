@@ -34,7 +34,8 @@
     "prepublish": "$npm_execpath build",
     "build": "tsgo --noEmit && $npm_execpath build:cjs && $npm_execpath build:esm",
     "build:cjs": "tsgo --build tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > lib/cjs/package.json",
-    "build:esm": "tsgo --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json"
+    "build:esm": "tsgo --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json",
+    "test": "vitest run"
   },
   "devDependencies": {
     "viem": "^2.41.2"
