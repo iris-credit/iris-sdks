@@ -32,6 +32,12 @@ export const LIFECYCLE_EVENT_KINDS = [
 
 export type LifecycleEventKind = (typeof LIFECYCLE_EVENT_KINDS)[number];
 
+/** Narrows a raw value (e.g. an indexer's `loanEvent.kind` column) to a
+ * `LifecycleEventKind`, surfacing unknown kinds explicitly at the boundary. */
+export const isLifecycleEventKind = (value: unknown): value is LifecycleEventKind => {
+  return LIFECYCLE_EVENT_KINDS.includes(value as LifecycleEventKind);
+};
+
 /**
  * Derives a loan's status and closure cause: numbers decide aliveness, the
  * diary decides the cause.
@@ -48,12 +54,13 @@ export type LifecycleEventKind = (typeof LIFECYCLE_EVENT_KINDS)[number];
  * awaiting escape.
  *
  * @param row The loan's current numbers, in seconds-based timestamps.
- * @param kinds The set of lifecycle event kinds recorded for the loan.
+ * @param kinds The set of lifecycle event kinds recorded for the loan. Callers
+ * holding raw strings (e.g. from an indexer DB) narrow with `isLifecycleEventKind`.
  * @param now The timestamp to evaluate at, in seconds.
  */
 export const deriveStatus = (
   row: { debt: bigint; maturity: bigint; overduePeriod: bigint },
-  kinds: ReadonlySet<string>,
+  kinds: ReadonlySet<LifecycleEventKind>,
   now: bigint,
 ): { status: LoanStatus; closureCause: ClosureCause | null } => {
   if (row.debt > 0n) {
