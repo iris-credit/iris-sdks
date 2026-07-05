@@ -1,12 +1,19 @@
+import type { LifecycleEventKind } from "./LoanStatus.js";
+
 import { describe, expect, test } from "vitest";
-import { LIFECYCLE_EVENT_KINDS, LOAN_STATUSES, deriveStatus } from "./LoanStatus.js";
+import {
+  LIFECYCLE_EVENT_KINDS,
+  LOAN_STATUSES,
+  deriveStatus,
+  isLifecycleEventKind,
+} from "./LoanStatus.js";
 
 const MATURITY = 1_000n;
 const OVERDUE_PERIOD = 100n;
 
 const alive = { debt: 1n, maturity: MATURITY, overduePeriod: OVERDUE_PERIOD };
 const settled = { debt: 0n, maturity: MATURITY, overduePeriod: OVERDUE_PERIOD };
-const none = new Set<string>();
+const none = new Set<LifecycleEventKind>();
 
 describe("loan status vocabulary", () => {
   test("should expose the contract values", () => {
@@ -20,6 +27,18 @@ describe("loan status vocabulary", () => {
       "Rebase",
       "Refinance",
     ]);
+  });
+});
+
+describe("isLifecycleEventKind", () => {
+  test("should accept every vocabulary kind and reject anything else", () => {
+    for (const kind of LIFECYCLE_EVENT_KINDS) {
+      expect(isLifecycleEventKind(kind)).toBe(true);
+    }
+
+    expect(isLifecycleEventKind("repay")).toBe(false);
+    expect(isLifecycleEventKind("")).toBe(false);
+    expect(isLifecycleEventKind(null)).toBe(false);
   });
 });
 
