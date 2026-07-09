@@ -1,5 +1,4 @@
 import type { Address } from "viem";
-import type { Quote } from "../../signatures/quote.js";
 import type { BigIntish } from "../../types.js";
 
 import { LoanUtils } from "./LoanUtils.js";
@@ -23,25 +22,6 @@ export interface ILoan {
  * Represents an Iris loan.
  */
 export class Loan implements ILoan {
-  /**
-   * Builds the loan terms from Quote as they are fixed at `take`.
-   */
-  static fromQuote(quote: Quote, { timestamp, fee }: { timestamp: BigIntish; fee: BigIntish }) {
-    return new Loan({
-      borrower: quote.borrower,
-      solver: quote.solver,
-      collateralToken: quote.collateralToken,
-      debtToken: quote.debtToken,
-      venueBitmap: quote.venueBitmap,
-      maturity: BigInt(timestamp) + quote.duration,
-      overduePeriod: quote.overduePeriod,
-      fixedRate: quote.fixedRate,
-      overdueRate: quote.overdueRate,
-      bondLltv: quote.bondLltv,
-      fee: BigInt(fee),
-    });
-  }
-
   /**
    * The user pays the fixed rate and posts the collateral.
    */
