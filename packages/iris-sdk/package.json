@@ -1,0 +1,50 @@
+{
+  "name": "@iris-credit/iris-sdk",
+  "version": "0.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iris-credit/iris-sdks.git",
+    "directory": "packages/iris-sdk"
+  },
+  "files": [
+    "lib"
+  ],
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/esm/index.d.ts",
+      "import": "./lib/esm/index.js",
+      "require": "./lib/cjs/index.js"
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/esm/index.d.ts",
+        "import": "./lib/esm/index.js",
+        "require": "./lib/cjs/index.js"
+      }
+    },
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "prepublish": "$npm_execpath build",
+    "build": "tsgo --noEmit && $npm_execpath build:cjs && $npm_execpath build:esm",
+    "build:cjs": "tsgo --build tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > lib/cjs/package.json",
+    "build:esm": "tsgo --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@iris-credit/core-sdk": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "viem": "^2.41.2"
+  },
+  "peerDependencies": {
+    "viem": "^2"
+  }
+}
