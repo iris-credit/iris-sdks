@@ -21,7 +21,7 @@ pnpm exec oxfmt "$FILE_PATH"
 # Type-check the package containing the changed file
 PKG_DIR=$(echo "$FILE_PATH" | sed -n 's|\(packages/[^/]*\)/.*|\1|p')
 if [[ -n "$PKG_DIR" && -f "$PKG_DIR/tsconfig.json" ]]; then
-  pnpm exec tsgo --noEmit -p "$PKG_DIR/tsconfig.json"
+  pnpm exec tsc --noEmit -p "$PKG_DIR/tsconfig.json"
 else
-  pnpm exec tsgo --build
+  pnpm exec tsc --build
 fi
