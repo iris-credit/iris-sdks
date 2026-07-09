@@ -38,6 +38,12 @@ export namespace ChainUtils {
 
   export const supportedChainIds = values(ChainId);
 
+  /** Narrows a raw number (e.g. an API request's chainId) to a supported `ChainId`,
+   * surfacing unsupported chains explicitly at the boundary. */
+  export const isSupportedChainId = (value: number): value is ChainId => {
+    return supportedChainIds.some((id) => id === value);
+  };
+
   export const CHAIN_METADATA = {
     [ChainId.EthMainnet]: {
       name: "Ethereum",

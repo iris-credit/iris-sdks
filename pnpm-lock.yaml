@@ -49,6 +49,19 @@ importers:
         specifier: ^2.41.2
         version: 2.46.2(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@5.0.10)(zod@4.3.6)
 
+  packages/iris-sdk:
+    dependencies:
+      '@iris-credit/core-sdk':
+        specifier: workspace:^
+        version: link:../core-sdk
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.19.11
+      viem:
+        specifier: ^2.41.2
+        version: 2.46.2(bufferutil@4.1.0)(typescript@7.0.2)(utf-8-validate@5.0.10)(zod@4.3.6)
+
   packages/iris-ts: {}
 
   packages/test:
