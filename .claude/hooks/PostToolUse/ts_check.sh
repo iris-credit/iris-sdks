@@ -23,5 +23,5 @@ PKG_DIR=$(echo "$FILE_PATH" | sed -n 's|\(packages/[^/]*\)/.*|\1|p')
 if [[ -n "$PKG_DIR" && -f "$PKG_DIR/tsconfig.json" ]]; then
   pnpm exec tsc --noEmit -p "$PKG_DIR/tsconfig.json"
 else
-  pnpm exec tsc --build
+  pnpm exec tsc --noEmit
 fi
