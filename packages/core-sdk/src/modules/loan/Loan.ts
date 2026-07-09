@@ -82,10 +82,24 @@ export class Loan implements ILoan {
   }
 
   /**
+   * The bond liquidation incentive factor, scaled by WAD.
+   */
+  get bondLif() {
+    return LoanUtils.getBondLif(this);
+  }
+
+  /**
    * The earliest timestamp at which this loan is liquidatable.
    */
   get liquidatableAt() {
     return LoanUtils.liquidatableAt(this);
+  }
+
+  /**
+   * The liquidation incentive factor at `timestamp`, scaled by WAD.
+   */
+  public getLif(timestamp: BigIntish) {
+    return LoanUtils.getLif(this, timestamp);
   }
 
   /**

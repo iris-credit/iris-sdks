@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { MAX_BOND_LIF, MAX_LIF, SECONDS_PER_YEAR } from "../../constants.js";
+import { SECONDS_PER_YEAR } from "../../constants.js";
 import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { PositionUtils } from "./PositionUtils.js";
@@ -315,52 +315,6 @@ describe("PositionUtils", () => {
           { bondLltv: 0n },
         ),
       ).toBe(false);
-    });
-  });
-
-  describe("getLif", () => {
-    const loan = { maturity: 1_000_000n, overduePeriod: 86_400n };
-    const liquidatableAt = 1_000_000n + 86_400n;
-
-    test("should grow linearly from 0 at maturity + overduePeriod", () => {
-      expect(PositionUtils.getLif(loan, liquidatableAt)).toBe(0n);
-      // 0.15e18 * 450 / 900 = 0.075e18.
-      expect(PositionUtils.getLif(loan, liquidatableAt + 450n)).toBe(75_000_000_000_000_000n);
-    });
-
-    test("should floor the growth", () => {
-      // 0.15e18 * 1 / 900 = 166_666_666_666_666.67 floors.
-      expect(PositionUtils.getLif(loan, liquidatableAt + 1n)).toBe(166_666_666_666_666n);
-    });
-
-    test("should cap at MAX_LIF from TIME_TO_MAX_LIF onwards", () => {
-      expect(PositionUtils.getLif(loan, liquidatableAt + 900n)).toBe(MAX_LIF);
-      expect(PositionUtils.getLif(loan, liquidatableAt + 10_000n)).toBe(MAX_LIF);
-    });
-
-    test("should clamp to 0 while the loan is not liquidatable", () => {
-      // The contract reverts with HealthyLoan in this range instead.
-      expect(PositionUtils.getLif(loan, 500_000n)).toBe(0n);
-    });
-  });
-
-  describe("getBondLif", () => {
-    test("should cap at MAX_BOND_LIF for low lltvs", () => {
-      // lltv 0: 1 / (1 - 0.5) - 1 = 1 MathLib.WAD, capped.
-      expect(PositionUtils.getBondLif({ bondLltv: 0n })).toBe(MAX_BOND_LIF);
-      // lltv 0.9: 1e36 / 0.95e18 - 1e18 = 52_631_578_947_368_421 > 0.05e18, capped.
-      expect(PositionUtils.getBondLif({ bondLltv: 900_000_000_000_000_000n })).toBe(MAX_BOND_LIF);
-    });
-
-    test("should floor 1 / (1 - cursor * (1 - bondLltv)) - 1", () => {
-      // lltv 0.95: 1e36 / 0.975e18 = 1_025_641_025_641_025_641.02… floors, minus MathLib.WAD.
-      expect(PositionUtils.getBondLif({ bondLltv: 950_000_000_000_000_000n })).toBe(
-        25_641_025_641_025_641n,
-      );
-    });
-
-    test("should be zero at a 100% lltv", () => {
-      expect(PositionUtils.getBondLif({ bondLltv: MathLib.WAD })).toBe(0n);
     });
   });
 });

@@ -33,12 +33,12 @@ export interface IPermit2Allowance {
 export interface IHolding {
   user: Address;
   token: Address;
-  balance: bigint;
   erc20Allowances: {
     [key in Erc20AllowanceRecipient]: bigint;
   };
   permit2IrisAllowance: IPermit2Allowance;
   permit2BundlerAllowance: IPermit2Allowance;
+  balance: bigint;
 }
 
 /** Represents a user's balance and allowance state for one token. */
@@ -52,11 +52,6 @@ export class Holding implements IHolding {
    * The token in which this holding is denominated.
    */
   public readonly token: Address;
-
-  /**
-   * The balance of the user for this token.
-   */
-  public readonly balance: bigint;
 
   /**
    * ERC20 allowance for this token from the user to the allowance recipient.
@@ -75,10 +70,15 @@ export class Holding implements IHolding {
    */
   public readonly permit2BundlerAllowance: Permit2Allowance;
 
+  /**
+   * Allows to customize the setter behavior in child classes.
+   */
+  protected _balance: bigint;
+
   constructor(params: IHolding) {
     this.user = params.user;
     this.token = params.token;
-    this.balance = params.balance;
+    this._balance = params.balance;
     this.erc20Allowances = fromEntries(
       entries(params.erc20Allowances).map(([address, allowance]) => [address, allowance]),
     );
@@ -92,5 +92,15 @@ export class Holding implements IHolding {
       expiration: BigInt(params.permit2BundlerAllowance.expiration),
       nonce: BigInt(params.permit2BundlerAllowance.nonce),
     };
+  }
+
+  /**
+   * The balance of the user for this token.
+   */
+  get balance() {
+    return this._balance;
+  }
+  set balance(value: bigint) {
+    this._balance = value;
   }
 }
