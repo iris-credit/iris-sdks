@@ -1,5 +1,6 @@
 import type { Address } from "viem";
 
+import { getAddress } from "viem";
 import { ChainId } from "./chain.js";
 import { UnsupportedChainIdError } from "./errors.js";
 
@@ -79,16 +80,22 @@ export const getChainAddresses = <T extends ChainId>(chainId: T): (typeof CHAIN_
  * NB: includes rate-based wrappers like wstETH for routing purposes; `fetchToken` intercepts
  * those before treating mapped tokens as constant-rate wrappers.
  */
-const unwrappedTokensMapping: Record<ChainId, Readonly<Record<Address, Address>>> = {
+const unwrappedTokensMapping = {
   [ChainId.EthMainnet]: {
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
       CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
   },
-};
+} as const satisfies Record<ChainId, Readonly<Record<Address, Address>>>;
 
-/** Returns the token `wrappedToken` unwraps to on `chainId`, or `undefined` if not registered. */
+/** Returns the token `wrappedToken` unwraps to on `chainId` (any casing), or `undefined` if not
+ * registered. */
 export const getUnwrappedToken = (wrappedToken: Address, chainId: ChainId) => {
-  return unwrappedTokensMapping[chainId][wrappedToken];
+  // Widened lookup: `wrappedToken` is an arbitrary probe (see `fetchToken`), not a known key.
+  const mapping: Readonly<Record<Address, Address>> = unwrappedTokensMapping[chainId];
+  if (mapping == null) throw new UnsupportedChainIdError(chainId);
+
+  // Normalize casing to match the checksummed mapping keys.
+  return mapping[getAddress(wrappedToken)];
 };
