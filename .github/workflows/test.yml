@@ -25,7 +25,9 @@ jobs:
       - name: Bullfrog
         uses: ./.github/actions/bullfrog
         with:
-          # Defaults plus the GitHub release domains foundry-toolchain downloads from.
+          # Defaults plus the GitHub release domains foundry-toolchain downloads from,
+          # and the public archive RPC the mainnet-fork tests default to when the
+          # MAINNET_RPC_URL secret is unset (when setting it, allow its domain too).
           allowed-domains: |
             registry.npmjs.org
             nodejs.org
@@ -34,6 +36,7 @@ jobs:
             raw.githubusercontent.com
             objects.githubusercontent.com
             release-assets.githubusercontent.com
+            eth.drpc.org
 
       - name: Set up pnpm
         uses: pnpm/action-setup@91ab88e2619ed1f46221f0ba42d1492c02baf788 # v6.0.6
@@ -57,3 +60,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+        env:
+          # Optional dedicated RPC for mainnet-fork tests; empty falls back to the public RPC.
+          MAINNET_RPC_URL: ${{ secrets.MAINNET_RPC_URL }}

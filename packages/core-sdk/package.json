@@ -17,6 +17,11 @@
       "types": "./lib/esm/index.d.ts",
       "import": "./lib/esm/index.js",
       "require": "./lib/cjs/index.js"
+    },
+    "./augment": {
+      "types": "./lib/esm/augment/index.d.ts",
+      "import": "./lib/esm/augment/index.js",
+      "require": "./lib/cjs/augment/index.js"
     }
   },
   "publishConfig": {
@@ -27,6 +32,11 @@
         "types": "./lib/esm/index.d.ts",
         "import": "./lib/esm/index.js",
         "require": "./lib/cjs/index.js"
+      },
+      "./augment": {
+        "types": "./lib/esm/augment/index.d.ts",
+        "import": "./lib/esm/augment/index.js",
+        "require": "./lib/cjs/augment/index.js"
       }
     }
   },
@@ -38,6 +48,7 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@iris-credit/test": "workspace:^",
     "@types/node": "^22.0.0",
     "viem": "^2.41.2"
   },
