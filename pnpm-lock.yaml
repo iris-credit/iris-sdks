@@ -57,6 +57,9 @@ importers:
       '@iris-credit/core-sdk':
         specifier: workspace:^
         version: link:../core-sdk
+      '@iris-credit/iris-ts':
+        specifier: workspace:^
+        version: link:../iris-ts
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

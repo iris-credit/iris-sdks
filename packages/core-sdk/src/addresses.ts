@@ -39,6 +39,11 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
+    // TODO: change deployed address
+    bundler3: {
+      bundler3: "0x0000000000000000000000000000000000000000",
+      generalAdapter1: "0x0000000000000000000000000000000000000000",
+    },
     // Protocol integrations.
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
