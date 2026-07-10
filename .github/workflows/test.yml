@@ -51,7 +51,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      # tsgo --noEmit (typecheck) + cjs/esm compile across all packages
+      # tsc --noEmit (typecheck) + cjs/esm compile across all packages
       - name: Build
         run: pnpm build
 
