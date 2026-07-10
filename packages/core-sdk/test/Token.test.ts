@@ -1,10 +1,18 @@
+import type { Address } from "viem";
+
 import { describe, expect } from "vitest";
 import { randomAddress } from "@iris-credit/test";
 import { Token } from "../src/augment/Token.js";
-import { ChainId, ExchangeRateWrappedToken, getChainAddresses } from "../src/index.js";
+import {
+  ChainId,
+  ConstantWrappedToken,
+  ExchangeRateWrappedToken,
+  getChainAddresses,
+  NATIVE_ADDRESS,
+} from "../src/index.js";
 import { test } from "./setup.js";
 
-const { USDC, wstETH, stETH } = getChainAddresses(ChainId.EthMainnet).tokens;
+const { USDC, WETH, wstETH, stETH } = getChainAddresses(ChainId.EthMainnet).tokens;
 
 // MKR's `name` and `symbol` are `bytes32`, exercising the metadata decoding fallback.
 const mkr = "0x9f8F72aA9304c8B593d555F12eF6589cC3A579A2";
@@ -23,6 +31,23 @@ describe("augment/Token", () => {
     expect(value).toStrictEqual(expectedData);
   });
 
+  test(
+    "should fetch token data from a lowercase address",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      const expectedData = new Token({
+        address: USDC,
+        decimals: 6,
+        symbol: "USDC",
+        name: "USD Coin",
+      });
+
+      const value = await Token.fetch(USDC.toLowerCase() as Address, client);
+
+      expect(value).toStrictEqual(expectedData);
+    },
+  );
+
   test("should fetch wrapped token data", { timeout: 30_000 }, async ({ client }) => {
     const expectedData = new ExchangeRateWrappedToken(
       {
@@ -36,6 +61,23 @@ describe("augment/Token", () => {
     );
 
     const value = await Token.fetch(wstETH, client);
+
+    expect(value).toStrictEqual(expectedData);
+  });
+
+  test("should fetch wrapped native token data", { timeout: 30_000 }, async ({ client }) => {
+    const expectedData = new ConstantWrappedToken(
+      {
+        address: WETH,
+        decimals: 18,
+        symbol: "WETH",
+        name: "Wrapped Ether",
+      },
+      NATIVE_ADDRESS,
+      18,
+    );
+
+    const value = await Token.fetch(WETH, client);
 
     expect(value).toStrictEqual(expectedData);
   });
