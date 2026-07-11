@@ -4,6 +4,10 @@
   "description": "Collection of SDKs to ease interactions with the IRIS credit",
   "license": "MIT",
   "author": "IRIS Team <team@iris.credit>",
+  "contributors": [
+    "u-zzam (https://github.com/u-zzam)",
+    "madiha-right (https://github.com/madiha-right)"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/iris-credit/iris-sdks.git"
