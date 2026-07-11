@@ -21,8 +21,6 @@
 <br />
 <br />
 
-> Forked from [`@morpho-org/morpho-ts`](https://github.com/morpho-org/sdks/tree/main/packages/morpho-ts), used under the MIT license.
-
 ## Overview
 
 TypeScript package to handle all things time & format-related.

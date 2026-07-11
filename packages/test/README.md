@@ -21,8 +21,6 @@
 <br />
 <br />
 
-> Forked from [`@morpho-org/test`](https://github.com/morpho-org/sdks/tree/main/packages/test), used under the MIT license.
-
 ## Overview
 
 Viem-based package that exports utilities to build Vitest fixtures that spawn anvil forks as child processes.
