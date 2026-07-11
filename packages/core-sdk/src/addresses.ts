@@ -21,6 +21,7 @@ interface ChainAddressesBase {
   readonly podImpl: Address;
   readonly whitelistBlm: Address;
   readonly permit2: Address;
+  readonly bundler3: Readonly<Record<string, Address>>;
   readonly tokens: Readonly<Record<string, Address>>;
 }
 
@@ -39,7 +40,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
-    // TODO: change deployed address
+    // TODO: change to deployed address
     bundler3: {
       bundler3: "0x0000000000000000000000000000000000000000",
       generalAdapter1: "0x0000000000000000000000000000000000000000",
