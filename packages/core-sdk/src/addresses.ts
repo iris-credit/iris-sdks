@@ -28,6 +28,7 @@ interface ChainAddressesBase {
   readonly whitelistBlm: Address;
   readonly permit2: Address;
   readonly multicall3: Address;
+  readonly bundler3: Readonly<Record<string, Address>>;
   readonly tokens: Readonly<Record<string, Address>>;
 }
 
@@ -47,6 +48,38 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
+    // TODO: change to deployed address
+    bundler3: {
+      bundler3: "0x0000000000000000000000000000000000000000",
+      generalAdapter1: "0x0000000000000000000000000000000000000000",
+    },
+    // Protocol integrations.
+    aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
+    aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
+    morphoBlueAdapter: "0x5fE09E7eA6F46296B42146D77f1Eb88F088Bdf8E",
+    morphoBlue: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
+    tokens: {
+      USDC: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+      WBTC: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+      cbBTC: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
+      WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      stETH: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
+      wstETH: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
+    },
+  },
+  [ChainId.TenderlyVNet]: {
+    // Iris protocol contracts.
+    iris: "0xF3545Eb175b94cb277D94892c90DbD9c08281E15",
+    blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
+    podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
+    whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
+    permit2: PERMIT2_ADDRESS,
+    multicall3: MULTICALL3_ADDRESS,
+    bundler3: {
+      bundler3: "0x8bfb92aC16F92808762F2DEe5F4aF2bE7Fa9617F",
+      generalAdapter1: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
+    },
     // Protocol integrations.
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
@@ -86,6 +119,12 @@ const unwrappedTokensMapping = {
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
       CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
+  },
+  [ChainId.TenderlyVNet]: {
+    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.wstETH]:
+      CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH,
   },
 } as const satisfies Record<ChainId, Readonly<Record<Address, Address>>>;
 
