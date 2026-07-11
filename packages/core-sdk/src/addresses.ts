@@ -75,6 +75,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
+    multicall3: MULTICALL3_ADDRESS,
     bundler3: {
       bundler3: "0x8bfb92aC16F92808762F2DEe5F4aF2bE7Fa9617F",
       generalAdapter1: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
@@ -118,6 +119,12 @@ const unwrappedTokensMapping = {
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
       CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
+  },
+  [ChainId.TenderlyVNet]: {
+    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.wstETH]:
+      CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH,
   },
 } as const satisfies Record<ChainId, Readonly<Record<Address, Address>>>;
 
