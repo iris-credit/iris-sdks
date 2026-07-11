@@ -1,6 +1,13 @@
 import type { Address } from "viem";
 import type { ChainId } from "./chain.js";
 
+/** Error thrown when a chain id has no registered chain addresses or metadata. */
+export class UnsupportedChainIdError extends Error {
+  constructor(public readonly chainId: number) {
+    super(`unsupported chain id ${chainId}`);
+  }
+}
+
 /** Error thrown when a token address has no curated metadata entry. */
 export class TokenMetadataNotFoundError extends Error {
   constructor(

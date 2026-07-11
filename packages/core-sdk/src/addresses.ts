@@ -1,6 +1,8 @@
 import type { Address } from "viem";
 
+import { getAddress } from "viem";
 import { ChainId } from "./chain.js";
+import { UnsupportedChainIdError } from "./errors.js";
 
 /** Address used to replicate an erc20-behaviour for native token.
  *
@@ -10,6 +12,10 @@ export const NATIVE_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE";
 
 // Permit2 is deployed at the same canonical address on every chain.
 const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
+
+// Multicall3 is deployed at the same canonical address on nearly every chain
+// (multicall3.com); chains where it differs (e.g. zkSync-style) override per-entry.
+const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
 // Fields guaranteed on every supported chain. Chain-specific addresses
 // (protocol integrations, tokens) vary per chain and are inferred from
@@ -21,6 +27,7 @@ interface ChainAddressesBase {
   readonly podImpl: Address;
   readonly whitelistBlm: Address;
   readonly permit2: Address;
+  readonly multicall3: Address;
   readonly bundler3: Readonly<Record<string, Address>>;
   readonly tokens: Readonly<Record<string, Address>>;
 }
@@ -40,6 +47,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
+    multicall3: MULTICALL3_ADDRESS,
     // TODO: change to deployed address
     bundler3: {
       bundler3: "0x0000000000000000000000000000000000000000",
@@ -93,5 +101,33 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
 export type ChainAddresses = (typeof CHAIN_ADDRESSES)[ChainId];
 
 export const getChainAddresses = <T extends ChainId>(chainId: T): (typeof CHAIN_ADDRESSES)[T] => {
-  return CHAIN_ADDRESSES[chainId];
+  const chainAddresses = CHAIN_ADDRESSES[chainId];
+  if (chainAddresses == null) throw new UnsupportedChainIdError(chainId);
+
+  return chainAddresses;
+};
+
+/* Per-chain mapping of wrapped tokens to the token they unwrap to (e.g. for unwrap routing).
+ *
+ * NB: includes rate-based wrappers like wstETH for routing purposes; `fetchToken` intercepts
+ * those before treating mapped tokens as constant-rate wrappers.
+ */
+const unwrappedTokensMapping = {
+  [ChainId.EthMainnet]: {
+    [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
+      CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
+  },
+} as const satisfies Record<ChainId, Readonly<Record<Address, Address>>>;
+
+/** Returns the token `wrappedToken` unwraps to on `chainId` (any casing), or `undefined` if not
+ * registered. */
+export const getUnwrappedToken = (wrappedToken: Address, chainId: ChainId) => {
+  // Widened lookup: `wrappedToken` is an arbitrary probe (see `fetchToken`), not a known key.
+  const mapping: Readonly<Record<Address, Address>> = unwrappedTokensMapping[chainId];
+  if (mapping == null) throw new UnsupportedChainIdError(chainId);
+
+  // Normalize casing to match the checksummed mapping keys.
+  return mapping[getAddress(wrappedToken)];
 };
