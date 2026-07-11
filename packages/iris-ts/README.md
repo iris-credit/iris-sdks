@@ -294,7 +294,7 @@ Convert 2 weeks to days:
 import { Time } from "@iris-credit/iris-ts";
 
 const days = Time.d.from.w(2); // 14
-const daysFromPeriod = Time.w.fromPeriod({unit: "w", duration: 2}); // 14
+const daysFromPeriod = Time.d.fromPeriod({unit: "w", duration: 2}); // 14
 ```
 
 
