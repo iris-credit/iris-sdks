@@ -42,6 +42,9 @@ importers:
         specifier: workspace:^
         version: link:../iris-ts
     devDependencies:
+      '@iris-credit/test':
+        specifier: workspace:^
+        version: link:../test
       '@types/node':
         specifier: ^22.0.0
         version: 22.19.11
