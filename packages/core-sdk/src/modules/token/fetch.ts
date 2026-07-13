@@ -1,5 +1,5 @@
-import type { Address, CallParameters, Client, UnionPick } from "viem";
-import type { ChainId } from "../../chain.js";
+import type { Address, Client } from "viem";
+import type { FetchParameters } from "../../types.js";
 
 import { erc20Abi, erc20Abi_bytes32, getAddress, hexToString, isHex } from "viem";
 import { getChainId, multicall, readContract } from "viem/actions";
@@ -9,14 +9,6 @@ import { UnsupportedChainIdError } from "../../errors.js";
 import { ConstantWrappedToken } from "./ConstantWrappedToken.js";
 import { ExchangeRateWrappedToken } from "./ExchangeRateWrappedToken.js";
 import { Token } from "./Token.js";
-
-/** Common viem call parameters accepted by core-sdk fetchers. */
-export type FetchParameters = UnionPick<
-  CallParameters,
-  "blockNumber" | "blockTag" | "stateOverride"
-> & {
-  chainId?: ChainId;
-};
 
 /** Minimal wstETH abi covering the only read `fetchToken` performs. */
 const wstEthAbi = [
