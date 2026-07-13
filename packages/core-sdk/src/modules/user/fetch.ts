@@ -29,18 +29,15 @@ export async function fetchUser(
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
-  const {
-    iris,
-    bundler3: { generalAdapter1 },
-  } = getChainAddresses(chainId);
+  const chainAddresses = getChainAddresses(chainId);
   address = getAddress(address);
 
   const isBundlerAuthorized = await readContract(client, {
     ...parameters,
-    address: iris,
+    address: chainAddresses.iris,
     abi: irisAbi,
     functionName: "isAuthorized",
-    args: [address, generalAdapter1],
+    args: [address, chainAddresses.bundler3.generalAdapter1],
   });
 
   return new User({ address, isBundlerAuthorized });

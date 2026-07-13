@@ -57,9 +57,7 @@ export async function fetchHolding(
       },
       balance: await getBalance(client, {
         address: user,
-        ...(parameters.blockNumber == null
-          ? { blockTag: parameters.blockTag }
-          : { blockNumber: parameters.blockNumber }),
+        ...parameters,
       }),
     });
 
