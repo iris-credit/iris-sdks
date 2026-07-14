@@ -2,7 +2,7 @@ import type { Address, Client } from "viem";
 import type { FetchParameters } from "../../types.js";
 
 import { erc20Abi, erc20Abi_bytes32, getAddress, hexToString, isHex } from "viem";
-import { getChainId, multicall, readContract } from "viem/actions";
+import { getChainId, readContract } from "viem/actions";
 import { getChainAddresses, getUnwrappedToken, NATIVE_ADDRESS } from "../../addresses.js";
 import { ChainUtils } from "../../chain.js";
 import { UnsupportedChainIdError } from "../../errors.js";
@@ -42,11 +42,12 @@ export const decodeBytes32String = (hexOrStr: string) => {
 /**
  * Fetches token metadata and wrapper metadata.
  *
- * Reads native token metadata locally for `NATIVE_ADDRESS`. For ERC20 tokens, batches the
- * `decimals`, `symbol`, and `name` reads (string and `bytes32` variants) into a single Multicall3
- * `eth_call`, mapping individually failed reads to `undefined`. wstETH is returned as an
- * `ExchangeRateWrappedToken` unwrapping to stETH at the current `stEthPerToken` rate, and tokens
- * with a registered unwrapped token (see `getUnwrappedToken`) as `ConstantWrappedToken`s.
+ * Reads native token metadata locally for `NATIVE_ADDRESS`. For ERC20 tokens, reads `decimals`,
+ * `symbol`, and `name` concurrently, retrying `symbol` and `name` with the `bytes32` variant when
+ * string decoding fails and mapping still-failed reads to `undefined`. wstETH is returned as an
+ * `ExchangeRateWrappedToken` unwrapping to stETH
+ * at the current `stEthPerToken` rate, and tokens with a registered unwrapped token (see
+ * `getUnwrappedToken`) as `ConstantWrappedToken`s.
  *
  * @param address - Token address in any casing, or `NATIVE_ADDRESS` for the native asset.
  * @param client - Viem client used for the reads.
@@ -80,34 +81,29 @@ export async function fetchToken(
 
   if (address === NATIVE_ADDRESS) return Token.native(chainId);
 
-  const { multicall3, tokens } = getChainAddresses(chainId);
+  const { tokens } = getChainAddresses(chainId);
   const { wstETH, stETH } = tokens;
 
-  const erc20 = { address, abi: erc20Abi } as const;
-  const erc20_bytes32 = { address, abi: erc20Abi_bytes32 } as const;
+  const erc20 = { ...parameters, address, abi: erc20Abi } as const;
+  const erc20_bytes32 = { ...parameters, address, abi: erc20Abi_bytes32 } as const;
 
-  // Over-fetches both abi variants in one batch: reads cost nothing extra onchain, and it avoids
-  // a second round trip for `bytes32`-metadata tokens (e.g. MKR).
-  const [decimals, symbol, symbol32, name, name32] = await multicall(client, {
-    ...parameters,
-    multicallAddress: multicall3,
-    allowFailure: true,
-    contracts: [
-      { ...erc20, functionName: "decimals" },
-      { ...erc20, functionName: "symbol" },
-      { ...erc20_bytes32, functionName: "symbol" },
-      { ...erc20, functionName: "name" },
-      { ...erc20_bytes32, functionName: "name" },
-    ],
-  });
+  // Tries the string abi first and only falls back to the `bytes32` variant when decoding fails,
+  // so the retry round trip is only paid for rare legacy tokens (e.g. MKR).
+  const [decimals, symbol, name] = await Promise.all([
+    readContract(client, { ...erc20, functionName: "decimals" }).catch(() => undefined),
+    readContract(client, { ...erc20, functionName: "symbol" }).catch(() =>
+      readContract(client, { ...erc20_bytes32, functionName: "symbol" })
+        .then(decodeBytes32String)
+        .catch(() => undefined),
+    ),
+    readContract(client, { ...erc20, functionName: "name" }).catch(() =>
+      readContract(client, { ...erc20_bytes32, functionName: "name" })
+        .then(decodeBytes32String)
+        .catch(() => undefined),
+    ),
+  ]);
 
-  const token = {
-    address,
-    decimals: decimals.result,
-    symbol:
-      symbol.result ?? (symbol32.result != null ? decodeBytes32String(symbol32.result) : undefined),
-    name: name.result ?? (name32.result != null ? decodeBytes32String(name32.result) : undefined),
-  };
+  const token = { address, decimals, symbol, name };
 
   switch (address) {
     case wstETH: {
