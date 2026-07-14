@@ -43,8 +43,9 @@ export const decodeBytes32String = (hexOrStr: string) => {
  * Fetches token metadata and wrapper metadata.
  *
  * Reads native token metadata locally for `NATIVE_ADDRESS`. For ERC20 tokens, reads `decimals`,
- * `symbol`, and `name` (string and `bytes32` variants) concurrently, mapping individually failed
- * reads to `undefined`. wstETH is returned as an `ExchangeRateWrappedToken` unwrapping to stETH
+ * `symbol`, and `name` concurrently, retrying `symbol` and `name` with the `bytes32` variant when
+ * string decoding fails and mapping still-failed reads to `undefined`. wstETH is returned as an
+ * `ExchangeRateWrappedToken` unwrapping to stETH
  * at the current `stEthPerToken` rate, and tokens with a registered unwrapped token (see
  * `getUnwrappedToken`) as `ConstantWrappedToken`s.
  *
@@ -86,22 +87,23 @@ export async function fetchToken(
   const erc20 = { ...parameters, address, abi: erc20Abi } as const;
   const erc20_bytes32 = { ...parameters, address, abi: erc20Abi_bytes32 } as const;
 
-  // Over-fetches both abi variants concurrently: reads cost nothing extra onchain, and it avoids
-  // a second round trip for `bytes32`-metadata tokens (e.g. MKR).
-  const [decimals, symbol, symbol32, name, name32] = await Promise.all([
+  // Tries the string abi first and only falls back to the `bytes32` variant when decoding fails,
+  // so the retry round trip is only paid for rare legacy tokens (e.g. MKR).
+  const [decimals, symbol, name] = await Promise.all([
     readContract(client, { ...erc20, functionName: "decimals" }).catch(() => undefined),
-    readContract(client, { ...erc20, functionName: "symbol" }).catch(() => undefined),
-    readContract(client, { ...erc20_bytes32, functionName: "symbol" }).catch(() => undefined),
-    readContract(client, { ...erc20, functionName: "name" }).catch(() => undefined),
-    readContract(client, { ...erc20_bytes32, functionName: "name" }).catch(() => undefined),
+    readContract(client, { ...erc20, functionName: "symbol" }).catch(() =>
+      readContract(client, { ...erc20_bytes32, functionName: "symbol" })
+        .then(decodeBytes32String)
+        .catch(() => undefined),
+    ),
+    readContract(client, { ...erc20, functionName: "name" }).catch(() =>
+      readContract(client, { ...erc20_bytes32, functionName: "name" })
+        .then(decodeBytes32String)
+        .catch(() => undefined),
+    ),
   ]);
 
-  const token = {
-    address,
-    decimals,
-    symbol: symbol ?? (symbol32 != null ? decodeBytes32String(symbol32) : undefined),
-    name: name ?? (name32 != null ? decodeBytes32String(name32) : undefined),
-  };
+  const token = { address, decimals, symbol, name };
 
   switch (address) {
     case wstETH: {
