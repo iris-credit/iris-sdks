@@ -1,7 +1,6 @@
 import type { Address, Client } from "viem";
-import type { FetchParameters } from "../../types.js";
+import type { BigIntish, FetchParameters } from "../../types.js";
 
-import { getAddress } from "viem";
 import { getChainId, readContract } from "viem/actions";
 import { irisAbi } from "../../abis/iris.js";
 import { getChainAddresses } from "../../addresses.js";
@@ -30,7 +29,6 @@ export async function fetchUser(
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
   const chainAddresses = getChainAddresses(chainId);
-  address = getAddress(address);
 
   const isBundlerAuthorized = await readContract(client, {
     ...parameters,
@@ -41,4 +39,39 @@ export async function fetchUser(
   });
 
   return new User({ address, isBundlerAuthorized });
+}
+
+/**
+ * Fetches whether an account has used a nonce on Iris.
+ *
+ * `take` and `setAuthorizationWithSig` consume nonces, so a quote whose `(solver, nonce)` pair
+ * is already used is unsubmittable.
+ *
+ * @param authorizer - Account owning the nonce (e.g. `quote.solver`).
+ * @param nonce - Nonce to look up.
+ * @param client - Viem client used for the read.
+ * @param parameters.blockNumber - Optional block number for historical reads.
+ * @param parameters.blockTag - Optional block tag for historical reads.
+ * @param parameters.stateOverride - Optional viem state override.
+ * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
+ * @returns Whether `authorizer` has used `nonce`.
+ */
+export async function fetchIsNonceUsed(
+  authorizer: Address,
+  nonce: BigIntish,
+  client: Client,
+  parameters: FetchParameters = {},
+) {
+  const chainId = parameters.chainId ?? (await getChainId(client));
+  if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
+
+  const { iris } = getChainAddresses(chainId);
+
+  return await readContract(client, {
+    ...parameters,
+    address: iris,
+    abi: irisAbi,
+    functionName: "isNonceUsed",
+    args: [authorizer, BigInt(nonce)],
+  });
 }

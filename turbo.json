@@ -1,6 +1,8 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "test": {}
+    "test": {
+      "passThroughEnv": ["MAINNET_RPC_URL"]
+    }
   }
 }

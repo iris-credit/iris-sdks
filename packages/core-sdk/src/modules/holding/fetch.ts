@@ -37,7 +37,7 @@ export async function fetchHolding(
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
-  user = getAddress(user);
+  // Normalize casing upfront so the native-token comparison below is reliable.
   token = getAddress(token);
 
   if (token === NATIVE_ADDRESS)
