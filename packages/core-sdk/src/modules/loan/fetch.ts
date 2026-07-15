@@ -1,7 +1,6 @@
 import type { Address, Client } from "viem";
 import type { FetchParameters } from "../../types.js";
 
-import { getAddress } from "viem";
 import { getChainId, readContract } from "viem/actions";
 import { irisAbi } from "../../abis/iris.js";
 import { getChainAddresses } from "../../addresses.js";
@@ -34,7 +33,7 @@ export async function fetchLoan(pod: Address, client: Client, parameters: FetchP
     address: iris,
     abi: irisAbi,
     functionName: "getLoan",
-    args: [getAddress(pod)],
+    args: [pod],
   });
 
   return new Loan({
