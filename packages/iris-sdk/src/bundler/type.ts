@@ -2,6 +2,27 @@ import type { Address, Hex } from "viem";
 import type { PermitSingle, Quote } from "@iris-credit/core-sdk";
 
 /**
+ * Iris authorization payload signed by a user for Bundler3-mediated Iris
+ * execution.
+ */
+export interface Authorization {
+  /** Address granting or revoking authorization. */
+  readonly authorizer: Address;
+
+  /** Address receiving authorization. */
+  readonly authorized: Address;
+
+  /** Whether authorization is granted (`true`) or revoked (`false`). */
+  readonly isAuthorized: boolean;
+
+  /** Iris authorization nonce consumed by the signature. */
+  readonly nonce: bigint;
+
+  /** Signature deadline timestamp in seconds. */
+  readonly deadline: bigint;
+}
+
+/**
  * Permit2 single-permit payload accepted by the `approve2` action, without a
  * `spender`: the encoder always injects GeneralAdapter1 or Iris so a signature can
  * never approve an arbitrary spender.
@@ -34,16 +55,6 @@ export interface ActionArgs {
     asset: Address,
     amount: bigint,
     recipient: Address,
-    skipRevert?: boolean,
-  ];
-
-  /** ERC-2612 permit from `owner` for `asset`, `amount`, `deadline`, and `signature`; `skipRevert` controls Bundler3 revert handling. */
-  readonly permit: [
-    owner: Address,
-    asset: Address,
-    amount: bigint,
-    deadline: bigint,
-    signature: Hex | null,
     skipRevert?: boolean,
   ];
 
@@ -93,6 +104,13 @@ export interface ActionArgs {
     minSharePrice: bigint,
     receiver: Address,
     owner: Address,
+    skipRevert?: boolean,
+  ];
+
+  /** Iris `setAuthorizationWithSig` call submitting a signed `authorization` and its `signature`; `skipRevert` controls Bundler3 revert handling. */
+  readonly irisSetAuthorizationWithSig: [
+    authorization: Authorization,
+    signature: Hex | null,
     skipRevert?: boolean,
   ];
 
