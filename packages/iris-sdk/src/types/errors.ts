@@ -150,6 +150,20 @@ export class ZeroCollateralAmountError extends Error {
   }
 }
 
+/** Thrown when a quote's debt amount is zero. */
+export class ZeroDebtAmountError extends Error {
+  constructor(debtToken: Address) {
+    super(`Debt amount must be positive for token: ${debtToken}`);
+  }
+}
+
+/** Thrown when a quote's bond amount is zero. */
+export class ZeroBondAmountError extends Error {
+  constructor(debtToken: Address) {
+    super(`Bond amount must be positive for token: ${debtToken}`);
+  }
+}
+
 /** Thrown when a quote's deadline has passed. */
 export class QuoteExpiredError extends Error {
   constructor(deadline: bigint) {
@@ -169,6 +183,27 @@ export class VenueNotSupportedError extends Error {
   constructor(venueId: bigint, venueBitmap: bigint) {
     super(
       `Venue ${venueId} is not set in the quote's venue bitmap ${venueBitmap}. Take a venue the solver enabled.`,
+    );
+  }
+}
+
+/** Thrown when a quote's nonce has already been consumed on Iris. */
+export class NonceAlreadyUsedError extends Error {
+  constructor(solver: Address, nonce: bigint) {
+    super(`Nonce ${nonce} of solver ${solver} has already been used. Request a fresh quote.`);
+  }
+}
+
+/** Thrown when the solver's debt-token funding cannot cover the quote's bond pull at take time. */
+export class InsufficientBondError extends Error {
+  constructor(params: {
+    readonly solver: Address;
+    readonly bond: bigint;
+    readonly balance: bigint;
+    readonly allowance: bigint;
+  }) {
+    super(
+      `Solver ${params.solver} cannot fund the bond ${params.bond}: balance ${params.balance}, direct allowance ${params.allowance}, and no covering Permit2 allowance. The take would revert on-chain.`,
     );
   }
 }
