@@ -7,7 +7,7 @@ export type Authorization = {
   authorizer: Address; // The address of the user granting or revoking authorization.
   authorized: Address; // The address of the user being authorized or deauthorized.
   isAuthorized: boolean; // Whether to grant (true) or revoke (false) authorization.
-  nonce: bigint; // A unique value to prevent replay attacks; increments with each authorization.
+  nonce: bigint; // A unique value to prevent replay attacks; random value not yet used (e.g. randomNonce()).
   deadline: bigint; // The timestamp after which the authorization is no longer valid.
 };
 
