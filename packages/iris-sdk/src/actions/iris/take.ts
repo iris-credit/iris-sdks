@@ -64,17 +64,9 @@ export const irisTake = ({
   chainId,
   args: { quote, quoteSignature, requirementSignature },
 }: IrisTakeParams): Readonly<Transaction<IrisTakeAction>> => {
-  if (quote.collateral <= 0n) {
-    throw new ZeroCollateralAmountError(quote.collateralToken);
-  }
-
-  if (quote.debt <= 0n) {
-    throw new ZeroDebtAmountError(quote.debtToken);
-  }
-
-  if (quote.bond <= 0n) {
-    throw new ZeroBondAmountError(quote.debtToken);
-  }
+  if (quote.collateral <= 0n) throw new ZeroCollateralAmountError(quote.collateralToken);
+  if (quote.debt <= 0n) throw new ZeroDebtAmountError(quote.debtToken);
+  if (quote.bond <= 0n) throw new ZeroBondAmountError(quote.debtToken);
 
   const {
     bundler3: { generalAdapter1 },
