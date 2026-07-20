@@ -2,7 +2,7 @@ import { values } from "@iris-credit/iris-ts";
 
 export const ChainId = {
   EthMainnet: 1,
-  TenderlyVNet: 9991,
+  VNet: 9991,
   // BaseMainnet: 8453,
 } as const;
 
@@ -53,11 +53,12 @@ export namespace ChainUtils {
       explorerUrl: "https://etherscan.io",
       identifier: "mainnet",
     },
-    [ChainId.TenderlyVNet]: {
-      name: "Tenderly Virtual TestNets",
-      id: ChainId.TenderlyVNet,
+    [ChainId.VNet]: {
+      name: "VNet",
+      id: ChainId.VNet,
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      explorerUrl: "https://dashboard.tenderly.co/explorer/vnet",
+      // The vnet mirrors mainnet addresses, so etherscan is the closest useful explorer.
+      explorerUrl: "https://etherscan.io",
       identifier: "vnet",
     },
     // [ChainId.BaseMainnet]: {

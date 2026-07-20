@@ -80,10 +80,10 @@ export const CHAIN_REGISTRIES = defineChainRegistries({
     },
   },
   // Fork of mainnet: inherits the mainnet deployment and mirrors its enabled configuration.
-  [ChainId.TenderlyVNet]: {
+  [ChainId.VNet]: {
     deploymentBlock: 25_442_833n,
     bondLltvs: [900_000_000_000_000_000n],
-    blms: { blm: CHAIN_ADDRESSES[ChainId.TenderlyVNet].blm },
+    blms: { blm: CHAIN_ADDRESSES[ChainId.VNet].blm },
     venues: { aaveV3: 0n, morphoBlue: 1n },
     marketDatas: {
       aaveV3: { venue: "aaveV3", data: "0x" },
