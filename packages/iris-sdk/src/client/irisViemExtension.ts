@@ -10,7 +10,7 @@ import { Iris } from "../entities/iris.js";
  * viem `Client` plus a frozen options bag and exposes the chain-scoped entity factory.
  *
  * Holds no state beyond configuration: no cache, no `init()`, no warm-up. Each factory call
- * (`iris`) returns a fresh entity bound to this client.
+ * (`core`) returns a fresh entity bound to this client.
  *
  * @internal
  */
@@ -24,7 +24,7 @@ function createIrisNamespace(
       supportSignature: options?.supportSignature ?? false,
     }),
 
-    iris(chainId: ChainId) {
+    core(chainId: ChainId) {
       return new Iris(namespace, chainId);
     },
   };
@@ -55,7 +55,7 @@ function createIrisNamespace(
  *   .extend(publicActions)
  *   .extend(irisViemExtension({ supportSignature: true }));
  *
- * const iris = client.iris.iris(1);
+ * const iris = client.iris.core(1);
  * const { buildTx, getRequirements } = iris.take({ userAddress: user, quote, quoteSignature });
  * const requirements = await getRequirements();
  * // ...satisfy requirements (send approvals / collect signatures)...

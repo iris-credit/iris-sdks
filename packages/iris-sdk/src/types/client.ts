@@ -11,5 +11,5 @@ export interface IrisClientType {
     readonly supportSignature: boolean;
   };
 
-  iris: (chainId: ChainId) => IrisActions;
+  core: (chainId: ChainId) => IrisActions;
 }
