@@ -7,10 +7,11 @@ import {
   encodeFunctionData,
   isAddressEqual,
   keccak256,
+  parseSignature,
   serializeSignature,
   zeroHash,
 } from "viem";
-import { getChainAddresses, irisAbi, permit2Abi } from "@iris-credit/core-sdk";
+import { erc2612Abi, getChainAddresses, irisAbi, permit2Abi } from "@iris-credit/core-sdk";
 import { bundler3Abi, generalAdapter1 as generalAdapter1Abi } from "../abis/index.js";
 import { BundlerErrors } from "../types/index.js";
 
@@ -142,6 +143,12 @@ export namespace BundlerAction {
       }
       case "erc20TransferFrom": {
         return BundlerAction.erc20TransferFrom(chainId, ...args);
+      }
+      case "permit": {
+        const [owner, asset, amount, deadline, signature, skipRevert] = args;
+        if (signature == null) throw new BundlerErrors.MissingSignature();
+
+        return BundlerAction.permit(chainId, owner, asset, amount, deadline, signature, skipRevert);
       }
       case "approve2": {
         const [owner, permitSingle, signature, skipRevert] = args;
@@ -350,6 +357,36 @@ export namespace BundlerAction {
           abi: generalAdapter1Abi,
           functionName: "erc20TransferFrom",
           args: [asset, recipient, amount],
+        }),
+        value: 0n,
+        skipRevert,
+        callbackHash: zeroHash,
+      },
+    ];
+  }
+
+  /** Encodes an ERC-2612 permit on `asset` approving GeneralAdapter1 (raw call to the token; ECDSA-only, split into `v`/`r`/`s`). */
+  export function permit(
+    chainId: ChainId,
+    owner: Address,
+    asset: Address,
+    amount: bigint,
+    deadline: bigint,
+    signature: Hex | Signature,
+    skipRevert = true,
+  ): BundlerCall[] {
+    const {
+      bundler3: { generalAdapter1 },
+    } = getChainAddresses(chainId);
+    const { r, s, yParity } = parseSignature(toSignatureHex(signature));
+
+    return [
+      {
+        to: asset,
+        data: encodeFunctionData({
+          abi: erc2612Abi,
+          functionName: "permit",
+          args: [owner, generalAdapter1, amount, deadline, yParity + 27, r, s],
         }),
         value: 0n,
         skipRevert,

@@ -71,9 +71,10 @@ export interface IrisActions {
   /**
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
    *
-   * `getRequirements` returns the collateral-token approval `Transaction` or Permit2 signature
-   * `Requirement` for `GeneralAdapter1`. No Iris authorization is needed: taking opens a new
-   * loan and the collateral is paid by the bundle.
+   * `getRequirements` returns the collateral-token approval `Transaction` or permit / Permit2
+   * signature `Requirement` for `GeneralAdapter1`; pass `useSimplePermit: true` to prefer an
+   * EIP-2612 permit when the token supports it. No Iris authorization is needed: taking opens a
+   * new loan and the collateral is paid by the bundle.
    *
    * @param params - Take parameters, including the pre-fetched {@link TakeData}.
    * @returns Object with `buildTx` and `getRequirements`.
@@ -87,7 +88,9 @@ export interface IrisActions {
     buildTx: (
       signatures?: readonly RequirementSignature[],
     ) => Readonly<Transaction<IrisTakeAction>>;
-    getRequirements: () => Promise<
+    getRequirements: (params?: {
+      useSimplePermit?: boolean;
+    }) => Promise<
       (Readonly<Transaction<ERC20ApprovalAction>> | Bundler3TokenSignatureRequirement)[]
     >;
   };
@@ -266,12 +269,13 @@ export class Iris implements IrisActions {
     }
 
     return {
-      getRequirements: () =>
+      getRequirements: (params?: { useSimplePermit?: boolean }) =>
         getGeneralAdapterRequirements(this.client.viemClient, {
           address: quote.collateralToken,
           chainId: this.chainId,
           supportSignature: this.client.options.supportSignature,
           args: { amount: quote.collateral, from: userAddress },
+          useSimplePermit: params?.useSimplePermit,
         }),
 
       buildTx: (signatures?: readonly RequirementSignature[]) => {

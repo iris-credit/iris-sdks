@@ -25,8 +25,9 @@ export function validateChainId(clientChainId: number | undefined, chainId: numb
  * Asserts that the client has a connected account AND that it matches
  * the provided user address.
  *
- * Used internally by the signature requirements (`encodeErc20Permit2Approve`,
- * `encodeIrisSignatureAuthorization`) to enforce builder = signer at `sign()` time:
+ * Used internally by the signature requirements (`encodeErc20Permit`,
+ * `encodeErc20Permit2Approve`, `encodeIrisSignatureAuthorization`) to enforce builder = signer
+ * at `sign()` time:
  * the signing flow is the only path where an account/address mismatch
  * is a real security concern (rather than just an integrator footgun).
  *

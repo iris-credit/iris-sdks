@@ -69,6 +69,15 @@ export interface Transaction<TAction extends BaseAction = TransactionAction> {
   readonly action: TAction;
 }
 
+export interface PermitArgs {
+  owner: Address;
+  nonce: bigint;
+  asset: Address;
+  signature: Hex;
+  amount: bigint;
+  deadline: bigint;
+}
+
 export interface Permit2Args {
   owner: Address;
   nonce: bigint;
@@ -119,6 +128,11 @@ export interface Requirement<TSignature extends RequirementSignature = Requireme
   action: TSignature["action"];
 }
 
+export interface PermitAction extends BaseAction<
+  "permit",
+  { spender: Address; amount: bigint; deadline: bigint }
+> {}
+
 export interface Permit2Action extends BaseAction<
   "permit2",
   { spender: Address; amount: bigint; deadline: bigint; expiration: bigint }
@@ -139,10 +153,10 @@ export interface QuoteSignatureAction extends BaseAction<
   { solver: Address; nonce: bigint; deadline: bigint }
 > {}
 
-/** A signed Permit2 approval requirement. */
+/** A signed ERC-2612 permit or Permit2 approval requirement. */
 export interface PermitRequirementSignature {
-  args: Permit2Args;
-  action: Permit2Action;
+  args: PermitArgs | Permit2Args;
+  action: PermitAction | Permit2Action;
 }
 
 /** A signed Iris authorization requirement (consumed via `setAuthorizationWithSig`). */
@@ -159,7 +173,7 @@ export interface QuoteRequirementSignature {
 
 /**
  * The deep-frozen output of `Requirement.sign()`. Discriminated on `action.type`:
- * `"permit2"` carries token-approval args, `"authorization"` the signed
+ * `"permit"` / `"permit2"` carry token-approval args, `"authorization"` the signed
  * Iris authorization, and `"quoteSignature"` the signed solver quote. Narrow with
  * {@link isPermitSignature} / {@link isAuthorizationSignature} / {@link isQuoteSignature}.
  */
@@ -223,15 +237,15 @@ export function isRequirementSignature<T extends RequirementSignature = Requirem
 }
 
 /**
- * Narrows a {@link RequirementSignature} to a Permit2 token-approval signature.
+ * Narrows a {@link RequirementSignature} to a permit / Permit2 token-approval signature.
  *
  * @param signature - The signed requirement to test.
- * @returns `true` when `signature.action.type` is `"permit2"`.
+ * @returns `true` when `signature.action.type` is `"permit"` or `"permit2"`.
  */
 export function isPermitSignature(
   signature: RequirementSignature,
 ): signature is PermitRequirementSignature {
-  return signature.action.type === "permit2";
+  return signature.action.type === "permit" || signature.action.type === "permit2";
 }
 
 /**
@@ -260,7 +274,7 @@ export function isQuoteSignature(
 
 /** The typed permit / authorization slots a bundled path consumes, split from a `buildTx` array. */
 export interface SelectedRequirementSignatures {
-  /** The single Permit2 token-approval signature, when present. */
+  /** The single permit / Permit2 signature, when present. */
   permit?: PermitRequirementSignature;
   /** The single Iris authorization signature, when present. */
   authorization?: AuthorizationRequirementSignature;
@@ -279,7 +293,7 @@ export interface SelectedRequirementSignatures {
  *
  * @param signatures - The signatures passed to `buildTx`.
  * @param accepts - Which signature kinds this operation consumes.
- * @param accepts.permit - Whether a Permit2 signature is consumed.
+ * @param accepts.permit - Whether a permit / Permit2 signature is consumed.
  * @param accepts.authorization - Whether an Iris authorization signature is consumed.
  * @returns The single permit and/or authorization signature, when present.
  * @throws {AmbiguousRequirementSignaturesError} when more than one signature of an accepted kind is present.

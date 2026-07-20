@@ -37,6 +37,16 @@ export interface ActionArgs {
     skipRevert?: boolean,
   ];
 
+  /** ERC-2612 permit from `owner` for `asset`, `amount`, `deadline`, and `signature`; `skipRevert` controls Bundler3 revert handling. */
+  readonly permit: [
+    owner: Address,
+    asset: Address,
+    amount: bigint,
+    deadline: bigint,
+    signature: Hex | null,
+    skipRevert?: boolean,
+  ];
+
   /**
    * Permit2 approval from `owner` for `permitSingle` and `signature`; `skipRevert` controls Bundler3 revert handling.
    * Spender is fixed to GeneralAdapter1.

@@ -143,6 +143,24 @@ export class DepositAssetMismatchError extends Error {
   }
 }
 
+/** Thrown when a `permit2` requirement signature is missing the `expiration` field. */
+export class Permit2ExpirationMissingError extends Error {
+  constructor() {
+    super(
+      'Requirement signature with action.type === "permit2" must include args.expiration. Re-sign using the permit2 flow.',
+    );
+  }
+}
+
+/** Thrown when a token exposes no readable ERC-20 `name`, so its EIP-2612 permit domain cannot be built. */
+export class Erc2612NameMissingError extends Error {
+  constructor(token: Address) {
+    super(
+      `Token "${token}" has no readable ERC-20 name to build its EIP-2612 permit domain. Use the Permit2 flow instead.`,
+    );
+  }
+}
+
 /** Thrown when a quote's collateral amount is zero. */
 export class ZeroCollateralAmountError extends Error {
   constructor(collateralToken: Address) {

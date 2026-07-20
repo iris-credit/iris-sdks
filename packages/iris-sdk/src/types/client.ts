@@ -7,7 +7,10 @@ export interface IrisClientType {
   readonly viemClient: Client;
 
   readonly options: {
-    /** Whether the integrator can collect EIP-712 signatures for Permit2. Defaults to `false`. */
+    /**
+     * Whether the integrator can collect EIP-712 signatures for permit / permit2. Defaults to
+     * `false`.
+     */
     readonly supportSignature: boolean;
   };
 

@@ -39,7 +39,7 @@ function createIrisNamespace(
  *
  * @param _options - Optional SDK-wide options forwarded to the `iris` namespace.
  * @param _options.supportSignature - Whether the integrator can collect EIP-712 signatures for
- *   Permit2. Defaults to `false` (classic approvals only).
+ *   permit / permit2. Defaults to `false` (classic approvals only).
  * @returns A viem extension function — `client.extend(irisViemExtension(...))` adds `client.iris`.
  * @example
  * ```ts

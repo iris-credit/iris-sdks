@@ -22,7 +22,7 @@ export interface IrisTakeParams {
     readonly quote: Quote;
     /** The solver's EIP-712 signature over the quote. */
     readonly quoteSignature: Hex;
-    /** Optional pre-signed Permit2 approval for the collateral transfer. */
+    /** Optional pre-signed permit/permit2 approval for the collateral transfer. */
     readonly requirementSignature?: PermitRequirementSignature;
   };
 }
@@ -31,15 +31,16 @@ export interface IrisTakeParams {
  * Prepares a take transaction opening an Iris loan from a solver-signed quote.
  *
  * Routed through bundler3 via `GeneralAdapter1`: the bundle pulls `quote.collateral` of
- * `quote.collateralToken` from the initiator into the adapter (plain `erc20TransferFrom`, or
- * `approve2` + `transferFrom2` when a Permit2 `requirementSignature` is provided), then calls
- * `irisTake(quote, quoteSignature)`. The bond is pulled by Iris from the solver directly and no
- * Iris authorization is needed: taking opens a new loan and the collateral is paid by the bundle.
+ * `quote.collateralToken` from the initiator into the adapter (plain `erc20TransferFrom`,
+ * `approve2` + `transferFrom2` for a Permit2 `requirementSignature`, or `permit` +
+ * `erc20TransferFrom` for an EIP-2612 one), then calls `irisTake(quote, quoteSignature)`. The
+ * bond is pulled by Iris from the solver directly and no Iris authorization is needed: taking
+ * opens a new loan and the collateral is paid by the bundle.
  *
  * @param params.chainId - The chain the bundle targets.
  * @param params.args.quote - The solver-signed quote to take.
  * @param params.args.quoteSignature - The solver's signature over the quote.
- * @param params.args.requirementSignature - Optional pre-signed Permit2 approval.
+ * @param params.args.requirementSignature - Optional pre-signed permit/permit2 approval.
  * @returns A deep-frozen `Transaction<IrisTakeAction>` with `to`, `value`, `data`, and the typed
  *   `action` discriminator.
  * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
