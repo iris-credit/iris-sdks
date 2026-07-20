@@ -30,14 +30,15 @@ describe("augment/Config", () => {
 describe("fetchIsBlmEnabled", () => {
   test("should fetch an enabled blm", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsBlmEnabled(blm, client)).toBe(true);
+    expect(await fetchIsBlmEnabled(whitelistBlm, client)).toBe(true);
   });
 
   test("should fetch a non-enabled blm", { timeout: 30_000 }, async ({ client }) => {
-    expect(await fetchIsBlmEnabled(whitelistBlm, client)).toBe(false);
     expect(await fetchIsBlmEnabled(randomAddress(), client)).toBe(false);
   });
 
   test("should fetch a newly enabled blm", { timeout: 30_000 }, async ({ client }) => {
+    const newBlm = randomAddress();
     const owner = await client.readContract({ address: iris, abi: irisAbi, functionName: "owner" });
     await client.impersonateAccount({ address: owner });
     await client.setBalance({ address: owner, value: parseEther("1") });
@@ -46,10 +47,10 @@ describe("fetchIsBlmEnabled", () => {
       address: iris,
       abi: irisAbi,
       functionName: "enableBlm",
-      args: [whitelistBlm],
+      args: [newBlm],
     });
 
-    expect(await fetchIsBlmEnabled(whitelistBlm, client)).toBe(true);
+    expect(await fetchIsBlmEnabled(newBlm, client)).toBe(true);
   });
 });
 

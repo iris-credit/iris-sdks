@@ -42,16 +42,15 @@ const defineChainAddresses = <const T extends Record<ChainId, ChainAddressesBase
 export const CHAIN_ADDRESSES = defineChainAddresses({
   [ChainId.EthMainnet]: {
     // Iris protocol contracts.
-    iris: "0xF3545Eb175b94cb277D94892c90DbD9c08281E15",
-    blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
+    iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
+    blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
-    whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
+    whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
-    // TODO: change to deployed address
     bundler3: {
-      bundler3: "0x0000000000000000000000000000000000000000",
-      generalAdapter1: "0x0000000000000000000000000000000000000000",
+      bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
+      generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
     },
     // Protocol integrations.
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
@@ -69,17 +68,17 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
       wstETH: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
     },
   },
-  [ChainId.TenderlyVNet]: {
+  [ChainId.VNet]: {
     // Iris protocol contracts.
-    iris: "0xF3545Eb175b94cb277D94892c90DbD9c08281E15",
-    blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
+    iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
+    blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
-    whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
+    whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     bundler3: {
-      bundler3: "0x8bfb92aC16F92808762F2DEe5F4aF2bE7Fa9617F",
-      generalAdapter1: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
+      bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
+      generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
     },
     // Protocol integrations.
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
@@ -122,11 +121,10 @@ const unwrappedTokensMapping = {
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
       CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
   },
-  [ChainId.TenderlyVNet]: {
-    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.WETH]: NATIVE_ADDRESS,
-    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH]: NATIVE_ADDRESS,
-    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.wstETH]:
-      CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH,
+  [ChainId.VNet]: {
+    [CHAIN_ADDRESSES[ChainId.VNet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.VNet].tokens.wstETH]: CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH,
   },
 } as const satisfies Record<ChainId, Readonly<Record<Address, Address>>>;
 
