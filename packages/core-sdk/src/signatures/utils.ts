@@ -1,4 +1,4 @@
 import { bytesToBigInt } from "viem";
 
-/** Random uint256 nonce for Quote/Authorization. Iris marks nonces used per signer, so uniqueness suffices — no on-chain read needed. */
-export const randomNonce = (): bigint => bytesToBigInt(crypto.getRandomValues(new Uint8Array(32)));
+/** Given `isNonceUsed` in our contract is mapped by the `authorizer`, we can use simpler form as solvers are never going to response quotes in the same ms  */
+export const randomNonce = () => BigInt(Date.now());
