@@ -1,26 +1,5 @@
 import type { Address, Hex } from "viem";
-import type { PermitSingle, Quote } from "@iris-credit/core-sdk";
-
-/**
- * Iris authorization payload signed by a user for Bundler3-mediated Iris
- * execution.
- */
-export interface Authorization {
-  /** Address granting or revoking authorization. */
-  readonly authorizer: Address;
-
-  /** Address receiving authorization. */
-  readonly authorized: Address;
-
-  /** Whether authorization is granted (`true`) or revoked (`false`). */
-  readonly isAuthorized: boolean;
-
-  /** Iris authorization nonce consumed by the signature. */
-  readonly nonce: bigint;
-
-  /** Signature deadline timestamp in seconds. */
-  readonly deadline: bigint;
-}
+import type { Authorization, PermitSingle, Quote } from "@iris-credit/core-sdk";
 
 /**
  * Permit2 single-permit payload accepted by the `approve2` action, without a
