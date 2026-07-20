@@ -67,7 +67,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
       wstETH: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
     },
   },
-  [ChainId.TenderlyVNet]: {
+  [ChainId.VNet]: {
     // Iris protocol contracts.
     iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
     blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
@@ -119,11 +119,10 @@ const unwrappedTokensMapping = {
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
       CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
   },
-  [ChainId.TenderlyVNet]: {
-    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.WETH]: NATIVE_ADDRESS,
-    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH]: NATIVE_ADDRESS,
-    [CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.wstETH]:
-      CHAIN_ADDRESSES[ChainId.TenderlyVNet].tokens.stETH,
+  [ChainId.VNet]: {
+    [CHAIN_ADDRESSES[ChainId.VNet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.VNet].tokens.wstETH]: CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH,
   },
 } as const satisfies Record<ChainId, Readonly<Record<Address, Address>>>;
 
