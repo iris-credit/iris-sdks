@@ -1,8 +1,15 @@
-import type { Address, Hex } from "viem";
+import type { Address, Hex, Signature } from "viem";
 import type { Authorization, ChainId, Quote } from "@iris-credit/core-sdk";
 import type { Action, Permit2PermitSingle } from "./type.js";
 
-import { encodeAbiParameters, encodeFunctionData, isAddressEqual, keccak256, zeroHash } from "viem";
+import {
+  encodeAbiParameters,
+  encodeFunctionData,
+  isAddressEqual,
+  keccak256,
+  serializeSignature,
+  zeroHash,
+} from "viem";
 import { getChainAddresses, irisAbi, permit2Abi } from "@iris-credit/core-sdk";
 import { bundler3Abi, generalAdapter1 as generalAdapter1Abi } from "../abis/index.js";
 import { BundlerErrors } from "../types/index.js";
@@ -61,6 +68,14 @@ const addBundlerPrefund = (state: BundleValueState, amount: bigint): BundleValue
   value: state.value + amount,
   availableBundlerValue: state.availableBundlerValue + amount,
 });
+
+/**
+ * Normalizes a raw ECDSA signature to its hex form. Integrators get a `Hex` from
+ * `signTypedData`/`signMessage` and a viem `Signature` object from the low-level
+ * `sign`; both are accepted so no manual conversion is required at the call site.
+ */
+const toSignatureHex = (signature: Hex | Signature): Hex =>
+  typeof signature === "string" ? signature : serializeSignature(signature);
 
 const consumeCallValue = (state: BundleValueState, call: BundlerCall): BundleValueState => {
   if (call.value > state.availableBundlerValue) {
@@ -348,7 +363,7 @@ export namespace BundlerAction {
     chainId: ChainId,
     owner: Address,
     permitSingle: Permit2PermitSingle,
-    signature: Hex,
+    signature: Hex | Signature,
     skipRevert = true,
   ): BundlerCall[] {
     const {
@@ -371,7 +386,7 @@ export namespace BundlerAction {
               ...permitSingle,
               spender: generalAdapter1,
             },
-            signature,
+            toSignatureHex(signature),
           ],
         }),
         value: 0n,
@@ -386,7 +401,7 @@ export namespace BundlerAction {
     chainId: ChainId,
     owner: Address,
     permitSingle: Permit2PermitSingle,
-    signature: Hex,
+    signature: Hex | Signature,
     skipRevert = true,
   ): BundlerCall[] {
     const { iris, permit2 } = getChainAddresses(chainId);
@@ -406,7 +421,7 @@ export namespace BundlerAction {
               ...permitSingle,
               spender: iris,
             },
-            signature,
+            toSignatureHex(signature),
           ],
         }),
         value: 0n,
@@ -513,7 +528,7 @@ export namespace BundlerAction {
   export function irisSetAuthorizationWithSig(
     chainId: ChainId,
     authorization: Authorization,
-    signature: Hex,
+    signature: Hex | Signature,
     skipRevert = true,
   ): BundlerCall[] {
     const {
@@ -531,7 +546,7 @@ export namespace BundlerAction {
         data: encodeFunctionData({
           abi: irisAbi,
           functionName: "setAuthorizationWithSig",
-          args: [authorization, signature],
+          args: [authorization, toSignatureHex(signature)],
         }),
         value: 0n,
         skipRevert,
@@ -544,7 +559,7 @@ export namespace BundlerAction {
   export function irisTake(
     chainId: ChainId,
     quote: Quote,
-    signature: Hex,
+    signature: Hex | Signature,
     skipRevert = false,
   ): BundlerCall[] {
     const {
@@ -557,7 +572,7 @@ export namespace BundlerAction {
         data: encodeFunctionData({
           abi: generalAdapter1Abi,
           functionName: "irisTake",
-          args: [quote, signature],
+          args: [quote, toSignatureHex(signature)],
         }),
         value: 0n,
         skipRevert,
