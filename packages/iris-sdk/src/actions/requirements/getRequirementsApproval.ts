@@ -2,7 +2,7 @@ import type { Address } from "viem";
 import type { ChainId } from "@iris-credit/core-sdk";
 import type { ERC20ApprovalAction, Transaction } from "../../types/index.js";
 
-import { getAddress } from "viem";
+import { isAddressEqual } from "viem";
 import { APPROVE_ONLY_ONCE_TOKENS } from "../../helpers/index.js";
 import { ApprovalAmountLessThanSpendAmountError } from "../../types/index.js";
 import { encodeErc20Approval } from "./encode/encodeErc20Approval.js";
@@ -60,7 +60,10 @@ export const getRequirementsApproval = (params: {
   const approvals: Transaction<ERC20ApprovalAction>[] = [];
 
   if (allowances < spendAmount) {
-    if (APPROVE_ONLY_ONCE_TOKENS[chainId]?.includes(getAddress(address)) && allowances > 0n) {
+    if (
+      APPROVE_ONLY_ONCE_TOKENS[chainId]?.some((entry) => isAddressEqual(entry, address)) &&
+      allowances > 0n
+    ) {
       approvals.push(
         encodeErc20Approval({
           token: address,
