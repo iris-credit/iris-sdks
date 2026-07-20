@@ -42,16 +42,15 @@ const defineChainAddresses = <const T extends Record<ChainId, ChainAddressesBase
 export const CHAIN_ADDRESSES = defineChainAddresses({
   [ChainId.EthMainnet]: {
     // Iris protocol contracts.
-    iris: "0xF3545Eb175b94cb277D94892c90DbD9c08281E15",
+    iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
     blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
-    // TODO: change to deployed address
     bundler3: {
-      bundler3: "0x0000000000000000000000000000000000000000",
-      generalAdapter1: "0x0000000000000000000000000000000000000000",
+      bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
+      generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
     },
     // Protocol integrations.
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
@@ -70,15 +69,15 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
   },
   [ChainId.TenderlyVNet]: {
     // Iris protocol contracts.
-    iris: "0xF3545Eb175b94cb277D94892c90DbD9c08281E15",
+    iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
     blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
     whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     bundler3: {
-      bundler3: "0x8bfb92aC16F92808762F2DEe5F4aF2bE7Fa9617F",
-      generalAdapter1: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
+      bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
+      generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
     },
     // Protocol integrations.
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
