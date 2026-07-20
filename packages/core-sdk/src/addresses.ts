@@ -43,9 +43,9 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
   [ChainId.EthMainnet]: {
     // Iris protocol contracts.
     iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
-    blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
+    blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
-    whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
+    whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     bundler3: {
@@ -70,9 +70,9 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
   [ChainId.TenderlyVNet]: {
     // Iris protocol contracts.
     iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
-    blm: "0x7d565f551D6022Ae90b5Ee57c22E7482cAf47698",
+    blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
     podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
-    whitelistBlm: "0x424A350566aAD1c992fdB348FaEb2FB198De9369",
+    whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     bundler3: {
