@@ -57,17 +57,17 @@ interface EncodeIrisSignatureAuthorizationParams {
  * import { encodeIrisSignatureAuthorization } from "@iris-credit/iris-sdk";
  *
  * const client = createWalletClient({ chain: mainnet, transport: http() });
- * const requirement = await encodeIrisSignatureAuthorization(client, {
+ * const requirement = encodeIrisSignatureAuthorization(client, {
  *   authorized: generalAdapter1,
  *   chainId: 1,
  * });
  * // requirement satisfies Requirement
  * ```
  */
-export const encodeIrisSignatureAuthorization = async (
+export const encodeIrisSignatureAuthorization = (
   viemClient: Client,
   params: EncodeIrisSignatureAuthorizationParams,
-): Promise<Requirement<AuthorizationRequirementSignature>> => {
+): Requirement<AuthorizationRequirementSignature> => {
   const { authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
 
   if (viemClient.chain?.id !== chainId) {

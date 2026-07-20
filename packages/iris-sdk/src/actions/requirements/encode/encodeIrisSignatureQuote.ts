@@ -44,15 +44,15 @@ interface EncodeIrisSignatureQuoteParams {
  * ```ts
  * import { encodeIrisSignatureQuote } from "@iris-credit/iris-sdk";
  *
- * const requirement = await encodeIrisSignatureQuote(client, { quote, chainId: 1 });
+ * const requirement = encodeIrisSignatureQuote(client, { quote, chainId: 1 });
  * const signed = await requirement.sign(walletClient, quote.solver);
  * // signed.args satisfies { solver, quote, signature }
  * ```
  */
-export const encodeIrisSignatureQuote = async (
+export const encodeIrisSignatureQuote = (
   viemClient: Client,
   params: EncodeIrisSignatureQuoteParams,
-): Promise<Requirement<QuoteRequirementSignature>> => {
+): Requirement<QuoteRequirementSignature> => {
   const { quote, chainId } = params;
 
   if (viemClient.chain?.id !== chainId) {
