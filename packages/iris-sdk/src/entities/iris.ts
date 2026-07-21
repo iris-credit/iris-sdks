@@ -26,7 +26,7 @@ import { Time } from "@iris-credit/iris-ts";
 import { irisTake } from "../actions/iris/take.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
-import { validateChainId, validateNativeAsset } from "../helpers/index.js";
+import { validateChainId, validateNativeAsset, validateUserAddress } from "../helpers/index.js";
 import {
   NativeAmountExceedsCollateralError,
   NegativeInputError,
@@ -63,9 +63,9 @@ export interface IrisActions {
    * - The Iris authorization for `GeneralAdapter1` on behalf of `quote.borrower` — `Iris.take`
    *   requires its bundled caller (the adapter) to be authorized by the borrower. Returned as a
    *   `setAuthorization` transaction, or as a signable `Requirement` when the client opts into
-   *   `supportSignature`; omitted when the borrower already authorized the adapter. When
-   *   `userAddress` differs from `quote.borrower` (taking on the borrower's behalf), this
-   *   requirement must still be satisfied by the borrower — its `sign()` enforces the signer.
+   *   `supportSignature`; omitted when the borrower already authorized the adapter. `userAddress`
+   *   must equal `quote.borrower` — the borrower funds the collateral and signs the authorization
+   *   with the connected client; `take` rejects a mismatch.
    *
    * @param params - Take parameters.
    * @returns Object with `buildTx` and `getRequirements`.
@@ -110,7 +110,8 @@ export class Iris implements IrisActions {
    * on-chain state is read here: quotes arrive RFQ-validated, the contract re-verifies
    * everything at execution, and the only reads happen lazily in `getRequirements`.
    *
-   * @param params.userAddress - Account funding the collateral (the bundle initiator).
+   * @param params.userAddress - Account funding the collateral (the bundle initiator); must equal
+   *   `quote.borrower`.
    * @param params.quote - The solver-signed quote to take.
    * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
    * @param params.solverPermit2 - Optional solver-signed Permit2 bond funding payload delivered
@@ -119,6 +120,7 @@ export class Iris implements IrisActions {
    *   in-bundle; the collateral token must be the chain's wNative.
    * @returns Object with `buildTx` and `getRequirements`.
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {AddressMismatchError} when `userAddress` is not `quote.borrower`.
    * @throws {QuoteExpiredError} when `quote.deadline` has passed.
    * @throws {ZeroAddressError} when a quote address field is the zero address.
    * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
@@ -151,6 +153,9 @@ export class Iris implements IrisActions {
     nativeAmount?: bigint;
   }) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
+    // A single connected client signs every requirement, but the Iris authorization must come
+    // from `quote.borrower`; so the take initiator must be the borrower.
+    validateUserAddress(userAddress, quote.borrower);
 
     if (quote.deadline < Time.timestamp()) throw new QuoteExpiredError(quote.deadline);
     if (isAddressEqual(quote.borrower, zeroAddress)) throw new ZeroAddressError("borrower");
