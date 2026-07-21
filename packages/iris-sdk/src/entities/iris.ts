@@ -26,8 +26,9 @@ import { Time } from "@iris-credit/iris-ts";
 import { irisTake } from "../actions/iris/take.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
-import { validateChainId, validateNativeAsset, validateUserAddress } from "../helpers/index.js";
+import { validateChainId, validateNativeAsset } from "../helpers/index.js";
 import {
+  AddressMismatchError,
   NativeAmountExceedsCollateralError,
   NegativeInputError,
   NotMultipleOfBpError,
@@ -155,7 +156,9 @@ export class Iris implements IrisActions {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
     // A single connected client signs every requirement, but the Iris authorization must come
     // from `quote.borrower`; so the take initiator must be the borrower.
-    validateUserAddress(userAddress, quote.borrower);
+    if (!isAddressEqual(userAddress, quote.borrower)) {
+      throw new AddressMismatchError(userAddress, quote.borrower);
+    }
 
     if (quote.deadline < Time.timestamp()) throw new QuoteExpiredError(quote.deadline);
     if (isAddressEqual(quote.borrower, zeroAddress)) throw new ZeroAddressError("borrower");
