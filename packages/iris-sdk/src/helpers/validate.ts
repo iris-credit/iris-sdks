@@ -1,10 +1,13 @@
 import type { Address } from "viem";
+import type { ChainId } from "@iris-credit/core-sdk";
 
 import { isAddressEqual } from "viem";
+import { getChainAddresses } from "@iris-credit/core-sdk";
 import {
   AddressMismatchError,
   ChainIdMismatchError,
   MissingClientPropertyError,
+  NativeAmountOnNonWNativeAssetError,
 } from "../types/index.js";
 
 /**
@@ -52,5 +55,21 @@ export function validateUserAddress(
   }
   if (!isAddressEqual(clientAccountAddress, userAddress)) {
     throw new AddressMismatchError(clientAccountAddress, userAddress);
+  }
+}
+
+/**
+ * Asserts that `asset` is the chain's wrapped native token — the only asset a native amount
+ * can fund, since the bundle wraps the native token before the pull.
+ *
+ * Throws {@link NativeAmountOnNonWNativeAssetError} if the asset is not wNative.
+ *
+ * @param chainId - Chain whose wNative the asset must match.
+ * @param asset - The asset a native amount was supplied for.
+ */
+export function validateNativeAsset(chainId: ChainId, asset: Address): void {
+  const { wNative } = getChainAddresses(chainId);
+  if (!isAddressEqual(asset, wNative)) {
+    throw new NativeAmountOnNonWNativeAssetError(asset, wNative);
   }
 }

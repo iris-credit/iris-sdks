@@ -26,8 +26,10 @@ import { Time } from "@iris-credit/iris-ts";
 import { irisTake } from "../actions/iris/take.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
-import { validateChainId } from "../helpers/index.js";
+import { validateChainId, validateNativeAsset } from "../helpers/index.js";
 import {
+  NativeAmountExceedsCollateralError,
+  NegativeInputError,
   NotMultipleOfBpError,
   QuoteExpiredError,
   QuoteOutOfBoundsError,
@@ -48,8 +50,8 @@ export interface IrisActions {
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
    *
    * Validation is local-only — the pure subset of `Iris.take`'s requires (deadline, non-zero
-   * addresses and amounts, rate / duration bounds, BP-multiple rates, venue bitmap, and
-   * `solverPermit2` consistency). On-chain guarantees the RFQ already validated at quote time (solver
+   * addresses and amounts, rate / duration bounds, BP-multiple rates, venue bitmap,
+   * `solverPermit2` consistency, and native-amount bounds). On-chain guarantees the RFQ already validated at quote time (solver
    * signature, enabled configuration, bond requirement) are not re-read here; the contract
    * re-verifies everything at execution.
    *
@@ -73,6 +75,7 @@ export interface IrisActions {
     quote: Quote;
     quoteSignature: Hex;
     solverPermit2?: SolverPermit2;
+    nativeAmount?: bigint;
   }) => {
     buildTx: (
       signatures?: readonly RequirementSignature[],
@@ -112,6 +115,8 @@ export class Iris implements IrisActions {
    * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
    * @param params.solverPermit2 - Optional solver-signed Permit2 bond funding payload delivered
    *   with the quote.
+   * @param params.nativeAmount - Optional collateral portion paid natively and wrapped
+   *   in-bundle; the collateral token must be the chain's wNative.
    * @returns Object with `buildTx` and `getRequirements`.
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
    * @throws {QuoteExpiredError} when `quote.deadline` has passed.
@@ -119,6 +124,10 @@ export class Iris implements IrisActions {
    * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
    * @throws {ZeroDebtAmountError} when `quote.debt` is zero.
    * @throws {ZeroBondAmountError} when `quote.bond` is zero.
+   * @throws {NegativeInputError} when `nativeAmount` is negative.
+   * @throws {NativeAmountExceedsCollateralError} when `nativeAmount` exceeds `quote.collateral`.
+   * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the collateral
+   *   token is not the chain's wNative.
    * @throws {QuoteOutOfBoundsError} when a rate / duration / overdue field is out of bounds.
    * @throws {NotMultipleOfBpError} when `fixedRate` or `overdueRate` is not a multiple of BP.
    * @throws {VenueNotSupportedError} when `quote.venueId` is not set in `quote.venueBitmap`.
@@ -133,11 +142,13 @@ export class Iris implements IrisActions {
     quote,
     quoteSignature,
     solverPermit2,
+    nativeAmount = 0n,
   }: {
     userAddress: Address;
     quote: Quote;
     quoteSignature: Hex;
     solverPermit2?: SolverPermit2;
+    nativeAmount?: bigint;
   }) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
@@ -151,6 +162,12 @@ export class Iris implements IrisActions {
 
     if (quote.collateral <= 0n) throw new ZeroCollateralAmountError(quote.collateralToken);
     if (quote.debt <= 0n) throw new ZeroDebtAmountError(quote.debtToken);
+
+    if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
+    if (nativeAmount > quote.collateral) {
+      throw new NativeAmountExceedsCollateralError(quote.collateral, nativeAmount);
+    }
+    if (nativeAmount > 0n) validateNativeAsset(this.chainId, quote.collateralToken);
 
     if (quote.fixedRate < 0n || quote.fixedRate > MAX_FIXED_RATE) {
       throw new QuoteOutOfBoundsError("fixedRate", quote.fixedRate, 0n, MAX_FIXED_RATE);
@@ -206,7 +223,7 @@ export class Iris implements IrisActions {
             address: quote.collateralToken,
             chainId: this.chainId,
             supportSignature: this.client.options.supportSignature,
-            args: { amount: quote.collateral, from: userAddress },
+            args: { amount: quote.collateral - nativeAmount, from: userAddress },
             useSimplePermit: params?.useSimplePermit,
           }),
           getIrisAuthorizationRequirement({
@@ -235,6 +252,7 @@ export class Iris implements IrisActions {
             quote,
             quoteSignature,
             solverPermit2,
+            nativeAmount,
             requirementSignature: permit,
             authorizationSignature: authorization,
           },

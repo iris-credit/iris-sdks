@@ -10,10 +10,11 @@ import type {
 } from "../../types/index.js";
 
 import { isAddressEqual } from "viem";
-import { getChainAddresses } from "@iris-credit/core-sdk";
 import { deepFreeze } from "@iris-credit/iris-ts";
 import { BundlerAction } from "../../bundler/actions.js";
 import {
+  NativeAmountExceedsCollateralError,
+  NegativeInputError,
   SolverPermit2AmountBelowBondError,
   SolverPermit2AssetMismatchError,
   ZeroBondAmountError,
@@ -21,7 +22,7 @@ import {
   ZeroDebtAmountError,
 } from "../../types/index.js";
 import { getIrisAuthorizationAction } from "../signatures/getIrisAuthorizationAction.js";
-import { getTokenRequirementActions } from "../signatures/getTokenRequirementActions.js";
+import { buildAssetFundingActions } from "./buildAssetFundingActions.js";
 
 /** Parameters for {@link irisTake}. */
 export interface IrisTakeParams {
@@ -44,6 +45,12 @@ export interface IrisTakeParams {
      * `quote.borrower`, folded into the bundle via `setAuthorizationWithSig`.
      */
     readonly authorizationSignature?: AuthorizationRequirementSignature;
+    /**
+     * Optional collateral portion paid in the native token and wrapped to wNative in-bundle;
+     * the ERC-20 pull covers the remainder (`quote.collateral - nativeAmount`). The collateral
+     * token must be the chain's wNative.
+     */
+    readonly nativeAmount?: bigint;
   };
 }
 
@@ -60,7 +67,9 @@ export interface IrisTakeParams {
  *    adapter, in a bundled take — to be authorized by `quote.borrower`, so a bundled take
  *    reverts `Unauthorized` unless the borrower authorized the adapter beforehand or this
  *    signature is included.
- * 3. The collateral pull into the adapter: plain `erc20TransferFrom`, `approve2` +
+ * 3. The collateral funding into the adapter: when `nativeAmount > 0n` (the collateral token
+ *    must be the chain's wNative), `nativeTransfer` + `wrapNative` first — the transaction's
+ *    `value` carries it — then the ERC-20 remainder: plain `erc20TransferFrom`, `approve2` +
  *    `transferFrom2` for a Permit2 `requirementSignature`, or `permit` + `erc20TransferFrom`
  *    for an EIP-2612 one.
  * 4. `irisTake(quote, quoteSignature)` — the bond is pulled by Iris from the solver directly,
@@ -72,6 +81,7 @@ export interface IrisTakeParams {
  * @param params.args.solverPermit2 - Optional solver-signed Permit2 bond funding payload.
  * @param params.args.requirementSignature - Optional pre-signed permit/permit2 approval.
  * @param params.args.authorizationSignature - Optional signed Iris authorization for the borrower.
+ * @param params.args.nativeAmount - Optional collateral portion paid natively and wrapped in-bundle.
  * @returns A deep-frozen `Transaction<IrisTakeAction>` with `to`, `value`, `data`, and the typed
  *   `action` discriminator.
  * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
@@ -83,10 +93,15 @@ export interface IrisTakeParams {
  *   `quote.bond`.
  * @throws {BundlerErrors.UnexpectedSignature} from `getIrisAuthorizationAction` when
  *   `authorizationSignature.args.authorized` is not the chain's `GeneralAdapter1`.
+ * @throws {NegativeInputError} when `nativeAmount` is negative.
+ * @throws {NativeAmountExceedsCollateralError} when `nativeAmount` exceeds `quote.collateral`.
+ * @throws {NativeAmountOnNonWNativeAssetError} from `buildAssetFundingActions` when
+ *   `nativeAmount > 0n` but the collateral token is not the chain's wNative.
  * @throws {DepositAssetMismatchError} from `getTokenRequirementActions` when `requirementSignature`
  *   is provided and the signed asset differs from `quote.collateralToken`.
  * @throws {DepositAmountMismatchError} from `getTokenRequirementActions` when `requirementSignature`
- *   is provided and the signed amount differs from `quote.collateral`.
+ *   is provided and the signed amount differs from the pulled ERC-20 amount
+ *   (`quote.collateral - nativeAmount`).
  * @example
  * ```ts
  * import { irisTake } from "@iris-credit/iris-sdk";
@@ -106,15 +121,23 @@ export interface IrisTakeParams {
  */
 export const irisTake = ({
   chainId,
-  args: { quote, quoteSignature, solverPermit2, requirementSignature, authorizationSignature },
+  args: {
+    quote,
+    quoteSignature,
+    solverPermit2,
+    requirementSignature,
+    authorizationSignature,
+    nativeAmount = 0n,
+  },
 }: IrisTakeParams): Readonly<Transaction<IrisTakeAction>> => {
   if (quote.collateral <= 0n) throw new ZeroCollateralAmountError(quote.collateralToken);
   if (quote.debt <= 0n) throw new ZeroDebtAmountError(quote.debtToken);
   if (quote.bond <= 0n) throw new ZeroBondAmountError(quote.debtToken);
 
-  const {
-    bundler3: { generalAdapter1 },
-  } = getChainAddresses(chainId);
+  if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
+  if (nativeAmount > quote.collateral) {
+    throw new NativeAmountExceedsCollateralError(quote.collateral, nativeAmount);
+  }
 
   const actions: Action[] = [];
 
@@ -143,10 +166,11 @@ export const irisTake = ({
   }
 
   actions.push(
-    ...getTokenRequirementActions({
+    ...buildAssetFundingActions({
+      chainId,
       asset: quote.collateralToken,
-      amount: quote.collateral,
-      recipient: generalAdapter1,
+      erc20Amount: quote.collateral - nativeAmount,
+      nativeAmount,
       requirementSignature,
     }),
     {

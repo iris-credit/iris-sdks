@@ -48,6 +48,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
+    wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
       bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
       generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
@@ -76,6 +77,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
+    wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
       bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
       generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",

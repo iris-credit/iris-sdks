@@ -198,6 +198,29 @@ export class NotMultipleOfBpError extends Error {
   }
 }
 
+/** Thrown when a non-negative input receives a negative value. */
+export class NegativeInputError extends Error {
+  constructor(field: string, value: bigint) {
+    super(`Input "${field}" must be non-negative, got "${value}".`);
+  }
+}
+
+/** Thrown when a native amount is supplied for an asset that is not the chain's wrapped native token. */
+export class NativeAmountOnNonWNativeAssetError extends Error {
+  constructor(asset: Address, wNative: Address) {
+    super(`Cannot use nativeAmount: asset ${asset} is not the wrapped native token ${wNative}`);
+  }
+}
+
+/** Thrown when a take's native amount exceeds the quote's collateral it must fund. */
+export class NativeAmountExceedsCollateralError extends Error {
+  constructor(collateral: bigint, nativeAmount: bigint) {
+    super(
+      `Native amount ${nativeAmount} exceeds the quote's collateral ${collateral}. Pay at most the collateral in native token.`,
+    );
+  }
+}
+
 /** Thrown when the solver's Permit2 payload was signed for a token other than the quote's debt token. */
 export class SolverPermit2AssetMismatchError extends Error {
   constructor(debtToken: Address, signedToken: Address) {
