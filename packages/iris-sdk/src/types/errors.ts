@@ -70,9 +70,9 @@ export class AmbiguousRequirementSignaturesError extends Error {
  */
 export class UnexpectedRequirementSignatureError extends Error {
   /**
-   * @param kind - The unexpected signature kind (`"permit"`, `"authorization"`, or `"quote"`).
+   * @param kind - The unexpected signature kind (`"permit"` or `"authorization"`).
    */
-  constructor(kind: "permit" | "authorization" | "quote") {
+  constructor(kind: "permit" | "authorization") {
     super(
       `Received a ${kind} signature that this operation does not consume. Remove it from the buildTx signatures array.`,
     );
@@ -182,6 +182,49 @@ export class ZeroBondAmountError extends Error {
   }
 }
 
+/** Thrown when a quote address field the contract requires to be non-zero is the zero address. */
+export class ZeroAddressError extends Error {
+  constructor(field: string) {
+    super(`Quote ${field} must not be the zero address. Request a valid quote.`);
+  }
+}
+
+/** Thrown when a WAD-scaled quote rate is not a whole multiple of BP (1e14), which `Iris.take` rejects. */
+export class NotMultipleOfBpError extends Error {
+  constructor(field: string, value: bigint) {
+    super(
+      `Quote ${field} ${value} is not a multiple of BP (1e14). Rates are stored in whole basis points on-chain; request a quote with a BP-aligned rate.`,
+    );
+  }
+}
+
+/** Thrown when the solver's Permit2 payload was signed for a token other than the quote's debt token. */
+export class SolverPermit2AssetMismatchError extends Error {
+  constructor(debtToken: Address, signedToken: Address) {
+    super(
+      `Solver Permit2 payload is signed for token "${signedToken}" but the quote's bond is pulled in debt token "${debtToken}".`,
+    );
+  }
+}
+
+/** Thrown when the solver's Permit2 payload was signed for an amount below the quote's bond. */
+export class SolverPermit2AmountBelowBondError extends Error {
+  constructor(bond: bigint, signedAmount: bigint) {
+    super(
+      `Solver Permit2 payload is signed for amount ${signedAmount}, below the quote's bond ${bond}. The bond pull would revert on-chain.`,
+    );
+  }
+}
+
+/** Thrown when the solver's Permit2 payload has an expired allowance expiration or signature deadline. */
+export class SolverPermit2ExpiredError extends Error {
+  constructor(params: { readonly expiration: bigint; readonly sigDeadline: bigint }) {
+    super(
+      `Solver Permit2 payload is expired (expiration ${params.expiration}, sigDeadline ${params.sigDeadline}). Request a fresh quote.`,
+    );
+  }
+}
+
 /** Thrown when a quote's deadline has passed. */
 export class QuoteExpiredError extends Error {
   constructor(deadline: bigint) {
@@ -201,27 +244,6 @@ export class VenueNotSupportedError extends Error {
   constructor(venueId: bigint, venueBitmap: bigint) {
     super(
       `Venue ${venueId} is not set in the quote's venue bitmap ${venueBitmap}. Take a venue the solver enabled.`,
-    );
-  }
-}
-
-/** Thrown when a quote's nonce has already been consumed on Iris. */
-export class NonceAlreadyUsedError extends Error {
-  constructor(solver: Address, nonce: bigint) {
-    super(`Nonce ${nonce} of solver ${solver} has already been used. Request a fresh quote.`);
-  }
-}
-
-/** Thrown when the solver's debt-token funding cannot cover the quote's bond pull at take time. */
-export class InsufficientBondError extends Error {
-  constructor(params: {
-    readonly solver: Address;
-    readonly bond: bigint;
-    readonly balance: bigint;
-    readonly allowance: bigint;
-  }) {
-    super(
-      `Solver ${params.solver} cannot fund the bond ${params.bond}: balance ${params.balance}, direct allowance ${params.allowance}, and no covering Permit2 allowance. The take would revert on-chain.`,
     );
   }
 }

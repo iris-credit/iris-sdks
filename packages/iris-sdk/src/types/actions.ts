@@ -1,5 +1,6 @@
 import type { Address, Hex, WalletClient } from "viem";
 import type { Quote } from "@iris-credit/core-sdk";
+import type { Permit2PermitSingle } from "../bundler/type.js";
 
 import {
   AmbiguousRequirementSignaturesError,
@@ -89,6 +90,18 @@ export interface Permit2Args {
 }
 
 /**
+ * Solver-signed Permit2 payload funding the bond pull, delivered off-chain alongside the quote
+ * (never signed by the taker). The signed spender is the Iris core; the take bundle submits it
+ * via an `approve2Iris` call before `irisTake` so `safeTransferFrom2` finds the allowance.
+ */
+export interface SolverPermit2 {
+  /** The Permit2 single-permit payload the solver signed (spender fixed to Iris by the encoder). */
+  readonly permitSingle: Permit2PermitSingle;
+  /** The solver's EIP-712 signature over the Permit2 payload. */
+  readonly signature: Hex;
+}
+
+/**
  * Signed Iris authorization payload produced when an integrator opts into offchain
  * signatures (`supportSignature: true`). Consumed by the action layer to emit a
  * `setAuthorizationWithSig` bundler call in place of a standalone `setAuthorization` transaction.
@@ -106,13 +119,6 @@ export interface AuthorizationSignatureArgs {
   deadline: bigint;
   /** EIP-712 signature over the Iris `Authorization` typed data. */
   signature: Hex;
-}
-
-/** Signed solver quote payload, distributed off-chain via the RFQ and consumed by `Iris.take`. */
-export interface QuoteSignatureArgs {
-  readonly solver: Address;
-  readonly quote: Quote;
-  readonly signature: Hex;
 }
 
 /**
@@ -147,12 +153,6 @@ export interface AuthorizationAction extends BaseAction<
   { authorized: Address; isAuthorized: boolean; deadline: bigint }
 > {}
 
-/** Signable solver quote requirement — the maker flow's EIP-712 `Quote` signature. */
-export interface QuoteSignatureAction extends BaseAction<
-  "quoteSignature",
-  { solver: Address; nonce: bigint; deadline: bigint }
-> {}
-
 /** A signed ERC-2612 permit or Permit2 approval requirement. */
 export interface PermitRequirementSignature {
   args: PermitArgs | Permit2Args;
@@ -165,22 +165,16 @@ export interface AuthorizationRequirementSignature {
   action: AuthorizationAction;
 }
 
-/** A signed solver quote requirement (the maker flow's final signature artifact). */
-export interface QuoteRequirementSignature {
-  args: QuoteSignatureArgs;
-  action: QuoteSignatureAction;
-}
-
 /**
  * The deep-frozen output of `Requirement.sign()`. Discriminated on `action.type`:
- * `"permit"` / `"permit2"` carry token-approval args, `"authorization"` the signed
- * Iris authorization, and `"quoteSignature"` the signed solver quote. Narrow with
- * {@link isPermitSignature} / {@link isAuthorizationSignature} / {@link isQuoteSignature}.
+ * `"permit"` / `"permit2"` carry token-approval args and `"authorization"` the signed
+ * Iris authorization. Narrow with {@link isPermitSignature} / {@link isAuthorizationSignature}.
+ *
+ * Solver-side artifacts (the signed quote, the solver's Permit2 bond funding) are not
+ * requirement signatures: they arrive off-chain with the quote and are passed to `take`
+ * as data (`quoteSignature`, {@link SolverPermit2}), never through `Requirement.sign()`.
  */
-export type RequirementSignature =
-  | PermitRequirementSignature
-  | AuthorizationRequirementSignature
-  | QuoteRequirementSignature;
+export type RequirementSignature = PermitRequirementSignature | AuthorizationRequirementSignature;
 
 /** Bundler3 token signature requirement. */
 export type Bundler3TokenSignatureRequirement = Requirement<PermitRequirementSignature>;
@@ -260,18 +254,6 @@ export function isAuthorizationSignature(
   return signature.action.type === "authorization";
 }
 
-/**
- * Narrows a {@link RequirementSignature} to a signed solver quote.
- *
- * @param signature - The signed requirement to test.
- * @returns `true` when `signature.action.type` is `"quoteSignature"`.
- */
-export function isQuoteSignature(
-  signature: RequirementSignature,
-): signature is QuoteRequirementSignature {
-  return signature.action.type === "quoteSignature";
-}
-
 /** The typed permit / authorization slots a bundled path consumes, split from a `buildTx` array. */
 export interface SelectedRequirementSignatures {
   /** The single permit / Permit2 signature, when present. */
@@ -287,9 +269,7 @@ export interface SelectedRequirementSignatures {
  * A bundled path consumes at most one permit and one authorization signature. Passing several of
  * the same kind, or a kind the path does not consume, is rejected with a typed error rather than
  * silently dropping the extras — the latter could otherwise leave a required authorization or
- * permit unsigned (and the bundle reverting on-chain) or apply the wrong signature. Quote
- * signatures are always rejected: they are consumed by the maker flow's `buildResponse`, never
- * by `buildTx`.
+ * permit unsigned (and the bundle reverting on-chain) or apply the wrong signature.
  *
  * @param signatures - The signatures passed to `buildTx`.
  * @param accepts - Which signature kinds this operation consumes.
@@ -316,9 +296,6 @@ export function selectRequirementSignatures(
 
   const permits = signatures.filter(isPermitSignature);
   const authorizations = signatures.filter(isAuthorizationSignature);
-
-  const quotes = signatures.filter(isQuoteSignature);
-  if (quotes.length > 0) throw new UnexpectedRequirementSignatureError("quote");
 
   if (!accepts.permit && permits.length > 0)
     throw new UnexpectedRequirementSignatureError("permit");

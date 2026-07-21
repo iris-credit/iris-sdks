@@ -56,10 +56,17 @@ function createIrisNamespace(
  *   .extend(irisViemExtension({ supportSignature: true }));
  *
  * const iris = client.iris.core(1);
- * const { buildTx, getRequirements } = iris.take({ userAddress: user, quote, quoteSignature });
+ * const { buildTx, getRequirements } = iris.take({
+ *   userAddress: user,
+ *   quote,
+ *   quoteSignature,
+ * });
  * const requirements = await getRequirements();
- * // ...satisfy requirements (send approvals / collect signatures)...
- * const tx = buildTx();
+ * // Send the approval / authorization transactions, and sign the signable requirements:
+ * const signatures = await Promise.all(
+ *   requirements.filter(isRequirementSignature).map((r) => r.sign(client, user)),
+ * );
+ * const tx = buildTx(signatures);
  * ```
  */
 export function irisViemExtension(_options?: { readonly supportSignature?: boolean }) {

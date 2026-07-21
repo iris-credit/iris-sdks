@@ -21,12 +21,12 @@ import { encodeErc20Approval } from "./encode/encodeErc20Approval.js";
  * @param params.args.spendAmount - The amount the bundle will actually pull.
  * @param params.args.approvalAmount - The amount to approve (often equal to `spendAmount`, but
  *   may be `MAX_UINT_160` for Permit2 prerequisites).
- * @param params.args.spender - Address that will be granted the approval. Must be GeneralAdapter1 or Permit2.
+ * @param params.args.spender - Address that will be granted the approval. Must be GeneralAdapter1, Permit2, or the Iris core.
  * @param params.allowances - The user's current allowance of `address` for `spender`.
  * @returns Up to two deep-frozen `Transaction<ERC20ApprovalAction>` entries: an optional reset
  *   followed by the new approval. Empty when no approval is needed.
  * @throws {ApprovalAmountLessThanSpendAmountError} when `approvalAmount < spendAmount`.
- * @throws {UnsupportedErc20ApprovalSpenderError} when `spender` is not GeneralAdapter1 or Permit2 for `chainId`.
+ * @throws {UnsupportedErc20ApprovalSpenderError} when `spender` is not GeneralAdapter1, Permit2, or the Iris core for `chainId`.
  * @example
  * ```ts
  * import { getRequirementsApproval } from "@iris-credit/iris-sdk";

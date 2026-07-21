@@ -2,88 +2,77 @@ import type { Address, Hex } from "viem";
 import type { ChainId, Quote } from "@iris-credit/core-sdk";
 import type { IrisClientType } from "../types/client.js";
 import type {
-  Bundler3TokenSignatureRequirement,
+  AuthorizationRequirementSignature,
   ERC20ApprovalAction,
+  IrisAuthorizationAction,
   IrisTakeAction,
+  PermitRequirementSignature,
+  Requirement,
   RequirementSignature,
+  SolverPermit2,
   Transaction,
 } from "../types/index.js";
 
-import { erc20Abi } from "viem";
-import { readContract, verifyTypedData } from "viem/actions";
+import { isAddressEqual, zeroAddress } from "viem";
 import {
-  getChainAddresses,
-  getQuoteTypedData,
-  irisAbi,
+  BP,
   MAX_DURATION,
   MAX_FIXED_RATE,
   MAX_OVERDUE_PERIOD,
   MAX_OVERDUE_RATE,
   MIN_DURATION,
-  permit2Abi,
 } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
 import { irisTake } from "../actions/iris/take.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
+import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
 import { validateChainId } from "../helpers/index.js";
 import {
-  InsufficientBondError,
-  InvalidSignatureError,
-  NonceAlreadyUsedError,
+  NotMultipleOfBpError,
   QuoteExpiredError,
   QuoteOutOfBoundsError,
   selectRequirementSignatures,
+  SolverPermit2AmountBelowBondError,
+  SolverPermit2AssetMismatchError,
+  SolverPermit2ExpiredError,
   VenueNotSupportedError,
+  ZeroAddressError,
+  ZeroBondAmountError,
+  ZeroCollateralAmountError,
+  ZeroDebtAmountError,
 } from "../types/index.js";
-
-/** On-chain state read by {@link Iris.getTakeData} and validated by {@link Iris.take}. */
-export interface TakeData {
-  /** Whether the quote's nonce has already been consumed on Iris. */
-  readonly nonceUsed: boolean;
-  /** Whether the quote signature verifies against `quote.solver` (ECDSA or ERC-1271). */
-  readonly signatureValid: boolean;
-  /** The solver's debt-token balance. */
-  readonly solverBalance: bigint;
-  /** The solver's direct debt-token allowance to the Iris core. */
-  readonly solverAllowance: bigint;
-  /** The solver's debt-token allowance to the Permit2 contract. */
-  readonly solverPermit2Erc20Allowance: bigint;
-  /** The Permit2-managed allowance amount for (solver, debtToken, Iris core). */
-  readonly solverPermit2Allowance: bigint;
-  /** The Permit2-managed allowance expiration timestamp in seconds. */
-  readonly solverPermit2Expiration: bigint;
-}
 
 /** Flow methods exposed by the chain-scoped Iris entity. */
 export interface IrisActions {
   /**
-   * Reads the on-chain state {@link take} validates: the quote's nonce usage, the quote
-   * signature's validity (ECDSA or ERC-1271 via the client), and the solver's debt-token funding
-   * for the bond pull (balance, direct allowance to the Iris core, and the Permit2 fallback
-   * allowances). Returns raw data without judging it — `take` throws the typed errors.
-   *
-   * @param params.quote - The solver-signed quote to read state for.
-   * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
-   * @returns The raw on-chain state consumed by `take`.
-   */
-  getTakeData: (params: { quote: Quote; quoteSignature: Hex }) => Promise<TakeData>;
-
-  /**
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
    *
-   * `getRequirements` returns the collateral-token approval `Transaction` or permit / Permit2
-   * signature `Requirement` for `GeneralAdapter1`; pass `useSimplePermit: true` to prefer an
-   * EIP-2612 permit when the token supports it. No Iris authorization is needed: taking opens a
-   * new loan and the collateral is paid by the bundle.
+   * Validation is local-only — the pure subset of `Iris.take`'s requires (deadline, non-zero
+   * addresses and amounts, rate / duration bounds, BP-multiple rates, venue bitmap, and
+   * `solverPermit2` consistency). On-chain guarantees the RFQ already validated at quote time (solver
+   * signature, enabled configuration, bond requirement) are not re-read here; the contract
+   * re-verifies everything at execution.
    *
-   * @param params - Take parameters, including the pre-fetched {@link TakeData}.
+   * `getRequirements` resolves what must be in place before the bundle executes:
+   *
+   * - The collateral-token approval `Transaction` or permit / Permit2 signature `Requirement`
+   *   for `GeneralAdapter1`, funded by `userAddress`; pass `useSimplePermit: true` to prefer an
+   *   EIP-2612 permit when the token supports it.
+   * - The Iris authorization for `GeneralAdapter1` on behalf of `quote.borrower` — `Iris.take`
+   *   requires its bundled caller (the adapter) to be authorized by the borrower. Returned as a
+   *   `setAuthorization` transaction, or as a signable `Requirement` when the client opts into
+   *   `supportSignature`; omitted when the borrower already authorized the adapter. When
+   *   `userAddress` differs from `quote.borrower` (taking on the borrower's behalf), this
+   *   requirement must still be satisfied by the borrower — its `sign()` enforces the signer.
+   *
+   * @param params - Take parameters.
    * @returns Object with `buildTx` and `getRequirements`.
    */
   take: (params: {
     userAddress: Address;
     quote: Quote;
     quoteSignature: Hex;
-    takeData: TakeData;
+    solverPermit2?: SolverPermit2;
   }) => {
     buildTx: (
       signatures?: readonly RequirementSignature[],
@@ -91,12 +80,17 @@ export interface IrisActions {
     getRequirements: (params?: {
       useSimplePermit?: boolean;
     }) => Promise<
-      (Readonly<Transaction<ERC20ApprovalAction>> | Bundler3TokenSignatureRequirement)[]
+      (
+        | Readonly<Transaction<ERC20ApprovalAction>>
+        | Requirement<PermitRequirementSignature>
+        | Readonly<Transaction<IrisAuthorizationAction>>
+        | Requirement<AuthorizationRequirementSignature>
+      )[]
     >;
   };
 }
 
-/** Chain-scoped Iris entity: validates flows, reads state, and returns lazy transaction handles. */
+/** Chain-scoped Iris entity: validates flows and returns lazy transaction handles. */
 export class Iris implements IrisActions {
   constructor(
     private readonly client: IrisClientType,
@@ -104,126 +98,66 @@ export class Iris implements IrisActions {
   ) {}
 
   /**
-   * Reads the on-chain state {@link take} validates, batched into one parallel round trip.
-   *
-   * **Stale `TakeData` only weakens the pre-flight check** — the chain re-validates everything
-   * at execution time, so a state change between this read and submission surfaces as an
-   * on-chain revert, never as a wrong transaction.
-   *
-   * @param params.quote - The solver-signed quote to read state for.
-   * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
-   * @returns The raw on-chain state consumed by `take`.
-   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
-   */
-  async getTakeData({
-    quote,
-    quoteSignature,
-  }: {
-    quote: Quote;
-    quoteSignature: Hex;
-  }): Promise<TakeData> {
-    validateChainId(this.client.viemClient.chain?.id, this.chainId);
-
-    const { iris, permit2 } = getChainAddresses(this.chainId);
-    const typedData = getQuoteTypedData(this.chainId, quote);
-
-    const [
-      nonceUsed,
-      signatureValid,
-      solverBalance,
-      solverAllowance,
-      [permit2Allowance, permit2Expiration],
-      solverPermit2Erc20Allowance,
-    ] = await Promise.all([
-      readContract(this.client.viemClient, {
-        abi: irisAbi,
-        address: iris,
-        functionName: "isNonceUsed",
-        args: [quote.solver, quote.nonce],
-      }),
-      verifyTypedData(this.client.viemClient, {
-        ...typedData,
-        address: quote.solver, // Verify against the solver (ECDSA or ERC-1271).
-        signature: quoteSignature,
-      }),
-      readContract(this.client.viemClient, {
-        abi: erc20Abi,
-        address: quote.debtToken,
-        functionName: "balanceOf",
-        args: [quote.solver],
-      }),
-      readContract(this.client.viemClient, {
-        abi: erc20Abi,
-        address: quote.debtToken,
-        functionName: "allowance",
-        args: [quote.solver, iris],
-      }),
-      readContract(this.client.viemClient, {
-        abi: permit2Abi,
-        address: permit2,
-        functionName: "allowance",
-        args: [quote.solver, quote.debtToken, iris],
-      }),
-      readContract(this.client.viemClient, {
-        abi: erc20Abi,
-        address: quote.debtToken,
-        functionName: "allowance",
-        args: [quote.solver, permit2],
-      }),
-    ]);
-
-    return {
-      nonceUsed,
-      signatureValid,
-      solverBalance,
-      solverAllowance,
-      solverPermit2Erc20Allowance,
-      solverPermit2Allowance: BigInt(permit2Allowance),
-      solverPermit2Expiration: BigInt(permit2Expiration),
-    };
-  }
-
-  /**
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
    *
-   * Validates the quote's shape — deadline not expired, `fixedRate` / `duration` /
-   * `overdueRate` / `overduePeriod` within the protocol bounds mirrored from `ConstantsLib`,
-   * and `venueId` enabled in `venueBitmap` — and the pre-fetched {@link TakeData}: nonce unused,
-   * quote signature valid, and the solver's debt-token funding covering the bond pull through
-   * either the direct allowance or the Permit2 fallback (mirroring `safeTransferFrom2`).
+   * Validates the quote's local shape — deadline not expired, non-zero addresses and amounts,
+   * `fixedRate` / `duration` / `overdueRate` / `overduePeriod` within the protocol bounds
+   * mirrored from `ConstantsLib` (rates must also be whole multiples of BP), `venueId` enabled
+   * in `venueBitmap`, and the `solverPermit2` payload consistent with the quote's bond. No
+   * on-chain state is read here: quotes arrive RFQ-validated, the contract re-verifies
+   * everything at execution, and the only reads happen lazily in `getRequirements`.
    *
    * @param params.userAddress - Account funding the collateral (the bundle initiator).
    * @param params.quote - The solver-signed quote to take.
    * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
-   * @param params.takeData - On-chain state from {@link getTakeData}.
+   * @param params.solverPermit2 - Optional solver-signed Permit2 bond funding payload delivered
+   *   with the quote.
    * @returns Object with `buildTx` and `getRequirements`.
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
    * @throws {QuoteExpiredError} when `quote.deadline` has passed.
+   * @throws {ZeroAddressError} when a quote address field is the zero address.
+   * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
+   * @throws {ZeroDebtAmountError} when `quote.debt` is zero.
+   * @throws {ZeroBondAmountError} when `quote.bond` is zero.
    * @throws {QuoteOutOfBoundsError} when a rate / duration / overdue field is out of bounds.
+   * @throws {NotMultipleOfBpError} when `fixedRate` or `overdueRate` is not a multiple of BP.
    * @throws {VenueNotSupportedError} when `quote.venueId` is not set in `quote.venueBitmap`.
-   * @throws {NonceAlreadyUsedError} when the quote's nonce is already consumed on Iris.
-   * @throws {InvalidSignatureError} when the quote signature does not verify against the solver.
-   * @throws {InsufficientBondError} when the solver's funding cannot cover the bond pull.
+   * @throws {SolverPermit2AssetMismatchError} when `solverPermit2` is signed for a token other
+   *   than `quote.debtToken`.
+   * @throws {SolverPermit2AmountBelowBondError} when `solverPermit2` is signed for less than
+   *   `quote.bond`.
+   * @throws {SolverPermit2ExpiredError} when `solverPermit2` is expired.
    */
   take({
     userAddress,
     quote,
     quoteSignature,
-    takeData,
+    solverPermit2,
   }: {
     userAddress: Address;
     quote: Quote;
     quoteSignature: Hex;
-    takeData: TakeData;
+    solverPermit2?: SolverPermit2;
   }) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
-    if (quote.deadline < Time.timestamp()) {
-      throw new QuoteExpiredError(quote.deadline);
+    if (quote.deadline < Time.timestamp()) throw new QuoteExpiredError(quote.deadline);
+    if (isAddressEqual(quote.borrower, zeroAddress)) throw new ZeroAddressError("borrower");
+    if (isAddressEqual(quote.receiver, zeroAddress)) throw new ZeroAddressError("receiver");
+    if (isAddressEqual(quote.collateralToken, zeroAddress)) {
+      throw new ZeroAddressError("collateralToken");
     }
+    if (isAddressEqual(quote.debtToken, zeroAddress)) throw new ZeroAddressError("debtToken");
+
+    if (quote.collateral <= 0n) throw new ZeroCollateralAmountError(quote.collateralToken);
+    if (quote.debt <= 0n) throw new ZeroDebtAmountError(quote.debtToken);
 
     if (quote.fixedRate < 0n || quote.fixedRate > MAX_FIXED_RATE) {
       throw new QuoteOutOfBoundsError("fixedRate", quote.fixedRate, 0n, MAX_FIXED_RATE);
+    }
+
+    if (quote.fixedRate % BP !== 0n) {
+      throw new NotMultipleOfBpError("fixedRate", quote.fixedRate);
     }
 
     if (quote.duration < MIN_DURATION || quote.duration > MAX_DURATION) {
@@ -234,56 +168,76 @@ export class Iris implements IrisActions {
       throw new QuoteOutOfBoundsError("overdueRate", quote.overdueRate, 0n, MAX_OVERDUE_RATE);
     }
 
+    if (quote.overdueRate % BP !== 0n) {
+      throw new NotMultipleOfBpError("overdueRate", quote.overdueRate);
+    }
+
     if (quote.overduePeriod < 0n || quote.overduePeriod > MAX_OVERDUE_PERIOD) {
       throw new QuoteOutOfBoundsError("overduePeriod", quote.overduePeriod, 0n, MAX_OVERDUE_PERIOD);
     }
+
+    if (quote.bond <= 0n) throw new ZeroBondAmountError(quote.debtToken);
 
     if (quote.venueId >= 256n || (quote.venueBitmap & (1n << quote.venueId)) === 0n) {
       throw new VenueNotSupportedError(quote.venueId, quote.venueBitmap);
     }
 
-    if (takeData.nonceUsed) {
-      throw new NonceAlreadyUsedError(quote.solver, quote.nonce);
-    }
+    if (solverPermit2) {
+      const { details, sigDeadline } = solverPermit2.permitSingle;
 
-    if (!takeData.signatureValid) {
-      throw new InvalidSignatureError();
-    }
-
-    // Mirror `safeTransferFrom2`: the bond pull succeeds through the direct allowance, or through
-    // the Permit2 fallback when both the Permit2-managed allowance (unexpired) and the ERC-20
-    // allowance to the Permit2 contract cover it.
-    const permit2Covered =
-      takeData.solverPermit2Allowance >= quote.bond &&
-      takeData.solverPermit2Expiration >= Time.timestamp() &&
-      takeData.solverPermit2Erc20Allowance >= quote.bond;
-    const covered = takeData.solverAllowance >= quote.bond || permit2Covered;
-
-    if (takeData.solverBalance < quote.bond || !covered) {
-      throw new InsufficientBondError({
-        solver: quote.solver,
-        bond: quote.bond,
-        balance: takeData.solverBalance,
-        allowance: takeData.solverAllowance,
-      });
+      if (!isAddressEqual(details.token, quote.debtToken)) {
+        throw new SolverPermit2AssetMismatchError(quote.debtToken, details.token);
+      }
+      if (details.amount < quote.bond) {
+        throw new SolverPermit2AmountBelowBondError(quote.bond, details.amount);
+      }
+      if (BigInt(details.expiration) < Time.timestamp() || sigDeadline < Time.timestamp()) {
+        throw new SolverPermit2ExpiredError({
+          expiration: BigInt(details.expiration),
+          sigDeadline,
+        });
+      }
     }
 
     return {
-      getRequirements: (params?: { useSimplePermit?: boolean }) =>
-        getGeneralAdapterRequirements(this.client.viemClient, {
-          address: quote.collateralToken,
-          chainId: this.chainId,
-          supportSignature: this.client.options.supportSignature,
-          args: { amount: quote.collateral, from: userAddress },
-          useSimplePermit: params?.useSimplePermit,
-        }),
+      getRequirements: async (params?: { useSimplePermit?: boolean }) => {
+        const [erc20Requirements, authorizationRequirement] = await Promise.all([
+          getGeneralAdapterRequirements(this.client.viemClient, {
+            address: quote.collateralToken,
+            chainId: this.chainId,
+            supportSignature: this.client.options.supportSignature,
+            args: { amount: quote.collateral, from: userAddress },
+            useSimplePermit: params?.useSimplePermit,
+          }),
+          getIrisAuthorizationRequirement({
+            viemClient: this.client.viemClient,
+            chainId: this.chainId,
+            userAddress: quote.borrower,
+            supportSignature: this.client.options.supportSignature,
+          }),
+        ]);
+
+        return [
+          ...erc20Requirements,
+          ...(authorizationRequirement ? [authorizationRequirement] : []),
+        ];
+      },
 
       buildTx: (signatures?: readonly RequirementSignature[]) => {
-        const { permit } = selectRequirementSignatures(signatures, { permit: true });
+        const { permit, authorization } = selectRequirementSignatures(signatures, {
+          permit: true,
+          authorization: true,
+        });
 
         return irisTake({
           chainId: this.chainId,
-          args: { quote, quoteSignature, requirementSignature: permit },
+          args: {
+            quote,
+            quoteSignature,
+            solverPermit2,
+            requirementSignature: permit,
+            authorizationSignature: authorization,
+          },
         });
       },
     };
