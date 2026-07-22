@@ -34,9 +34,11 @@ export function validateChainId(clientChainId: number | undefined, chainId: numb
  * the signing flow is the only path where an account/address mismatch
  * is a real security concern (rather than just an integrator footgun).
  *
- * Transaction builders no longer call this helper — callers are
+ * Action-layer transaction builders do not call this helper — callers are
  * responsible for keeping `userAddress` aligned with the signing account
- * at the builder layer.
+ * at the builder layer. Entity entrypoints reuse it for build-time
+ * address-equality invariants (e.g. `Iris.take` requires `userAddress` to be
+ * `quote.borrower`, the account that must sign the Iris authorization).
  *
  * Throws {@link MissingClientPropertyError} if the client has no account.
  * Throws {@link AddressMismatchError} if the client account differs from
