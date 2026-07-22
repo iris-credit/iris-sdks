@@ -19,7 +19,7 @@ const authorizationTypes = {
     { name: "nonce", type: "uint256" },
     { name: "deadline", type: "uint256" },
   ],
-};
+} as const;
 
 export const getAuthorizationTypedData = (
   chainId: ChainId,

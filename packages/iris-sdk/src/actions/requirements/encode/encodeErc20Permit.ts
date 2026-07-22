@@ -8,12 +8,11 @@ import type {
 
 import { isAddressEqual, verifyTypedData } from "viem";
 import { signTypedData } from "viem/actions";
-import { fetchToken, getChainAddresses, getErc2612PermitTypedData } from "@iris-credit/core-sdk";
+import { fetchToken, getChainAddresses, getPermitTypedData } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
 import { validateUserAddress } from "../../../helpers/index.js";
 import {
   ChainIdMismatchError,
-  Erc2612NameMissingError,
   InvalidSignatureError,
   UnsupportedErc20ApprovalSpenderError,
 } from "../../../types/index.js";
@@ -31,14 +30,9 @@ interface EncodeErc20PermitParams {
  * Builds an EIP-2612 permit `Requirement` that, once signed, lets a supported SDK spender pull
  * `amount` of `token`.
  *
- * Reads token metadata via `fetchToken` to build the permit domain: `name` comes from the token
- * and `version` follows the common convention (`"2"` for USDC, `"1"` otherwise) — tokens with
- * non-standard domains should be routed through the Permit2 flow instead. The returned
- * `Requirement.sign()` produces the EIP-712 signature, verifies it offline against the connected
- * account, and returns a `RequirementSignature` the bundler action helpers can consume. The
- * verification is deliberately ECDSA-only: ERC-2612 `permit` recovers the signer with `ecrecover`
- * on-chain, so an ERC-1271 contract-wallet signature could never be consumed and fails closed at
- * sign time. Deadline defaults to two hours from `Time.timestamp()`.
+ * Reads token metadata via `fetchToken`. The returned `Requirement.sign()` produces the EIP-712
+ * signature, verifies it against the connected account, and returns a `RequirementSignature`
+ * the bundler action helpers can consume. Deadline defaults to two hours from `Time.timestamp()`.
  *
  * @param viemClient - Connected viem `Client` whose `chain.id` matches `params.chainId`.
  * @param params - Permit encoding parameters.
@@ -50,7 +44,6 @@ interface EncodeErc20PermitParams {
  * @returns A `Requirement` whose `sign(client, userAddress)` produces the deep-frozen signature.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
  * @throws {UnsupportedErc20ApprovalSpenderError} when `spender` is not GeneralAdapter1 for `chainId`.
- * @throws {Erc2612NameMissingError} when the token exposes no readable ERC-20 `name`.
  * @throws {MissingClientPropertyError} from `sign()` when the client has no `account.address`.
  * @throws {AddressMismatchError} from `sign()` when the client account differs from `userAddress`.
  * @throws {InvalidSignatureError} from `sign()` when EIP-712 verification fails.
@@ -82,7 +75,6 @@ export const encodeErc20Permit = async (
   }
 
   const {
-    tokens,
     bundler3: { generalAdapter1 },
   } = getChainAddresses(chainId);
   if (!isAddressEqual(spender, generalAdapter1)) {
@@ -98,10 +90,6 @@ export const encodeErc20Permit = async (
   const deadline = now + Time.s.from.h(2n);
 
   const tokenData = await fetchToken(token, viemClient);
-  const { name } = tokenData;
-  if (name == null) {
-    throw new Erc2612NameMissingError(token);
-  }
 
   const action: PermitAction = {
     type: "permit",
@@ -117,15 +105,9 @@ export const encodeErc20Permit = async (
     async sign(client: WalletClient, userAddress: Address) {
       const account = client.account;
       validateUserAddress(account?.address, userAddress);
-      const typedData = getErc2612PermitTypedData(
-        {
-          token,
-          chainId,
-          name,
-          // USDC's EIP-712 domain uses version "2"; other mainstream ERC-2612 tokens use "1".
-          version: isAddressEqual(token, tokens.USDC) ? "2" : "1",
-        },
-        { owner: userAddress, spender, value: amount, nonce, deadline },
+      const typedData = getPermitTypedData(
+        { erc20: tokenData, owner: userAddress, spender, allowance: amount, nonce, deadline },
+        chainId,
       );
 
       const signature = await signTypedData(client, {

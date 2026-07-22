@@ -77,8 +77,6 @@ export type GetGeneralAdapterRequirementsParams =
  *   `Requirement` objects (signature requirements with a `sign()` method). Empty when `amount`
  *   is zero or when the classic-approval path can reuse sufficient direct allowance.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
- * @throws {Erc2612NameMissingError} from the simple-permit branch when the probed token exposes
- *   `nonces` but no readable ERC-20 `name`.
  * @example
  * ```ts
  * import { createPublicClient, http } from "viem";

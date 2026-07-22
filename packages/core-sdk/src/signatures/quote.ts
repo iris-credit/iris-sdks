@@ -48,7 +48,7 @@ const quoteTypes = {
     { name: "nonce", type: "uint256" },
     { name: "data", type: "bytes" },
   ],
-};
+} as const;
 
 export const getQuoteTypedData = (
   chainId: ChainId,

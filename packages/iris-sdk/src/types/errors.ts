@@ -152,15 +152,6 @@ export class Permit2ExpirationMissingError extends Error {
   }
 }
 
-/** Thrown when a token exposes no readable ERC-20 `name`, so its EIP-2612 permit domain cannot be built. */
-export class Erc2612NameMissingError extends Error {
-  constructor(token: Address) {
-    super(
-      `Token "${token}" has no readable ERC-20 name to build its EIP-2612 permit domain. Use the Permit2 flow instead.`,
-    );
-  }
-}
-
 /** Thrown when a quote's collateral amount is zero. */
 export class ZeroCollateralAmountError extends Error {
   constructor(collateralToken: Address) {
