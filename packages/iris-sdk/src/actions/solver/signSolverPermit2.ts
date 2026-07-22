@@ -9,7 +9,7 @@ import {
   MathLib,
   permit2Abi,
 } from "@iris-credit/core-sdk";
-import { deepFreeze, Time } from "@iris-credit/iris-ts";
+import { deepFreeze } from "@iris-credit/iris-ts";
 import { validateUserAddress } from "../../helpers/index.js";
 import {
   ChainIdMismatchError,
@@ -109,9 +109,6 @@ export const signSolverPermit2 = async (
       )[2],
     );
 
-  const now = Time.timestamp();
-  const deadline = now + Time.s.from.h(2n);
-
   const permitSingle = {
     details: {
       token: debtToken,
@@ -119,7 +116,7 @@ export const signSolverPermit2 = async (
       expiration: Number(expiration),
       nonce: Number(nonce),
     },
-    sigDeadline: deadline,
+    sigDeadline: expiration,
   };
 
   const typedData = getPermit2PermitTypedData(chainId, { ...permitSingle, spender: iris });
