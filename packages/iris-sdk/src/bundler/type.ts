@@ -1,5 +1,5 @@
 import type { Address, Hex } from "viem";
-import type { PermitSingle, Quote } from "@iris-credit/core-sdk";
+import type { Authorization, PermitSingle, Quote } from "@iris-credit/core-sdk";
 
 /**
  * Permit2 single-permit payload accepted by the `approve2` action, without a
@@ -93,6 +93,13 @@ export interface ActionArgs {
     minSharePrice: bigint,
     receiver: Address,
     owner: Address,
+    skipRevert?: boolean,
+  ];
+
+  /** Iris `setAuthorizationWithSig` call submitting a signed `authorization` and its `signature`; `skipRevert` controls Bundler3 revert handling. */
+  readonly irisSetAuthorizationWithSig: [
+    authorization: Authorization,
+    signature: Hex | null,
     skipRevert?: boolean,
   ];
 
