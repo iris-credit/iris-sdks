@@ -4,7 +4,7 @@ import type { ERC20ApprovalAction, Transaction } from "../../../types/index.js";
 
 import { encodeFunctionData, erc20Abi, isAddressEqual, maxUint256 } from "viem";
 import { getChainAddresses, MathLib } from "@iris-credit/core-sdk";
-import { deepFreeze } from "@iris-credit/iris-ts";
+import { deepFreeze, entries } from "@iris-credit/iris-ts";
 import { MAX_TOKEN_APPROVALS } from "../../../helpers/index.js";
 import { UnsupportedErc20ApprovalSpenderError } from "../../../types/index.js";
 
@@ -70,9 +70,8 @@ export const encodeErc20Approval = (
 
   const amountValue = MathLib.min(
     amount,
-    Object.entries(MAX_TOKEN_APPROVALS[chainId] ?? {}).find(([entry]) =>
-      isAddressEqual(entry as Address, token),
-    )?.[1] ?? maxUint256,
+    entries(MAX_TOKEN_APPROVALS[chainId]).find(([entry]) => isAddressEqual(entry, token))?.[1] ??
+      maxUint256,
   );
 
   return deepFreeze({
