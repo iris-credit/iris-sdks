@@ -5,8 +5,8 @@ import type { SolverPermit2 } from "../../types/index.js";
 import { signQuote } from "./signQuote.js";
 import { signSolverPermit2 } from "./signSolverPermit2.js";
 
-/** Parameters for {@link signQuoteResponse}. */
-export interface SignQuoteResponseParams {
+/** Parameters for {@link signResponse}. */
+export interface SignResponseParams {
   /** Target chain id; must match `client.chain.id`. */
   chainId: ChainId;
   /** The complete quote to sign — `quote.solver` must be the connected account. */
@@ -29,7 +29,7 @@ export interface SignQuoteResponseParams {
  *
  * @param client - Wallet client whose account is `quote.solver`; its transport must support
  *   `eth_call` (ERC-1271-capable verification and the Permit2 nonce read).
- * @param params - See {@link SignQuoteResponseParams}.
+ * @param params - See {@link SignResponseParams}.
  * @returns The quote signature, plus the {@link SolverPermit2} payload in the `usePermit2`
  *   mode — attach both to the RFQ webhook response.
  * @throws {ChainIdMismatchError} when `client.chain?.id !== params.chainId`.
@@ -39,9 +39,9 @@ export interface SignQuoteResponseParams {
  * @throws {InvalidSignatureError} when EIP-712 verification fails.
  * @example
  * ```ts
- * import { signQuoteResponse } from "@iris-credit/iris-sdk";
+ * import { signResponse } from "@iris-credit/iris-sdk";
  *
- * const { quoteSignature, solverPermit2 } = await signQuoteResponse(client, {
+ * const { quoteSignature, solverPermit2 } = await signResponse(client, {
  *   chainId: 1,
  *   quote,
  *   usePermit2: true,
@@ -49,9 +49,9 @@ export interface SignQuoteResponseParams {
  * // Respond to the RFQ webhook with { ...quote fields, signature: quoteSignature, solverPermit2 }.
  * ```
  */
-export const signQuoteResponse = async (
+export const signResponse = async (
   client: WalletClient,
-  params: SignQuoteResponseParams,
+  params: SignResponseParams,
 ): Promise<{ quoteSignature: Hex; solverPermit2?: SolverPermit2 }> => {
   const { chainId, quote, usePermit2 } = params;
 

@@ -32,7 +32,7 @@ export interface SignSolverPermit2Params {
   /**
    * Permit2 allowance expiration in seconds. Defaults to `MathLib.MAX_UINT_48` — a
    * never-expiring allowance once submitted; pass a bound to scope it
-   * (`signQuoteResponse` passes `quote.deadline`).
+   * (`signResponse` passes `quote.deadline`).
    */
   expiration?: bigint;
 }
