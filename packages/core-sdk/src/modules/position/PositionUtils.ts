@@ -188,6 +188,61 @@ export namespace PositionUtils {
   };
 
   /**
+   * Returns the debt-token assets pulled from the payer when the position is repaid at the
+   * given timestamp, matching Iris's onchain repayment: the debt (principal), the fixed leg —
+   * topped up with the residual fixed interest to maturity on an early settlement — and the
+   * part of the floating leg's excess over the fixed leg that the bond does not cover (the
+   * bad bond, charged to the payer).
+   *
+   * Legs must already be accrued to `timestamp` (see {@link getAccruedLegs}); this function
+   * only credits the settlement residual on top, mirroring `Iris.repay`'s
+   * accrue-then-settle order. The onchain amount keeps moving with the venue and clock —
+   * overdue interest past maturity, floating-leg growth in the bad-bond case — so fund a
+   * repayment with a small buffer on top of this value.
+   *
+   * @param position.debt The position's debt (principal).
+   * @param position.bond The position's bond.
+   * @param position.fixedLeg The position's fixed leg, accrued to `timestamp`.
+   * @param position.floatingLeg The position's floating leg, accrued to `timestamp`.
+   * @param loan.maturity The loan's maturity timestamp (in seconds).
+   * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
+   * @param timestamp The repayment timestamp (in seconds).
+   * @returns The debt-token assets transferred from the payer.
+   * @example
+   * ```ts
+   * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const repaid = PositionUtils.getRepaid(
+   *   { debt: MathLib.WAD, bond: 0n, fixedLeg: 0n, floatingLeg: 0n },
+   *   { maturity: 17_768_000n, fixedRate: 10_0000000000000000n },
+   *   2_000_000n,
+   * );
+   * // repaid === MathLib.WAD + 50000000000000000n
+   * ```
+   */
+  export const getRepaid = (
+    position: {
+      debt: BigIntish;
+      bond: BigIntish;
+      fixedLeg: BigIntish;
+      floatingLeg: BigIntish;
+    },
+    loan: { maturity: BigIntish; fixedRate: BigIntish },
+    timestamp: BigIntish,
+  ) => {
+    position.debt = BigInt(position.debt);
+    position.bond = BigInt(position.bond);
+    position.fixedLeg = BigInt(position.fixedLeg);
+    position.floatingLeg = BigInt(position.floatingLeg);
+
+    const fixedLeg = position.fixedLeg + getResidual(position, loan, timestamp);
+    const negativeNet = position.floatingLeg > fixedLeg ? position.floatingLeg - fixedLeg : 0n;
+    const badBond = MathLib.zeroFloorSub(negativeNet, position.bond);
+
+    return position.debt + fixedLeg + badBond;
+  };
+
+  /**
    * Returns whether the position's bond is healthy: the bond covers the bond requirement, and
    * the drawdown of the floating leg over the fixed leg, relative to the bond, does not exceed
    * the loan's bond LLTV. A closed loan (zero bond requirement) is always healthy.

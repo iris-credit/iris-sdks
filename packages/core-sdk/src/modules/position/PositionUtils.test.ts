@@ -264,6 +264,71 @@ describe("PositionUtils", () => {
     });
   });
 
+  describe("getRepaid", () => {
+    const loan = {
+      maturity: 2_000_000n + SECONDS_PER_YEAR / 2n,
+      fixedRate: 100_000_000_000_000_000n,
+    };
+
+    test("should charge the debt, accrued fixed leg, and residual before maturity", () => {
+      // fixedLeg 0.01 + residual 10% over half a year (0.05 * debt).
+      expect(
+        PositionUtils.getRepaid(
+          {
+            debt: MathLib.WAD,
+            bond: 0n,
+            fixedLeg: 10_000_000_000_000_000n,
+            floatingLeg: 0n,
+          },
+          loan,
+          2_000_000n,
+        ),
+      ).toBe(MathLib.WAD + 60_000_000_000_000_000n);
+    });
+
+    test("should not credit a residual at or after maturity", () => {
+      expect(
+        PositionUtils.getRepaid(
+          { debt: MathLib.WAD, bond: 0n, fixedLeg: 10_000_000_000_000_000n, floatingLeg: 0n },
+          loan,
+          loan.maturity,
+        ),
+      ).toBe(MathLib.WAD + 10_000_000_000_000_000n);
+    });
+
+    test("should not charge a bond-covered negative net", () => {
+      // floating 0.2 vs fixed 0.05 (residual only): negative net 0.15, fully bonded.
+      expect(
+        PositionUtils.getRepaid(
+          {
+            debt: MathLib.WAD,
+            bond: 150_000_000_000_000_000n,
+            fixedLeg: 0n,
+            floatingLeg: 200_000_000_000_000_000n,
+          },
+          loan,
+          2_000_000n,
+        ),
+      ).toBe(MathLib.WAD + 50_000_000_000_000_000n);
+    });
+
+    test("should charge the negative net in excess of the bond", () => {
+      // negative net 0.15 against a 0.1 bond: 0.05 bad bond on top.
+      expect(
+        PositionUtils.getRepaid(
+          {
+            debt: MathLib.WAD,
+            bond: 100_000_000_000_000_000n,
+            fixedLeg: 0n,
+            floatingLeg: 200_000_000_000_000_000n,
+          },
+          loan,
+          2_000_000n,
+        ),
+      ).toBe(MathLib.WAD + 100_000_000_000_000_000n);
+    });
+  });
+
   describe("isHealthyBond", () => {
     test("should be healthy when the loan is closed", () => {
       expect(

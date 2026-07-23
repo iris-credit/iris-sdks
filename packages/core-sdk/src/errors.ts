@@ -8,6 +8,16 @@ export class UnsupportedChainIdError extends Error {
   }
 }
 
+/** Error thrown when a venue adapter has no offline rate model registered in the SDK. */
+export class UnsupportedVenueAdapterError extends Error {
+  constructor(
+    public readonly adapter: Address,
+    public readonly chainId: ChainId,
+  ) {
+    super(`unsupported venue adapter ${adapter} on chain ${chainId}`);
+  }
+}
+
 /** Error thrown when a token address has no curated metadata entry. */
 export class TokenMetadataNotFoundError extends Error {
   constructor(
