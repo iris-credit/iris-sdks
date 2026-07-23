@@ -24,18 +24,18 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral before accrual.
    * @param position.debt The position's debt (principal).
    * @param position.bondRequirement The position's bond requirement (zero once the loan is closed, which skips the surplus accrual).
-   * @param position.collateralIndex The venue's collateral index at the last update (scaled by WAD).
-   * @param position.debtIndex The venue's debt index at the last update (scaled by WAD).
+   * @param position.collateralIndex The venue's collateral index at the last update (scaled by RAY).
+   * @param position.debtIndex The venue's debt index at the last update (scaled by RAY).
    * @param position.floatingLeg The position's floating leg before accrual.
    * @param position.surplus The position's surplus before accrual.
    * @param position.lastUpdate The timestamp of the last accrual (in seconds).
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
    * @param loan.overdueRate The loan's annual overdue rate, added on top of the fixed rate past maturity (scaled by WAD).
-   * @param newCollateralIndex The venue's current collateral index, from `IVenueAdapter.indices` (scaled by WAD).
-   * @param newDebtIndex The venue's current debt index, from `IVenueAdapter.indices` (scaled by WAD).
+   * @param newCollateralIndex The venue's current collateral index, from `IVenueAdapter.indices` (scaled by RAY).
+   * @param newDebtIndex The venue's current debt index, from `IVenueAdapter.indices` (scaled by RAY).
    * @param timestamp The timestamp at which to accrue interest (in seconds).
-   * @returns The new venue indices (scaled by WAD) and the `fixedLeg`, `floatingLeg` & `surplus` increments.
+   * @returns The new venue indices (scaled by RAY) and the `fixedLeg`, `floatingLeg` & `surplus` increments.
    * @example
    * ```ts
    * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";

@@ -41,7 +41,7 @@ export class MorphoBlueVenue extends Venue implements IMorphoBlueVenue {
    * borrow assets from its `lastUpdate` at the current borrow rate.
    *
    * @param timestamp - The timestamp to project to (in seconds).
-   * @returns The pinned collateral index (RAY) and the projected borrow index (scaled by 1e33).
+   * @returns The pinned collateral index (RAY) and the projected borrow index (RAY).
    */
   public indices(timestamp: BigIntish): VenueIndices {
     const interest = MathLib.wMulDown(

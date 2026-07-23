@@ -48,11 +48,11 @@ export class Position implements IPosition {
    */
   public bondRequirement: bigint;
   /**
-   * The venue's collateral index at the last update (scaled by WAD).
+   * The venue's collateral index at the last update (scaled by RAY).
    */
   public collateralIndex: bigint;
   /**
-   * The venue's debt index at the last update (scaled by WAD).
+   * The venue's debt index at the last update (scaled by RAY).
    */
   public debtIndex: bigint;
   /**
