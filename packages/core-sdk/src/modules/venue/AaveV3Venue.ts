@@ -16,9 +16,7 @@ export interface IAaveReserve {
 
 /** Plain input shape for an Aave V3 venue. */
 export interface IAaveV3Venue {
-  /** The collateral asset's reserve state. */
   collateralReserve: IAaveReserve;
-  /** The debt asset's reserve state. */
   debtReserve: IAaveReserve;
 }
 
@@ -27,7 +25,13 @@ export interface IAaveV3Venue {
  * interest model used to project the reserve indices.
  */
 export class AaveV3Venue extends Venue implements IAaveV3Venue {
+  /**
+   * The collateral asset's reserve state.
+   */
   public collateralReserve: IAaveReserve;
+  /**
+   * The debt asset's reserve state.
+   */
   public debtReserve: IAaveReserve;
 
   constructor(venue: IAaveV3Venue) {

@@ -13,6 +13,13 @@ export namespace AaveV3Utils {
    * @param a The first RAY-scaled factor.
    * @param b The second RAY-scaled factor.
    * @returns `a × b` (scaled by RAY, rounded half up).
+   * @example
+   * ```ts
+   * import { AaveV3Utils, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const product = AaveV3Utils.rayMul(1n, MathLib.RAY / 2n);
+   * // product === 1n (0.5 rounds half up, where rounding down would return 0)
+   * ```
    */
   export const rayMul = (a: BigIntish, b: BigIntish) => {
     a = BigInt(a);
@@ -60,6 +67,13 @@ export namespace AaveV3Utils {
    * @param lastUpdateTimestamp The reserve's last update timestamp (in seconds).
    * @param timestamp The timestamp to compound to (in seconds).
    * @returns The interest factor (scaled by RAY).
+   * @example
+   * ```ts
+   * import { AaveV3Utils, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const factor = AaveV3Utils.getCompoundedInterest(MathLib.RAY / 20n, 0n, 2_592_000n);
+   * // factor === 1_004_118_044_969_757_105_730_597_891n (5% compounded over 30 days)
+   * ```
    */
   export const getCompoundedInterest = (
     rate: BigIntish,

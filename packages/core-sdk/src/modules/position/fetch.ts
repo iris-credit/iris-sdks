@@ -69,6 +69,18 @@ export async function fetchPosition(
  * @returns The hydrated `AccrualPosition` entity.
  * @throws {UnsupportedVenueAdapterError} from `fetchVenue` when the position's venue adapter
  *   has no offline rate model.
+ * @example
+ * ```ts
+ * import { fetchAccrualPosition } from "@iris-credit/core-sdk";
+ * import { Time } from "@iris-credit/iris-ts";
+ * import { createPublicClient, http } from "viem";
+ * import { mainnet } from "viem/chains";
+ *
+ * const client = createPublicClient({ chain: mainnet, transport: http() });
+ *
+ * const position = await fetchAccrualPosition(pod, client);
+ * const repaid = position.getRepaid(Time.timestamp());
+ * ```
  */
 export async function fetchAccrualPosition(
   pod: Address,

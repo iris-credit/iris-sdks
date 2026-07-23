@@ -8,15 +8,10 @@ import { Venue } from "./Venue.js";
 
 /** Plain input shape for a Morpho Blue venue: the market state a projection needs. */
 export interface IMorphoBlueVenue {
-  /** The market's total supply assets at `lastUpdate` (drives the IRM's utilization). */
   totalSupplyAssets: bigint;
-  /** The market's total borrow assets at `lastUpdate`. */
   totalBorrowAssets: bigint;
-  /** The market's total borrow shares (accrual-invariant). */
   totalBorrowShares: bigint;
-  /** The market's last accrual timestamp (in seconds). */
   lastUpdate: bigint;
-  /** The market's `rateAtTarget` (per second, scaled by WAD), when it uses the canonical Adaptive Curve IRM. */
   rateAtTarget?: bigint;
 }
 
@@ -25,10 +20,26 @@ export interface IMorphoBlueVenue {
  * used to project the borrow index.
  */
 export class MorphoBlueVenue extends Venue implements IMorphoBlueVenue {
+  /**
+   * The market's total supply assets at `lastUpdate` (drives the IRM's utilization).
+   */
   public totalSupplyAssets: bigint;
+  /**
+   * The market's total borrow assets at `lastUpdate`.
+   */
   public totalBorrowAssets: bigint;
+  /**
+   * The market's total borrow shares (accrual-invariant).
+   */
   public totalBorrowShares: bigint;
+  /**
+   * The market's last accrual timestamp (in seconds).
+   */
   public lastUpdate: bigint;
+  /**
+   * The market's `rateAtTarget` (per second, scaled by WAD), when it uses the canonical
+   * Adaptive Curve IRM.
+   */
   public rateAtTarget?: bigint;
 
   constructor(venue: IMorphoBlueVenue) {

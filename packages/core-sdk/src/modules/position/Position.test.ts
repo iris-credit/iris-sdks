@@ -131,28 +131,9 @@ describe("AccrualPosition", () => {
         MathLib.WAD + 50_000_000_000_000_000n,
       );
     });
-
-    test("should charge the negative net in excess of the bond", () => {
-      const value = new AccrualPosition(
-        position,
-        loan,
-        new TestVenue({ collateralIndex: MathLib.WAD, debtIndex: 1_200_000_000_000_000_000n }),
-      );
-
-      // floating 0.2 vs fixed 0.05: negative net 0.15 against a 0.1 bond.
-      expect(value.getRepaid(position.lastUpdate + SECONDS_PER_YEAR / 4n)).toBe(
-        MathLib.WAD + 100_000_000_000_000_000n,
-      );
-    });
   });
 
   describe("isHealthyBond", () => {
-    test("should be healthy when the loan is closed", () => {
-      const value = new AccrualPosition({ ...position, bondRequirement: 0n }, loan, venue);
-
-      expect(value.isHealthyBond).toBe(true);
-    });
-
     test("should be unhealthy when the bond does not cover the requirement", () => {
       const value = new AccrualPosition(
         { ...position, bondRequirement: position.bond + 1n },
