@@ -14,9 +14,9 @@ export interface VenueIndices {
  * needed to project its indices to an arbitrary timestamp.
  *
  * Each implementation mirrors its venue adapter's onchain `indices` definition, so projected
- * values stay on the same scale as the indices Iris stores on positions. Projections assume
- * the venue's current rates persist — the same assumption the venues themselves make between
- * touches — so they are exact at the snapshot and first-order approximations beyond it.
+ * values stay on the same scale as the indices Iris stores on positions, and reproduces its
+ * venue's own rate dynamics — projections are exact as long as the venue is untouched in
+ * between.
  */
 export abstract class Venue {
   /**

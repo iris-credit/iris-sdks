@@ -22,7 +22,7 @@ export namespace MorphoBlueUtils {
    *
    * @param market.totalBorrowAssets The market's total borrow assets (with pending interest).
    * @param market.totalBorrowShares The market's total borrow shares.
-   * @returns The borrow index (scaled by 1e33).
+   * @returns The borrow index (scaled by RAY).
    * @example
    * ```ts
    * import { MorphoBlueUtils } from "@iris-credit/core-sdk";

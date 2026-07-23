@@ -6,7 +6,11 @@ import { decodeAbiParameters, encodeAbiParameters, isAddressEqual, keccak256 } f
 import { getChainId, readContract } from "viem/actions";
 import { aaveV3PoolAbi } from "../../abis/aaveV3.js";
 import { irisAbi } from "../../abis/iris.js";
-import { morphoBlueAbi, morphoIrmAbi, morphoMarketParamsAbi } from "../../abis/morphoBlue.js";
+import {
+  adaptiveCurveIrmAbi,
+  morphoBlueAbi,
+  morphoMarketParamsAbi,
+} from "../../abis/morphoBlue.js";
 import { getChainAddresses } from "../../addresses.js";
 import { ChainUtils } from "../../chain.js";
 import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
@@ -31,8 +35,9 @@ export interface FetchVenueArgs {
  *
  * Resolves the venue adapter from Iris, then dispatches:
  *
- * - **Morpho Blue adapter** — decodes the market params from `data` and reads the market state
- *   and the IRM's `borrowRateView`, returning a {@link MorphoBlueVenue}.
+ * - **Morpho Blue adapter** — decodes the market params from `data` and reads the market state,
+ *   plus the Adaptive Curve IRM's `rateAtTarget` when the market uses it, returning a
+ *   {@link MorphoBlueVenue}.
  * - **Aave V3 adapter** — reads the collateral and debt reserves, returning an
  *   {@link AaveV3Venue}.
  *
@@ -54,7 +59,7 @@ export async function fetchVenue(
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
-  const { iris, morphoBlueAdapter, morphoBlue, aaveV3Adapter, aaveV3Pool } =
+  const { iris, morphoBlueAdapter, morphoBlue, adaptiveCurveIrm, aaveV3Adapter, aaveV3Pool } =
     getChainAddresses(chainId);
 
   const adapter = await readContract(client, {
@@ -69,44 +74,33 @@ export async function fetchVenue(
     const [marketParams] = decodeAbiParameters(morphoMarketParamsAbi, data);
     const id = keccak256(encodeAbiParameters(morphoMarketParamsAbi, [marketParams]));
 
-    const [
-      totalSupplyAssets,
-      totalSupplyShares,
-      totalBorrowAssets,
-      totalBorrowShares,
-      lastUpdate,
-      fee,
-    ] = await readContract(client, {
-      ...parameters,
-      address: morphoBlue,
-      abi: morphoBlueAbi,
-      functionName: "market",
-      args: [id],
-    });
+    const [totalSupplyAssets, , totalBorrowAssets, totalBorrowShares, lastUpdate] =
+      await readContract(client, {
+        ...parameters,
+        address: morphoBlue,
+        abi: morphoBlueAbi,
+        functionName: "market",
+        args: [id],
+      });
 
-    const borrowRate = await readContract(client, {
-      ...parameters,
-      address: marketParams.irm,
-      abi: morphoIrmAbi,
-      functionName: "borrowRateView",
-      args: [
-        marketParams,
-        {
-          totalSupplyAssets,
-          totalSupplyShares,
-          totalBorrowAssets,
-          totalBorrowShares,
-          lastUpdate,
-          fee,
-        },
-      ],
-    });
+    // Only the canonical Adaptive Curve IRM exposes its state; markets on any other IRM
+    // accrue at a zero rate offline (see `MorphoBlueVenue.indices`).
+    const rateAtTarget = isAddressEqual(marketParams.irm, adaptiveCurveIrm)
+      ? await readContract(client, {
+          ...parameters,
+          address: adaptiveCurveIrm,
+          abi: adaptiveCurveIrmAbi,
+          functionName: "rateAtTarget",
+          args: [id],
+        })
+      : undefined;
 
     return new MorphoBlueVenue({
+      totalSupplyAssets,
       totalBorrowAssets,
       totalBorrowShares,
       lastUpdate,
-      borrowRate,
+      rateAtTarget,
     });
   }
 
