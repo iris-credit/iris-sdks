@@ -5,10 +5,6 @@ import { MathLib } from "../../math/index.js";
 
 /**
  * Namespace of utility functions to ease Aave V3 venue-index calculations.
- *
- * Mirrors the Aave venue adapter's onchain `indices` definition so the offline projections
- * stay consistent with the values Iris stores on positions: Aave's normalized income /
- * variable debt interest factors (Aave V3 `MathUtils`) with `WadRayMath` rounding.
  */
 export namespace AaveV3Utils {
   /**
@@ -55,9 +51,10 @@ export namespace AaveV3Utils {
 
   /**
    * Returns the compounded interest factor between the last update and the given timestamp,
-   * matching Aave's `MathUtils.calculateCompoundedInterest` binomial approximation
-   * `(1 + x)^n ≈ 1 + nx + n(n-1)x²/2 + n(n-1)(n-2)x³/6` (used for the variable borrow index).
-   * A timestamp at or before the last update returns RAY (no accrual).
+   * matching Aave's `MathUtils.calculateCompoundedInterest` third-order approximation of
+   * `e^(rate × elapsed / year)` — `1 + x + x²/2 + x³/6` with `x = rate × elapsed / year`
+   * (used for the variable borrow index). A timestamp at or before the last update returns
+   * RAY (no accrual).
    *
    * @param rate The annual rate (scaled by RAY).
    * @param lastUpdateTimestamp The reserve's last update timestamp (in seconds).
@@ -73,15 +70,8 @@ export namespace AaveV3Utils {
     const elapsed = MathLib.zeroFloorSub(timestamp, lastUpdateTimestamp);
     if (elapsed === 0n) return MathLib.RAY;
 
-    const elapsedMinusOne = elapsed - 1n;
-    const elapsedMinusTwo = elapsed > 2n ? elapsed - 2n : 0n;
+    const x = (rate * elapsed) / SECONDS_PER_YEAR;
 
-    const basePowerTwo = rayMul(rate, rate) / (SECONDS_PER_YEAR * SECONDS_PER_YEAR);
-    const basePowerThree = rayMul(basePowerTwo, rate) / SECONDS_PER_YEAR;
-
-    const secondTerm = (elapsed * elapsedMinusOne * basePowerTwo) / 2n;
-    const thirdTerm = (elapsed * elapsedMinusOne * elapsedMinusTwo * basePowerThree) / 6n;
-
-    return MathLib.RAY + (rate * elapsed) / SECONDS_PER_YEAR + secondTerm + thirdTerm;
+    return MathLib.RAY + x + rayMul(x, x / 2n + rayMul(x, x / 6n));
   };
 }

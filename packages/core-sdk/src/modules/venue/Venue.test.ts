@@ -65,12 +65,15 @@ describe("AaveV3Utils", () => {
       expect(AaveV3Utils.getCompoundedInterest(MathLib.RAY, 1_000n, 500n)).toBe(MathLib.RAY);
     });
 
-    test("should match the binomial expansion for a two-second window", () => {
-      // RAY + 2 * rate / YEAR + basePowerTwo, with basePowerTwo = rayMul(RAY, RAY) / YEAR².
+    test("should match Aave's third-order exponential approximation", () => {
+      // Reference values from aave-v3-origin v3.6 `MathUtils.calculateCompoundedInterest`:
+      // RAY + x + rayMul(x, x/2 + rayMul(x, x/6)), with x = rate × elapsed / YEAR.
       expect(AaveV3Utils.getCompoundedInterest(MathLib.RAY, 0n, 2n)).toBe(
-        MathLib.RAY +
-          (2n * MathLib.RAY) / SECONDS_PER_YEAR +
-          MathLib.RAY / (SECONDS_PER_YEAR * SECONDS_PER_YEAR),
+        1_000_000_063_419_585_978_551_030_828n,
+      );
+      // 5% over 30 days.
+      expect(AaveV3Utils.getCompoundedInterest(MathLib.RAY / 20n, 0n, 2_592_000n)).toBe(
+        1_004_118_044_969_757_105_730_597_891n,
       );
     });
 
