@@ -25,10 +25,6 @@ export interface IAaveV3Venue {
 /**
  * Represents an Aave V3 venue: the collateral and debt reserves backing the loan, with Aave's
  * interest model used to project the reserve indices.
- *
- * Mirrors the Aave venue adapter's onchain `indices`: the collateral index is the reserve's
- * normalized income (linearly accumulated liquidity index) and the debt index is the reserve's
- * normalized variable debt (compounded variable borrow index), both scaled by RAY.
  */
 export class AaveV3Venue extends Venue implements IAaveV3Venue {
   public collateralReserve: IAaveReserve;

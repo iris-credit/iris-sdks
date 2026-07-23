@@ -1,6 +1,4 @@
-/**
- * Aave V3 `IPool` interface ABI, generated from the venue submodule pinned by `iris-core`.
- */
+/** Aave V3 `IPool` interface ABI. */
 export const aaveV3PoolAbi = [
   {
     type: "function",

@@ -4,10 +4,6 @@ import { MathLib } from "../../math/index.js";
 
 /**
  * Namespace of utility functions to ease Morpho Blue venue-index calculations.
- *
- * Mirrors the Morpho venue adapter's onchain `indices` definition so the offline projections
- * stay consistent with the values Iris stores on positions: the virtual-shares-adjusted borrow
- * asset-per-share index, grown with Morpho Blue's `MathLib.wTaylorCompounded`.
  */
 export namespace MorphoBlueUtils {
   /** The Morpho adapter's pinned collateral index — Morpho Blue collateral is idle. */

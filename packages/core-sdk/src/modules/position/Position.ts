@@ -139,14 +139,6 @@ export class AccrualPosition extends Position {
    * surplus from the venue's indices projected to `timestamp` with its rate model
    * (see {@link Venue.indices}).
    *
-   * Projections assume the venue's current rates persist, so values at future timestamps are
-   * first-order estimates — fund flows derived from them with a small buffer
-   * (see {@link getRepaid}).
-   *
-   * The venue is carried over unchanged on purpose: it is the projection's calibration
-   * snapshot, not a time-anchored view, so re-anchoring it would add no information while
-   * making chained accruals path-dependent (Taylor compounding is not exactly multiplicative).
-   *
    * A never-created position (`lastUpdate === 0n`) is returned unchanged.
    *
    * @param timestamp - The timestamp at which to accrue interest (in seconds). Must be greater
@@ -188,9 +180,6 @@ export class AccrualPosition extends Position {
    * Returns the debt-token assets pulled from the payer when the position is repaid at the
    * given timestamp: accrues the legs to `timestamp`, then applies Iris's settlement math
    * (see {@link PositionUtils.getRepaid}).
-   *
-   * The onchain amount can still drift from this projection until execution (venue rates
-   * moving with utilization), so fund a repayment with a small buffer on top of this value.
    *
    * @param timestamp - The repayment timestamp (in seconds).
    * @throws {IrisCoreErrors.InvalidInterestAccrual} when `timestamp` is prior to `lastUpdate`.

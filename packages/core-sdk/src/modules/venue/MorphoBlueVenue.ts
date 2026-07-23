@@ -20,13 +20,6 @@ export interface IMorphoBlueVenue {
 /**
  * Represents a Morpho Blue venue: the market backing the loan, with Morpho's interest math
  * used to project the borrow index.
- *
- * Mirrors the Morpho venue adapter's onchain `indices`: the collateral index is pinned to RAY
- * (Morpho Blue collateral is idle) and the debt index is the virtual-shares-adjusted borrow
- * asset-per-share ratio (see {@link MorphoBlueUtils.getDebtIndex}). Projection mirrors
- * Morpho Blue's onchain `_accrueInterest`: the current borrow rate held constant, compounded
- * with {@link MorphoBlueUtils.wTaylorCompounded} — only `totalBorrowAssets` grows, as accrual
- * never mints borrow shares.
  */
 export class MorphoBlueVenue extends Venue implements IMorphoBlueVenue {
   public totalBorrowAssets: bigint;

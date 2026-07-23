@@ -1,7 +1,4 @@
-/**
- * Morpho Blue interface ABI (static-typed getters), generated from the venue submodule pinned
- * by `iris-core`.
- */
+/** Morpho Blue interface ABI. */
 export const morphoBlueAbi = [
   {
     type: "function",
@@ -1006,11 +1003,7 @@ export const morphoBlueAbi = [
   },
 ] as const;
 
-/**
- * Morpho `IIrm` interface ABI, generated from the venue submodule pinned by `iris-core`.
- * Served by any market IRM, so `borrowRateView` reads work against whatever IRM the market
- * params carry.
- */
+/** Morpho `IIrm` interface ABI, served by any IRM a market's params may carry. */
 export const morphoIrmAbi = [
   {
     type: "function",
@@ -1180,10 +1173,7 @@ export const morphoIrmAbi = [
   },
 ] as const;
 
-/**
- * The Morpho Blue `MarketParams` struct as an ABI parameter list — the shape ABI-encoded in a
- * Morpho venue's position `data`, and the preimage of a Morpho market id.
- */
+/** The Morpho Blue `MarketParams` struct ABI, encoded in a Morpho venue's position `data`. */
 export const morphoMarketParamsAbi = [
   {
     type: "tuple",
