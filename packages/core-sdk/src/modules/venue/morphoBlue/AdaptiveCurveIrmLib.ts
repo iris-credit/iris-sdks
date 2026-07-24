@@ -1,7 +1,7 @@
-import type { BigIntish } from "../../types.js";
+import type { BigIntish } from "../../../types.js";
 
-import { SECONDS_PER_YEAR } from "../../constants.js";
-import { MathLib } from "../../math/index.js";
+import { SECONDS_PER_YEAR } from "../../../constants.js";
+import { MathLib } from "../../../math/index.js";
 
 /**
  * JS implementation of {@link https://github.com/morpho-org/morpho-blue-irm/blob/main/src/adaptive-curve-irm/libraries/ExpLib.sol ExpLib} used by the Adaptive Curve IRM.

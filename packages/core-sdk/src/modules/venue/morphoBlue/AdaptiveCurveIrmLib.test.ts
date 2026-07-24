@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { MathLib } from "../../math/index.js";
+import { MathLib } from "../../../math/index.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
 
 const { wExp, getBorrowRate, TARGET_UTILIZATION } = AdaptiveCurveIrmLib;
