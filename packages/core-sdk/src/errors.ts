@@ -41,6 +41,19 @@ export namespace IrisCoreErrors {
     }
   }
 
+  /** Error thrown when venue accrual is requested before a venue side's last update. */
+  export class InvalidVenueInterestAccrual extends Error {
+    constructor(
+      public readonly kind: "collateral" | "debt",
+      public readonly timestamp: bigint,
+      public readonly lastUpdate: bigint,
+    ) {
+      super(
+        `invalid ${kind} venue interest accrual: accrual timestamp ${timestamp} can't be prior to last update ${lastUpdate}`,
+      );
+    }
+  }
+
   /** Error thrown when a venue index is prior to the position's stored index. */
   export class InvalidVenueIndex extends Error {
     constructor(
