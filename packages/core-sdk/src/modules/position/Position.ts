@@ -5,6 +5,7 @@ import type { Venue } from "../venue/Venue.js";
 
 import { IrisCoreErrors } from "../../errors.js";
 import { Loan } from "../loan/Loan.js";
+import { LoanUtils } from "../loan/LoanUtils.js";
 import { PositionUtils } from "./PositionUtils.js";
 
 /** Plain input shape for an Iris pod position. */
@@ -134,6 +135,104 @@ export class AccrualPosition extends Position {
   }
 
   /**
+   * Whether the position's bond is healthy (see `PositionUtils.isHealthyBond`). Evaluated
+   * on the legs as stored on this instance — accrue first for an up-to-date answer.
+   */
+  get isHealthyBond() {
+    return PositionUtils.isHealthyBond(this, this._loan);
+  }
+
+  /**
+   * The position's drawdown: the floating leg over the fixed leg, relative to the bond
+   * (scaled by WAD; see `PositionUtils.getDrawdown`). Evaluated on the legs as stored on
+   * this instance — accrue first for an up-to-date answer.
+   */
+  get drawdown() {
+    return PositionUtils.getDrawdown(this);
+  }
+
+  /**
+   * The maximum collateral withdrawable while keeping the loan collateralized through the
+   * liquidation deadline (see `PositionUtils.getWithdrawableCollateral`), or `undefined`
+   * when the venue price is unknown. Evaluated at `lastUpdate` — accrue first for an
+   * up-to-date answer.
+   */
+  get withdrawableCollateral() {
+    return PositionUtils.getWithdrawableCollateral(this, this._loan, this._venue, this.lastUpdate);
+  }
+
+  /**
+   * The maximum bond withdrawable while keeping the bond healthy (see
+   * `PositionUtils.getWithdrawableBond`). Evaluated on the legs as stored on this
+   * instance — accrue first for an up-to-date answer.
+   */
+  get withdrawableBond() {
+    return PositionUtils.getWithdrawableBond(this, this._loan);
+  }
+
+  /**
+   * The collateral seized in exchange for repaying the loan when liquidated at
+   * `lastUpdate` (zero while the loan is not liquidatable; see
+   * `PositionUtils.getLiquidationSeizedCollateral`), or `undefined` when the venue price
+   * is unknown. Accrue first for an up-to-date answer.
+   */
+  get seizableCollateral() {
+    return PositionUtils.getLiquidationSeizedCollateral(
+      this,
+      this._loan,
+      this._venue,
+      this.lastUpdate,
+    );
+  }
+
+  /**
+   * The bond seized by the caller for triggering the bond liquidation (zero while the
+   * bond is healthy; see `PositionUtils.getBondLiquidationSeizedAmount`). Evaluated on
+   * the legs as stored on this instance — accrue first for an up-to-date answer.
+   */
+  get seizableBond() {
+    return PositionUtils.getBondLiquidationSeizedAmount(this, this._loan);
+  }
+
+  /**
+   * Whether the loan is past maturity at `lastUpdate` — accrue first for an up-to-date
+   * answer.
+   */
+  get isOverdue() {
+    return LoanUtils.isOverdue(this._loan, this.lastUpdate);
+  }
+
+  /**
+   * Whether the loan is liquidatable at `lastUpdate` — accrue first for an up-to-date
+   * answer.
+   */
+  get isLiquidatable() {
+    return LoanUtils.isLiquidatable(this._loan, this.lastUpdate);
+  }
+
+  /**
+   * The earliest timestamp at which the loan is liquidatable.
+   */
+  get liquidatableAt() {
+    return LoanUtils.liquidatableAt(this._loan);
+  }
+
+  /**
+   * The liquidation incentive factor at `lastUpdate` (scaled by WAD) — accrue first for
+   * an up-to-date answer.
+   */
+  get lif() {
+    return LoanUtils.getLif(this._loan, this.lastUpdate);
+  }
+
+  /**
+   * The bond liquidation incentive factor (scaled by WAD).
+   */
+  get bondLif() {
+    return LoanUtils.getBondLif(this._loan);
+  }
+
+  /**
    * Returns a new position with the venue projected to the given timestamp with its own
    * rate model (see `Venue.accrueInterest`) and the indices and legs accrued against the
    * projected venue, matching Iris's onchain accrual (see `PositionUtils.getAccruedLegs`).
@@ -217,5 +316,16 @@ export class AccrualPosition extends Position {
     );
 
     return { position, ...settlement };
+  }
+
+  /**
+   * Returns the debt assets required to repay the loan at the given timestamp: the legs
+   * accrued to `timestamp` (see `accrueLegs`), the fixed leg settled (see `settleLegs`)
+   * and Iris's repay charge applied (see `PositionUtils.getRepayAmount`).
+   *
+   * @param timestamp The repayment timestamp (in seconds). Defaults to `lastUpdate`.
+   */
+  public getRepayAmount(timestamp: BigIntish = this.lastUpdate) {
+    return PositionUtils.getRepayAmount(this.accrueLegs(timestamp).settleLegs().position);
   }
 }

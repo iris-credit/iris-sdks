@@ -100,6 +100,123 @@ describe("AccrualPosition", () => {
     );
   });
 
+  describe("isHealthyBond", () => {
+    test("should be unhealthy when the bond does not cover the requirement", () => {
+      const value = new AccrualPosition(
+        { ...position, bondRequirement: position.bond + 1n },
+        loan,
+        venue,
+      );
+
+      expect(accrualPosition.isHealthyBond).toBe(true);
+      expect(value.isHealthyBond).toBe(false);
+    });
+  });
+
+  describe("drawdown", () => {
+    test("should relate the negative net to the bond", () => {
+      expect(accrualPosition.drawdown).toBe(0n);
+
+      // 0.05 floating over 0.1 bond.
+      expect(
+        new AccrualPosition({ ...position, floatingLeg: 50_000_000_000_000_000n }, loan, venue)
+          .drawdown,
+      ).toBe(500_000_000_000_000_000n);
+    });
+  });
+
+  describe("withdrawableCollateral", () => {
+    test("should reserve the worst-case payoff against the lltv limit", () => {
+      // Past the deadline the residual is zero: required = 1 debt / 0.8 lltv = 1.25 collateral.
+      const value = new AccrualPosition(
+        { ...position, lastUpdate: loan.maturity + loan.overduePeriod },
+        loan,
+        venue,
+      );
+
+      expect(value.withdrawableCollateral).toBe(750_000_000_000_000_000n);
+    });
+
+    test("should be undefined when the price is unknown", () => {
+      const value = new AccrualPosition(
+        position,
+        loan,
+        new TestVenue({ ...venue, price: undefined }),
+      );
+
+      expect(value.withdrawableCollateral).toBeUndefined();
+    });
+  });
+
+  describe("withdrawableBond", () => {
+    test("should keep the bond requirement", () => {
+      expect(accrualPosition.withdrawableBond).toBe(position.bond - position.bondRequirement);
+    });
+
+    test("should reserve the drawdown allowance", () => {
+      // Required bond = 0.05 floating / 0.5 bondLltv = 0.1: the whole bond.
+      const value = new AccrualPosition(
+        { ...position, floatingLeg: 50_000_000_000_000_000n },
+        loan,
+        venue,
+      );
+
+      expect(value.withdrawableBond).toBe(0n);
+    });
+  });
+
+  describe("seizableCollateral", () => {
+    test("should be zero while the loan is not liquidatable", () => {
+      expect(accrualPosition.seizableCollateral).toBe(0n);
+    });
+
+    test("should price the repaid amount with the liquidation incentive", () => {
+      // Repaid 1 (zero stored legs) at a 1:1 price with the max lif reached: 1.15.
+      const value = new AccrualPosition(
+        { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },
+        loan,
+        venue,
+      );
+
+      expect(value.seizableCollateral).toBe(1_150_000_000_000_000_000n);
+    });
+  });
+
+  describe("seizableBond", () => {
+    test("should be zero while the bond is healthy", () => {
+      expect(accrualPosition.seizableBond).toBe(0n);
+    });
+
+    test("should seize the bond times the bond lif", () => {
+      // Drawdown 0.6 > bondLltv 0.5, bond lif capped at 0.05: 0.1 * 0.05.
+      const value = new AccrualPosition(
+        { ...position, floatingLeg: 60_000_000_000_000_000n },
+        loan,
+        venue,
+      );
+
+      expect(value.seizableBond).toBe(5_000_000_000_000_000n);
+    });
+  });
+
+  test("should expose the loan status at lastUpdate", () => {
+    expect(accrualPosition.isOverdue).toBe(false);
+    expect(accrualPosition.isLiquidatable).toBe(false);
+    expect(accrualPosition.liquidatableAt).toBe(loan.maturity + loan.overduePeriod + 1n);
+    expect(accrualPosition.lif).toBe(0n);
+    expect(accrualPosition.bondLif).toBe(50_000_000_000_000_000n);
+
+    const overdue = new AccrualPosition(
+      { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },
+      loan,
+      venue,
+    );
+
+    expect(overdue.isOverdue).toBe(true);
+    expect(overdue.isLiquidatable).toBe(true);
+    expect(overdue.lif).toBe(150_000_000_000_000_000n);
+  });
+
   describe("accrueLegs", () => {
     test("should accrue the legs to the given timestamp against the venue indices", () => {
       const value = new AccrualPosition(
@@ -204,6 +321,15 @@ describe("AccrualPosition", () => {
       expect(surplusFee).toBe(0n);
       // The original position is left unchanged.
       expect(accrualPosition.fixedLeg).toBe(0n);
+    });
+  });
+
+  describe("getRepayAmount", () => {
+    test("should charge the debt and the full-term fixed leg before maturity", () => {
+      // Accrued 0.025 + residual 0.025: the fixed interest of the whole remaining term.
+      expect(accrualPosition.getRepayAmount(position.lastUpdate + SECONDS_PER_YEAR / 4n)).toBe(
+        MathLib.WAD + 50_000_000_000_000_000n,
+      );
     });
   });
 });
