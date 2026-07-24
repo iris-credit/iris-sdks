@@ -17,9 +17,7 @@ import {
   NegativeInputError,
   SolverPermit2AmountBelowBondError,
   SolverPermit2AssetMismatchError,
-  ZeroBondAmountError,
-  ZeroCollateralAmountError,
-  ZeroDebtAmountError,
+  ZeroAmountError,
 } from "../../types/index.js";
 import { getIrisAuthorizationAction } from "../signatures/getIrisAuthorizationAction.js";
 import { buildAssetFundingActions } from "./buildAssetFundingActions.js";
@@ -84,9 +82,7 @@ export interface IrisTakeParams {
  * @param params.args.nativeAmount - Optional collateral portion paid natively and wrapped in-bundle.
  * @returns A deep-frozen `Transaction<IrisTakeAction>` with `to`, `value`, `data`, and the typed
  *   `action` discriminator.
- * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
- * @throws {ZeroDebtAmountError} when `quote.debt` is zero.
- * @throws {ZeroBondAmountError} when `quote.bond` is zero.
+ * @throws {ZeroAmountError} when `quote.collateral`, `quote.debt`, or `quote.bond` is zero.
  * @throws {SolverPermit2AssetMismatchError} when `solverPermit2` is signed for a token other than
  *   `quote.debtToken`.
  * @throws {SolverPermit2AmountBelowBondError} when `solverPermit2` is signed for less than
@@ -130,9 +126,9 @@ export const irisTake = ({
     nativeAmount = 0n,
   },
 }: IrisTakeParams): Readonly<Transaction<IrisTakeAction>> => {
-  if (quote.collateral <= 0n) throw new ZeroCollateralAmountError(quote.collateralToken);
-  if (quote.debt <= 0n) throw new ZeroDebtAmountError(quote.debtToken);
-  if (quote.bond <= 0n) throw new ZeroBondAmountError(quote.debtToken);
+  if (quote.collateral <= 0n) throw new ZeroAmountError("collateral", quote.collateralToken);
+  if (quote.debt <= 0n) throw new ZeroAmountError("debt", quote.debtToken);
+  if (quote.bond <= 0n) throw new ZeroAmountError("bond", quote.debtToken);
 
   if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
   if (nativeAmount > quote.collateral) {

@@ -152,24 +152,10 @@ export class Permit2ExpirationMissingError extends Error {
   }
 }
 
-/** Thrown when a quote's collateral amount is zero. */
-export class ZeroCollateralAmountError extends Error {
-  constructor(collateralToken: Address) {
-    super(`Collateral amount must be positive for token: ${collateralToken}`);
-  }
-}
-
-/** Thrown when a quote's debt amount is zero. */
-export class ZeroDebtAmountError extends Error {
-  constructor(debtToken: Address) {
-    super(`Debt amount must be positive for token: ${debtToken}`);
-  }
-}
-
-/** Thrown when a quote's bond amount is zero. */
-export class ZeroBondAmountError extends Error {
-  constructor(debtToken: Address) {
-    super(`Bond amount must be positive for token: ${debtToken}`);
+/** Thrown when an amount the contract requires to be positive is zero. */
+export class ZeroAmountError extends Error {
+  constructor(field: string, token: Address) {
+    super(`The ${field} amount must be positive for token: ${token}`);
   }
 }
 

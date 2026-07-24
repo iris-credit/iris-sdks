@@ -39,9 +39,7 @@ import {
   SolverPermit2ExpiredError,
   VenueNotSupportedError,
   ZeroAddressError,
-  ZeroBondAmountError,
-  ZeroCollateralAmountError,
-  ZeroDebtAmountError,
+  ZeroAmountError,
 } from "../types/index.js";
 
 /** Flow methods exposed by the chain-scoped Iris entity. */
@@ -123,9 +121,7 @@ export class Iris implements IrisActions {
    * @throws {AddressMismatchError} when `userAddress` is not `quote.borrower`.
    * @throws {QuoteExpiredError} when `quote.deadline` has passed.
    * @throws {ZeroAddressError} when a quote address field is the zero address.
-   * @throws {ZeroCollateralAmountError} when `quote.collateral` is zero.
-   * @throws {ZeroDebtAmountError} when `quote.debt` is zero.
-   * @throws {ZeroBondAmountError} when `quote.bond` is zero.
+   * @throws {ZeroAmountError} when `quote.collateral`, `quote.debt`, or `quote.bond` is zero.
    * @throws {NegativeInputError} when `nativeAmount` is negative.
    * @throws {NativeAmountExceedsCollateralError} when `nativeAmount` exceeds `quote.collateral`.
    * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the collateral
@@ -165,8 +161,8 @@ export class Iris implements IrisActions {
     }
     if (isAddressEqual(quote.debtToken, zeroAddress)) throw new ZeroAddressError("debtToken");
 
-    if (quote.collateral <= 0n) throw new ZeroCollateralAmountError(quote.collateralToken);
-    if (quote.debt <= 0n) throw new ZeroDebtAmountError(quote.debtToken);
+    if (quote.collateral <= 0n) throw new ZeroAmountError("collateral", quote.collateralToken);
+    if (quote.debt <= 0n) throw new ZeroAmountError("debt", quote.debtToken);
 
     if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
     if (nativeAmount > quote.collateral) {
@@ -198,7 +194,7 @@ export class Iris implements IrisActions {
       throw new QuoteOutOfBoundsError("overduePeriod", quote.overduePeriod, 0n, MAX_OVERDUE_PERIOD);
     }
 
-    if (quote.bond <= 0n) throw new ZeroBondAmountError(quote.debtToken);
+    if (quote.bond <= 0n) throw new ZeroAmountError("bond", quote.debtToken);
 
     if (quote.venueId >= 256n || (quote.venueBitmap & (1n << quote.venueId)) === 0n) {
       throw new VenueNotSupportedError(quote.venueId, quote.venueBitmap);

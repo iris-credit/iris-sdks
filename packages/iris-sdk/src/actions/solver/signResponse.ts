@@ -35,7 +35,7 @@ export interface SignResponseParams {
  * @throws {ChainIdMismatchError} when `client.chain?.id !== params.chainId`.
  * @throws {MissingClientPropertyError} when the client has no `account.address`.
  * @throws {AddressMismatchError} when the client account differs from `quote.solver`.
- * @throws {ZeroBondAmountError} in the `usePermit2` mode when `quote.bond` is zero.
+ * @throws {ZeroAmountError} in the `usePermit2` mode when `quote.bond` is zero.
  * @throws {InvalidSignatureError} when EIP-712 verification fails.
  * @example
  * ```ts
