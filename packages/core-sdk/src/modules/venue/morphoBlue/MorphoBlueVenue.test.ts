@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { SECONDS_PER_YEAR } from "../../../constants.js";
+import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
@@ -9,6 +9,7 @@ import { MorphoBlueVenue } from "./MorphoBlueVenue.js";
 describe("MorphoBlueVenue", () => {
   // Live view placeholders — these tests exercise the accrual model only.
   const view = {
+    id: 1n,
     pod: "0x0000000000000000000000000000000000000001" as const,
     collateral: 0n,
     debt: 0n,
@@ -172,5 +173,37 @@ describe("MorphoBlueVenue", () => {
         totalBorrowShares: MathLib.WAD * 9_000_000n,
       }),
     );
+  });
+
+  test("should supply collateral to the view and the position primitives", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, collateral: 5n },
+      market,
+      { borrowShares: 0n, collateral: 5n },
+      rateAtTarget,
+    );
+    const supplied = funded.supplyCollateral(3n, 1_000n);
+
+    expect(supplied.collateral).toBe(8n);
+    expect(supplied.position.collateral).toBe(8n);
+    // The original position primitives are left untouched.
+    expect(funded.position.collateral).toBe(5n);
+  });
+
+  test("should withdraw collateral keeping the venue position healthy", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, collateral: 5n, price: ORACLE_PRICE_SCALE },
+      market,
+      { borrowShares: 0n, collateral: 5n },
+      rateAtTarget,
+    );
+    const withdrawn = funded.withdrawCollateral(2n, 1_000n);
+
+    expect(withdrawn.collateral).toBe(3n);
+    expect(withdrawn.position.collateral).toBe(3n);
+    expect(() => funded.withdrawCollateral(6n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenueCollateral,
+    );
+    expect(() => venue.withdrawCollateral(1n, 1_000n)).toThrow(IrisCoreErrors.UnknownVenuePrice);
   });
 });

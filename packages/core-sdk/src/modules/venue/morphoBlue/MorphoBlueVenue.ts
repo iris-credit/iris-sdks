@@ -70,9 +70,9 @@ export class MorphoBlueVenue extends Venue {
    * The market and its rate-at-target re-anchor at the accrued state; the collateral index
    * stays pinned (idle collateral).
    *
-   * @param timestamp - The timestamp to accrue to (in seconds).
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
    */
-  public accrueInterest(timestamp: BigIntish): MorphoBlueVenue {
+  public accrueInterest(timestamp: BigIntish = this.lastUpdate): MorphoBlueVenue {
     timestamp = BigInt(timestamp);
 
     const interest = this.getAccrualTotalBorrowAssets(timestamp) - this.market.totalBorrowAssets;
@@ -154,6 +154,49 @@ export class MorphoBlueVenue extends Venue {
       MorphoBlueMath.INDEX_SCALE,
       this.market.totalBorrowShares + MorphoBlueMath.VIRTUAL_SHARES,
     );
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral supplied on
+   * top — both the live view and the pod's position primitive move (Morpho Blue
+   * collateral is idle).
+   *
+   * @param amount - The collateral amount to supply.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public supplyCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral += amount;
+    venue.position = { ...venue.position, collateral: venue.position.collateral + amount };
+
+    return new MorphoBlueVenue(venue, venue.market, venue.position, venue.rateAtTarget);
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral withdrawn —
+   * both the live view and the pod's position primitive move — keeping the pod's venue
+   * position healthy (see `Venue.isHealthy`).
+   *
+   * @param amount - The collateral amount to withdraw.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
+   *   the venue position unhealthy.
+   */
+  public withdrawCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
+
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral -= amount;
+    venue.position = { ...venue.position, collateral: venue.position.collateral - amount };
+
+    if (venue.collateral < 0n || !venue.isHealthy) {
+      throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
+    }
+
+    return new MorphoBlueVenue(venue, venue.market, venue.position, venue.rateAtTarget);
   }
 
   /**

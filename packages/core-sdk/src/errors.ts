@@ -75,6 +75,7 @@ export namespace IrisCoreErrors {
     }
   }
 
+  /** Error thrown when a venue collateral withdrawal would leave the pod's venue position unhealthy. */
   export class InsufficientVenueCollateral extends Error {
     constructor(
       public readonly pod: Address,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { SECONDS_PER_YEAR } from "../../../constants.js";
+import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { AaveV3Venue } from "./AaveV3Venue.js";
@@ -7,6 +7,7 @@ import { AaveV3Venue } from "./AaveV3Venue.js";
 describe("AaveV3Venue", () => {
   // Live view placeholders — these tests exercise the accrual model only.
   const view = {
+    id: 1n,
     pod: "0x0000000000000000000000000000000000000001" as const,
     collateral: 0n,
     debt: 0n,
@@ -74,5 +75,38 @@ describe("AaveV3Venue", () => {
     expect(() => venue.getAccrualCollateralIndex(500n)).toThrow(
       IrisCoreErrors.InvalidVenueInterestAccrual,
     );
+  });
+
+  test("should supply collateral on top of the accrued view", () => {
+    const funded = new AaveV3Venue(
+      { ...view, collateral: MathLib.WAD },
+      venue.collateralReserve,
+      venue.debtReserve,
+    );
+
+    // Accrued 1.1x over the year, then supplied on top.
+    expect(funded.supplyCollateral(MathLib.WAD, 1_000n + SECONDS_PER_YEAR).collateral).toBe(
+      2_100_000_000_000_000_000n,
+    );
+  });
+
+  test("should withdraw collateral keeping the venue position healthy", () => {
+    const funded = new AaveV3Venue(
+      { ...view, collateral: MathLib.WAD, price: ORACLE_PRICE_SCALE },
+      venue.collateralReserve,
+      venue.debtReserve,
+    );
+
+    expect(funded.withdrawCollateral(MathLib.WAD, 1_000n).collateral).toBe(0n);
+    expect(() => funded.withdrawCollateral(MathLib.WAD + 1n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenueCollateral,
+    );
+    expect(() =>
+      new AaveV3Venue(
+        { ...view, collateral: MathLib.WAD },
+        venue.collateralReserve,
+        venue.debtReserve,
+      ).withdrawCollateral(1n, 1_000n),
+    ).toThrow(IrisCoreErrors.UnknownVenuePrice);
   });
 });

@@ -77,6 +77,10 @@ export abstract class Venue implements IVenue {
     this.lastUpdate = venue.lastUpdate;
   }
 
+  /**
+   * Whether the pod's position is healthy on the venue: the debt within the venue's LLTV
+   * limit of the collateral's value, or `undefined` when the price is unknown.
+   */
   get isHealthy() {
     const collateralValue = PositionUtils.getCollateralValue(
       { collateral: this.collateral },
@@ -122,8 +126,25 @@ export abstract class Venue implements IVenue {
    */
   public abstract getAccrualDebtIndex(timestamp: BigIntish): bigint;
 
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral supplied on
+   * top (see `accrueInterest`).
+   *
+   * @param amount - The collateral amount to supply.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
   public abstract supplyCollateral(amount: bigint, timestamp?: BigIntish): Venue;
 
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral withdrawn,
+   * keeping the pod's venue position healthy (see `isHealthy`).
+   *
+   * @param amount - The collateral amount to withdraw.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
+   *   the venue position unhealthy.
+   */
   public abstract withdrawCollateral(amount: bigint, timestamp?: BigIntish): Venue;
 
   /**

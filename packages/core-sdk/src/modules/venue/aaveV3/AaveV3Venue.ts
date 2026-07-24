@@ -42,9 +42,9 @@ export class AaveV3Venue extends Venue {
    * liquidity index, compounded for the variable borrow index. The reserves re-anchor at
    * the accrued indices and timestamp.
    *
-   * @param timestamp - The timestamp to accrue to (in seconds).
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
    */
-  public accrueInterest(timestamp: BigIntish): AaveV3Venue {
+  public accrueInterest(timestamp: BigIntish = this.lastUpdate): AaveV3Venue {
     timestamp = BigInt(timestamp);
 
     if (timestamp < this.lastUpdate) {
@@ -132,8 +132,15 @@ export class AaveV3Venue extends Venue {
     );
   }
 
-  // more and more supply collateral makes prediction worse as reserves are not updated
-  public supplyCollateral(amount: bigint, timestamp: BigIntish): AaveV3Venue {
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral supplied on
+   * top. Supplies don't refresh the reserve rates, so repeated operations drift further
+   * from onchain results.
+   *
+   * @param amount - The collateral amount to supply.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public supplyCollateral(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
     const venue = this.accrueInterest(timestamp);
 
     venue.collateral += amount;
@@ -141,7 +148,17 @@ export class AaveV3Venue extends Venue {
     return new AaveV3Venue(venue, venue.collateralReserve, venue.debtReserve);
   }
 
-  public withdrawCollateral(amount: bigint, timestamp: BigIntish): AaveV3Venue {
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral withdrawn,
+   * keeping the pod's venue position healthy (see `Venue.isHealthy`).
+   *
+   * @param amount - The collateral amount to withdraw.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
+   *   the venue position unhealthy.
+   */
+  public withdrawCollateral(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
     if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
 
     const venue = this.accrueInterest(timestamp);
