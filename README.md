@@ -23,6 +23,8 @@ The packages below are lower-level building blocks. Use them only if `@iris-cred
 
 - [**`@iris-credit/iris-ts`**](./packages/iris-ts/): TypeScript package to handle all things time & format-related
 
+- [**`@iris-credit/evm-simulation`**](./packages/evm-simulation/): EVM bundle simulation engine — execution preview via `eth_simulateV1`, transfer parsing, per-account asset changes, and a bundler3 retention guard — the equivalent of Morpho's `evm-simulation` (without the Tenderly backend)
+
 ### Testing
 
 - [**`@iris-credit/test`**](./packages/test/): Viem-based package that exports utilities to build Vitest fixtures that spawn anvil forks as child processes
