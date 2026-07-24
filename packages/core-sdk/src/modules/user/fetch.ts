@@ -75,3 +75,38 @@ export async function fetchIsNonceUsed(
     args: [authorizer, BigInt(nonce)],
   });
 }
+
+/**
+ * Fetches an account's claimable balance of a token on Iris.
+ *
+ * Claimables accrue when positions settle — the solver's net rate spread and collateral surplus,
+ * and the fee recipient's fees — and are transferred out with `Iris.claim`.
+ *
+ * @param token - Token whose claimable balance is fetched.
+ * @param account - Account the claimable balance accrued to.
+ * @param client - Viem client used for the read.
+ * @param parameters.blockNumber - Optional block number for historical reads.
+ * @param parameters.blockTag - Optional block tag for historical reads.
+ * @param parameters.stateOverride - Optional viem state override.
+ * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
+ * @returns The claimable amount of `token` for `account`.
+ */
+export async function fetchClaimable(
+  token: Address,
+  account: Address,
+  client: Client,
+  parameters: FetchParameters = {},
+) {
+  const chainId = parameters.chainId ?? (await getChainId(client));
+  if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
+
+  const { iris } = getChainAddresses(chainId);
+
+  return await readContract(client, {
+    ...parameters,
+    address: iris,
+    abi: irisAbi,
+    functionName: "claimable",
+    args: [token, account],
+  });
+}

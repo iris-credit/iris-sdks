@@ -40,7 +40,10 @@ export interface IrisRefinanceAction extends BaseAction<"irisRefinance"> {}
 
 export interface IrisEscapeAction extends BaseAction<"irisEscape"> {}
 
-export interface IrisClaimAction extends BaseAction<"irisClaim"> {}
+export interface IrisClaimAction extends BaseAction<
+  "irisClaim",
+  { token: Address; amount: bigint; receiver: Address }
+> {}
 
 export interface IrisAuthorizationAction extends BaseAction<
   "irisAuthorization",

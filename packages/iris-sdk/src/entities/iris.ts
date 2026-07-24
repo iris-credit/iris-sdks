@@ -5,6 +5,7 @@ import type {
   AuthorizationRequirementSignature,
   ERC20ApprovalAction,
   IrisAuthorizationAction,
+  IrisClaimAction,
   IrisTakeAction,
   PermitRequirementSignature,
   Requirement,
@@ -16,6 +17,7 @@ import type {
 import { isAddressEqual, zeroAddress } from "viem";
 import {
   BP,
+  fetchClaimable,
   MAX_DURATION,
   MAX_FIXED_RATE,
   MAX_OVERDUE_PERIOD,
@@ -23,6 +25,7 @@ import {
   MIN_DURATION,
 } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
+import { irisClaim } from "../actions/iris/claim.js";
 import { irisTake } from "../actions/iris/take.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
@@ -40,6 +43,7 @@ import {
   VenueNotSupportedError,
   ZeroAddressError,
   ZeroAmountError,
+  ZeroClaimableBalanceError,
 } from "../types/index.js";
 
 /** Flow methods exposed by the chain-scoped Iris entity. */
@@ -89,6 +93,40 @@ export interface IrisActions {
       )[]
     >;
   };
+
+  /**
+   * Prepares a claim transaction transferring tokens accrued to `userAddress` on Iris — a
+   * solver's net rate spread and collateral surplus, or the fee recipient's fees — to `receiver`.
+   *
+   * Fetches the claimable balance of `token` for `userAddress` up front: `amount` defaults to
+   * the full balance, and a zero balance is rejected.
+   *
+   * `getRequirements` resolves the single prerequisite: the Iris authorization for
+   * `GeneralAdapter1` on behalf of `userAddress` — `GeneralAdapter1.irisClaim` claims on behalf
+   * of the bundle initiator, so `userAddress` must be the account sending the bundle. Returned
+   * as a `setAuthorization` transaction, or as a signable `Requirement` when the client opts
+   * into `supportSignature`; omitted when already authorized. No token funding is involved —
+   * the claimed tokens leave Iris directly.
+   *
+   * @param params - Claim parameters.
+   * @returns Object with `buildTx` and `getRequirements`.
+   */
+  claim: (params: {
+    userAddress: Address;
+    token: Address;
+    amount?: bigint;
+    receiver: Address;
+  }) => Promise<{
+    buildTx: (
+      signatures?: readonly RequirementSignature[],
+    ) => Readonly<Transaction<IrisClaimAction>>;
+    getRequirements: () => Promise<
+      (
+        | Readonly<Transaction<IrisAuthorizationAction>>
+        | Requirement<AuthorizationRequirementSignature>
+      )[]
+    >;
+  }>;
 }
 
 /** Chain-scoped Iris entity: validates flows and returns lazy transaction handles. */
@@ -255,6 +293,76 @@ export class Iris implements IrisActions {
             solverPermit2,
             nativeAmount,
             requirementSignature: permit,
+            authorizationSignature: authorization,
+          },
+        });
+      },
+    };
+  }
+
+  /**
+   * Prepares a claim transaction transferring tokens accrued to `userAddress` on Iris to
+   * `receiver`.
+   *
+   * Fetches the claimable balance of `token` for `userAddress` — the method's only on-chain
+   * read — rejecting when there is nothing to claim; `amount` defaults to the full balance.
+   * The bundled claim is executed by `GeneralAdapter1` on behalf of the bundle initiator, so
+   * `userAddress` must be the account sending the bundle, and the Iris authorization resolved
+   * by `getRequirements` is the only requirement — no token funding is involved.
+   *
+   * @param params.userAddress - Account whose claimable balance is claimed (the bundle initiator).
+   * @param params.token - The token to claim.
+   * @param params.amount - The amount to claim; defaults to the full claimable balance.
+   * @param params.receiver - The address receiving the claimed tokens.
+   * @returns Object with `buildTx` and `getRequirements`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {ZeroClaimableBalanceError} when `userAddress` has nothing to claim for `token`.
+   * @throws {ZeroAmountError} when `amount` is zero or negative.
+   */
+  async claim({
+    userAddress,
+    token,
+    amount,
+    receiver,
+  }: {
+    userAddress: Address;
+    token: Address;
+    amount?: bigint;
+    receiver: Address;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    const claimable = await fetchClaimable(token, userAddress, this.client.viemClient, {
+      chainId: this.chainId,
+    });
+    if (claimable === 0n) throw new ZeroClaimableBalanceError(token, userAddress);
+
+    const claimAmount = amount ?? claimable;
+    if (claimAmount <= 0n) throw new ZeroAmountError("claim", token);
+
+    return {
+      getRequirements: async () => {
+        const authorizationRequirement = await getIrisAuthorizationRequirement({
+          viemClient: this.client.viemClient,
+          chainId: this.chainId,
+          userAddress,
+          supportSignature: this.client.options.supportSignature,
+        });
+
+        return authorizationRequirement ? [authorizationRequirement] : [];
+      },
+
+      buildTx: (signatures?: readonly RequirementSignature[]) => {
+        const { authorization } = selectRequirementSignatures(signatures, {
+          authorization: true,
+        });
+
+        return irisClaim({
+          chainId: this.chainId,
+          args: {
+            token,
+            amount: claimAmount,
+            receiver,
             authorizationSignature: authorization,
           },
         });

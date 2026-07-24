@@ -159,6 +159,13 @@ export class ZeroAmountError extends Error {
   }
 }
 
+/** Thrown when an account has nothing to claim on Iris for the requested token. */
+export class ZeroClaimableBalanceError extends Error {
+  constructor(token: Address, account: Address) {
+    super(`Account ${account} has no claimable balance for token: ${token}`);
+  }
+}
+
 /** Thrown when a quote address field the contract requires to be non-zero is the zero address. */
 export class ZeroAddressError extends Error {
   constructor(field: string) {
