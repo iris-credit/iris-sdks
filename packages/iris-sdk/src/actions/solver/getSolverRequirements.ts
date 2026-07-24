@@ -5,7 +5,7 @@ import type { ERC20ApprovalAction, Transaction } from "../../types/index.js";
 import { erc20Abi, maxUint256 } from "viem";
 import { readContract } from "viem/actions";
 import { getChainAddresses, MathLib } from "@iris-credit/core-sdk";
-import { ChainIdMismatchError, ZeroBondAmountError } from "../../types/index.js";
+import { ChainIdMismatchError, NonPositiveInputError } from "../../types/index.js";
 import { getRequirementsApproval } from "../requirements/getRequirementsApproval.js";
 
 /** Parameters for {@link getSolverRequirements}. */
@@ -49,7 +49,7 @@ export interface GetSolverRequirementsParams {
  * @returns The approval transactions the solver must send. Empty when the chosen mode is
  *   already funded.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
- * @throws {ZeroBondAmountError} when `params.bond` is zero.
+ * @throws {NonPositiveInputError} when `params.bond` is not positive.
  * @example
  * ```ts
  * import { getSolverRequirements } from "@iris-credit/iris-sdk";
@@ -76,7 +76,7 @@ export const getSolverRequirements = async (
   }
 
   if (bond <= 0n) {
-    throw new ZeroBondAmountError(debtToken);
+    throw new NonPositiveInputError("bond", bond);
   }
 
   const { iris, permit2 } = getChainAddresses(chainId);
