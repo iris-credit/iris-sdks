@@ -2,9 +2,12 @@ import type { Address } from "viem";
 import type { BigIntish } from "../../types.js";
 
 import { IrisCoreErrors } from "../../errors.js";
+import { MathLib } from "../../math/index.js";
+import { PositionUtils } from "../position/PositionUtils.js";
 
 /** Plain input shape for a venue's view of a pod. */
 export interface IVenue {
+  id: bigint;
   pod: Address;
   collateral: bigint;
   debt: bigint;
@@ -25,6 +28,8 @@ export interface IVenue {
  * silently diverges from Iris's onchain results.
  */
 export abstract class Venue implements IVenue {
+  /** The venue ID. */
+  public readonly id: bigint;
   /**
    * The pod this view is of.
    */
@@ -61,6 +66,7 @@ export abstract class Venue implements IVenue {
   public lastUpdate: bigint;
 
   constructor(venue: IVenue) {
+    this.id = venue.id;
     this.pod = venue.pod;
     this.collateral = venue.collateral;
     this.debt = venue.debt;
@@ -71,11 +77,22 @@ export abstract class Venue implements IVenue {
     this.lastUpdate = venue.lastUpdate;
   }
 
+  get isHealthy() {
+    const collateralValue = PositionUtils.getCollateralValue(
+      { collateral: this.collateral },
+      { price: this.price },
+    );
+    if (collateralValue == null) return;
+
+    const maxDebt = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
+
+    return this.debt <= maxDebt;
+  }
+
   /**
    * Returns a new venue accrued up to the given timestamp: the indices projected with the
    * venue's own rate model, the pod's assets grown with them, and the rate model advanced
-   * alongside. A timestamp equal to `lastUpdate` returns an unchanged copy. Leaves this
-   * venue unchanged.
+   * alongside. A timestamp equal to `lastUpdate` returns an unchanged copy.
    *
    * Accruals assume the venue is untouched in between — exact when it is, an estimate
    * otherwise.
@@ -104,6 +121,10 @@ export abstract class Venue implements IVenue {
    * Returns the debt index accrued up to the given timestamp (scaled by RAY).
    */
   public abstract getAccrualDebtIndex(timestamp: BigIntish): bigint;
+
+  public abstract supplyCollateral(amount: bigint, timestamp?: BigIntish): Venue;
+
+  public abstract withdrawCollateral(amount: bigint, timestamp?: BigIntish): Venue;
 
   /**
    * Returns the view fields accrued up to the given timestamp via the accrual accessors,

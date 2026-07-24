@@ -373,13 +373,11 @@ export namespace PositionUtils {
    * Mirror of Iris's `withdrawCollateral` limit: returns the maximum collateral
    * withdrawable while keeping the loan collateralized through the liquidation deadline.
    *
-   * The withdrawal check reserves the worst-case payoff — the debt, the fixed leg and the
-   * interest still accruing until `maturity + overduePeriod` (both rates over the overdue
-   * window) — against the venue LLTV limit on the remaining collateral's value, as the
-   * loan cannot be liquidated before the deadline. Returns `undefined` when the collateral
-   * price is unknown, zero once the worst-case payoff reaches the LLTV limit of the
-   * collateral's value (notably on a zero price or LLTV), and the full collateral when
-   * nothing is owed.
+   * The withdrawal check reserves the worst-case payoff (see `getRequiredCollateralValue`)
+   * against the venue LLTV limit on the remaining collateral's value. Returns `undefined`
+   * when the collateral price is unknown, zero once the worst-case payoff reaches the LLTV
+   * limit of the collateral's value (notably on a zero price or LLTV), and the full
+   * collateral when nothing is owed.
    *
    * Iris accepts `withdrawCollateral(pod, amount, receiver)` iff `amount` does not exceed
    * this limit.
@@ -422,12 +420,6 @@ export namespace PositionUtils {
     timestamp: BigIntish,
   ) => {
     position.collateral = BigInt(position.collateral);
-    position.debt = BigInt(position.debt);
-    position.fixedLeg = BigInt(position.fixedLeg);
-    loan.maturity = BigInt(loan.maturity);
-    loan.overduePeriod = BigInt(loan.overduePeriod);
-    loan.fixedRate = BigInt(loan.fixedRate);
-    loan.overdueRate = BigInt(loan.overdueRate);
 
     if (price == null) return;
 
@@ -439,14 +431,7 @@ export namespace PositionUtils {
       lltv,
       MathLib.WAD,
     );
-    const timeToLiquidation = MathLib.zeroFloorSub(loan.maturity + loan.overduePeriod, timestamp);
-    const residual = MathLib.mulDivDown(
-      position.debt,
-      timeToLiquidation * loan.fixedRate +
-        MathLib.min(timeToLiquidation, loan.overduePeriod) * loan.overdueRate,
-      SECONDS_PER_YEAR * MathLib.WAD,
-    );
-    const requiredCollateralValue = position.debt + position.fixedLeg + residual;
+    const requiredCollateralValue = getRequiredCollateralValue(position, loan, timestamp);
 
     if (requiredCollateralValue >= maxDebt) return 0n;
 
@@ -557,6 +542,110 @@ export namespace PositionUtils {
     if (price == null) return;
 
     return MathLib.mulDivDown(collateral, price, ORACLE_PRICE_SCALE);
+  };
+
+  /**
+   * Returns the worst-case payoff reserved by Iris's collateralization checks: the debt,
+   * the fixed leg and the interest still accruing until `maturity + overduePeriod` (both
+   * rates over the overdue window), as the loan cannot be liquidated before the deadline
+   * (see `getWithdrawableCollateral`, `isHealthy`).
+   *
+   * @param position.debt The position's debt (principal).
+   * @param position.fixedLeg The position's fixed leg.
+   * @param loan.maturity The loan's maturity timestamp (in seconds).
+   * @param loan.overduePeriod The loan's overdue period (in seconds).
+   * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
+   * @param loan.overdueRate The loan's annual overdue rate, added on top of the fixed rate past maturity (scaled by WAD).
+   * @param timestamp The timestamp at which to evaluate the payoff (in seconds).
+   * @returns The worst-case payoff in debt assets.
+   * @example
+   * ```ts
+   * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const value = PositionUtils.getRequiredCollateralValue(
+   *   { debt: MathLib.WAD, fixedLeg: 0n },
+   *   { maturity: 40_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
+   *   40_086_400n - 31_536_000n,
+   * );
+   * // value === 1100000000000000000n
+   * ```
+   */
+  export const getRequiredCollateralValue = (
+    position: { debt: BigIntish; fixedLeg: BigIntish },
+    loan: {
+      maturity: BigIntish;
+      overduePeriod: BigIntish;
+      fixedRate: BigIntish;
+      overdueRate: BigIntish;
+    },
+    timestamp: BigIntish,
+  ) => {
+    position.debt = BigInt(position.debt);
+    position.fixedLeg = BigInt(position.fixedLeg);
+    loan.maturity = BigInt(loan.maturity);
+    loan.overduePeriod = BigInt(loan.overduePeriod);
+    loan.fixedRate = BigInt(loan.fixedRate);
+    loan.overdueRate = BigInt(loan.overdueRate);
+
+    const timeToLiquidation = MathLib.zeroFloorSub(loan.maturity + loan.overduePeriod, timestamp);
+    const residual = MathLib.mulDivDown(
+      position.debt,
+      timeToLiquidation * loan.fixedRate +
+        MathLib.min(timeToLiquidation, loan.overduePeriod) * loan.overdueRate,
+      SECONDS_PER_YEAR * MathLib.WAD,
+    );
+
+    return position.debt + position.fixedLeg + residual;
+  };
+
+  /**
+   * Returns whether the position is healthy: the worst-case payoff (see
+   * `getRequiredCollateralValue`) within the venue LLTV limit of the collateral's value,
+   * as the withdrawal check reserves it (see `getWithdrawableCollateral`). `undefined`
+   * when the collateral price is unknown.
+   *
+   * @param position.collateral The position's collateral.
+   * @param position.debt The position's debt (principal).
+   * @param position.fixedLeg The position's fixed leg.
+   * @param loan.maturity The loan's maturity timestamp (in seconds).
+   * @param loan.overduePeriod The loan's overdue period (in seconds).
+   * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
+   * @param loan.overdueRate The loan's annual overdue rate, added on top of the fixed rate past maturity (scaled by WAD).
+   * @param venue.price The collateral price quoted in debt assets, from `IVenueAdapter.price` (scaled by ORACLE_PRICE_SCALE), or `undefined` when unknown.
+   * @param venue.lltv The venue's LLTV for the loan's token pair, from `IVenueAdapter.lltv` (scaled by WAD).
+   * @param timestamp The timestamp at which to evaluate health (in seconds).
+   * @returns Whether the worst-case payoff is within the LLTV limit of the collateral's
+   * value, or `undefined` when the price is unknown.
+   * @example
+   * ```ts
+   * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
+   *
+   * const healthy = PositionUtils.isHealthy(
+   *   { collateral: 2n * MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n },
+   *   { maturity: 1_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
+   *   { price: ORACLE_PRICE_SCALE, lltv: 80_0000000000000000n },
+   *   1_086_400n,
+   * );
+   * // healthy === true
+   * ```
+   */
+  export const isHealthy = (
+    position: { collateral: BigIntish; debt: BigIntish; fixedLeg: BigIntish },
+    loan: {
+      maturity: BigIntish;
+      overduePeriod: BigIntish;
+      fixedRate: BigIntish;
+      overdueRate: BigIntish;
+    },
+    { price, lltv }: { price?: BigIntish; lltv: BigIntish },
+    timestamp: BigIntish,
+  ) => {
+    const collateralValue = getCollateralValue(position, { price });
+    if (collateralValue == null) return;
+
+    const maxDebt = MathLib.mulDivDown(collateralValue, lltv, MathLib.WAD);
+
+    return getRequiredCollateralValue(position, loan, timestamp) <= maxDebt;
   };
 
   /**

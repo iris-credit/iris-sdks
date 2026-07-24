@@ -100,6 +100,23 @@ describe("AccrualPosition", () => {
     );
   });
 
+  describe("isHealthy", () => {
+    test("should reserve the worst-case payoff against the lltv limit", () => {
+      // Debt 1 plus the residual to the deadline, within the 2 * 0.8 limit.
+      expect(accrualPosition.isHealthy).toBe(true);
+      expect(
+        new AccrualPosition({ ...position, debt: 2n * MathLib.WAD }, loan, venue).isHealthy,
+      ).toBe(false);
+    });
+
+    test("should be undefined when the price is unknown", () => {
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, price: undefined }))
+          .isHealthy,
+      ).toBeUndefined();
+    });
+  });
+
   describe("isHealthyBond", () => {
     test("should be unhealthy when the bond does not cover the requirement", () => {
       const value = new AccrualPosition(
@@ -303,8 +320,8 @@ describe("AccrualPosition", () => {
       expect(value?.bondRequirement).toBe(position.bondRequirement);
     });
 
-    test("should return undefined when the price is unknown", () => {
-      expect(
+    test("should throw when the price is unknown", () => {
+      expect(() =>
         new AccrualPosition(
           position,
           loan,
@@ -315,7 +332,7 @@ describe("AccrualPosition", () => {
             price: undefined,
           }),
         ).rebase(),
-      ).toBeUndefined();
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
     });
   });
 
@@ -327,6 +344,163 @@ describe("AccrualPosition", () => {
       expect(settled.fixedLeg).toBe(50_000_000_000_000_000n);
       // The original position is left unchanged.
       expect(accrualPosition.fixedLeg).toBe(0n);
+    });
+  });
+
+  describe("repay", () => {
+    test("should settle the legs and resolve the loan", () => {
+      const { position: value, repaid } = accrualPosition.repay();
+
+      expect(repaid).toBe(MathLib.WAD + 50_000_000_000_000_000n);
+      expect(repaid).toBe(accrualPosition.repayAmount);
+      expect(value.debt).toBe(0n);
+      // No negative net: the bond is untouched.
+      expect(value.bond).toBe(position.bond);
+      expect(value.bondRequirement).toBe(0n);
+      expect(value.fixedLeg).toBe(0n);
+      expect(value.floatingLeg).toBe(0n);
+      expect(value.surplus).toBe(0n);
+      // The original position is left unchanged.
+      expect(accrualPosition.debt).toBe(position.debt);
+    });
+  });
+
+  describe("liquidate", () => {
+    test("should throw while the loan is not liquidatable", () => {
+      expect(() => accrualPosition.liquidate()).toThrow(IrisCoreErrors.HealthyLoan);
+    });
+
+    test("should seize the priced repay amount and resolve the loan", () => {
+      // Repaid 1 (zero legs past maturity) at a 1:1 price with the max lif reached: 1.15.
+      const value = new AccrualPosition(
+        { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },
+        loan,
+        venue,
+      ).liquidate();
+
+      expect(value?.repaid).toBe(MathLib.WAD);
+      expect(value?.seized).toBe(1_150_000_000_000_000_000n);
+      expect(value?.position.collateral).toBe(850_000_000_000_000_000n);
+      expect(value?.position.debt).toBe(0n);
+      expect(value?.position.bondRequirement).toBe(0n);
+    });
+
+    test("should be undefined when the price is unknown", () => {
+      expect(
+        new AccrualPosition(
+          { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },
+          loan,
+          new TestVenue({ ...venue, price: undefined }),
+        ).liquidate(),
+      ).toBeUndefined();
+    });
+  });
+
+  describe("supplyCollateral", () => {
+    test("should add the collateral", () => {
+      const value = accrualPosition.supplyCollateral(MathLib.WAD);
+
+      expect(value.collateral).toBe(3n * MathLib.WAD);
+      // The original position is left unchanged.
+      expect(accrualPosition.collateral).toBe(position.collateral);
+    });
+  });
+
+  describe("withdrawCollateral", () => {
+    test("should withdraw up to the withdrawable limit", () => {
+      const value = new AccrualPosition(
+        { ...position, lastUpdate: loan.maturity + loan.overduePeriod },
+        loan,
+        venue,
+      );
+
+      expect(value.withdrawCollateral(750_000_000_000_000_000n)?.collateral).toBe(
+        1_250_000_000_000_000_000n,
+      );
+      expect(() => value.withdrawCollateral(750_000_000_000_000_001n)).toThrow(
+        IrisCoreErrors.InsufficientCollateral,
+      );
+    });
+
+    test("should throw when the price is unknown", () => {
+      expect(() =>
+        new AccrualPosition(
+          position,
+          loan,
+          new TestVenue({ ...venue, price: undefined }),
+        ).withdrawCollateral(1n),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+    });
+  });
+
+  describe("supplyBond", () => {
+    test("should top up the bond in place", () => {
+      const value = new AccrualPosition(position, loan, venue);
+
+      expect(value.supplyBond(position.bond).bond).toBe(2n * position.bond);
+      // The top-up is also applied in place.
+      expect(value.bond).toBe(2n * position.bond);
+    });
+  });
+
+  describe("withdrawBond", () => {
+    test("should withdraw down to the required bond", () => {
+      expect(accrualPosition.withdrawBond(position.bond - 1n).bond).toBe(1n);
+      expect(() => accrualPosition.withdrawBond(position.bond)).toThrow(
+        IrisCoreErrors.InsufficientBond,
+      );
+    });
+
+    test("should keep the drawdown allowance", () => {
+      // Any withdrawal pushes the 0.05 / 0.1 drawdown over the 0.5 bondLltv.
+      const value = new AccrualPosition(
+        { ...position, floatingLeg: 50_000_000_000_000_000n },
+        loan,
+        venue,
+      );
+
+      expect(() => value.withdrawBond(1n)).toThrow(IrisCoreErrors.InsufficientBond);
+    });
+
+    test("should throw when the price is unknown", () => {
+      expect(() =>
+        new AccrualPosition(
+          position,
+          loan,
+          new TestVenue({ ...venue, price: undefined }),
+        ).withdrawBond(1n),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+    });
+  });
+
+  describe("liquidateBond", () => {
+    test("should throw while the bond is healthy", () => {
+      expect(() => accrualPosition.liquidateBond()).toThrow(IrisCoreErrors.HealthyBond);
+    });
+
+    test("should slash the negative net plus the seized incentive", () => {
+      // Drawdown 0.6 > 0.5: seized = 0.1 * 0.05 and slashed = 0.06 + 0.005.
+      const { position: value, seized } = new AccrualPosition(
+        { ...position, floatingLeg: 60_000_000_000_000_000n },
+        loan,
+        venue,
+      ).liquidateBond();
+
+      expect(seized).toBe(5_000_000_000_000_000n);
+      expect(value.bond).toBe(35_000_000_000_000_000n);
+      expect(value.collateral).toBe(0n);
+      expect(value.debt).toBe(0n);
+      expect(value.bondRequirement).toBe(0n);
+    });
+
+    test("should throw when the price is unknown", () => {
+      expect(() =>
+        new AccrualPosition(
+          position,
+          loan,
+          new TestVenue({ ...venue, price: undefined }),
+        ).liquidateBond(),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
     });
   });
 });

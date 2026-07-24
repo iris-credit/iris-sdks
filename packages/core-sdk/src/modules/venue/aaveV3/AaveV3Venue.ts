@@ -47,6 +47,10 @@ export class AaveV3Venue extends Venue {
   public accrueInterest(timestamp: BigIntish): AaveV3Venue {
     timestamp = BigInt(timestamp);
 
+    if (timestamp < this.lastUpdate) {
+      throw new IrisCoreErrors.InvalidInterestAccrual(timestamp, this.lastUpdate);
+    }
+
     return new AaveV3Venue(
       this.accruedView(timestamp),
       {
@@ -126,5 +130,28 @@ export class AaveV3Venue extends Venue {
       AaveV3Math.getCompoundedInterest(this.debtReserve.rate, elapsed),
       this.debtReserve.index,
     );
+  }
+
+  // more and more supply collateral makes prediction worse as reserves are not updated
+  public supplyCollateral(amount: bigint, timestamp: BigIntish): AaveV3Venue {
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral += amount;
+
+    return new AaveV3Venue(venue, venue.collateralReserve, venue.debtReserve);
+  }
+
+  public withdrawCollateral(amount: bigint, timestamp: BigIntish): AaveV3Venue {
+    if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
+
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral -= amount;
+
+    if (venue.collateral < 0n || !venue.isHealthy) {
+      throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
+    }
+
+    return new AaveV3Venue(venue, venue.collateralReserve, venue.debtReserve);
   }
 }

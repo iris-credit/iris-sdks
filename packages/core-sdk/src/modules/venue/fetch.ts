@@ -8,7 +8,7 @@ import { irisAbi } from "../../abis/iris.js";
 import { venueAdapterAbi } from "../../abis/venueAdapter.js";
 import { getChainAddresses } from "../../addresses.js";
 import { ChainUtils } from "../../chain.js";
-import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
+import { UnsupportedChainIdError, IrisCoreErrors } from "../../errors.js";
 import { fetchAaveV3Venue } from "./aaveV3/fetch.js";
 import { fetchMorphoBlueVenue } from "./morphoBlue/fetch.js";
 
@@ -67,7 +67,9 @@ export async function fetchVenue(
     args: [BigInt(venueId)],
   });
   // An unregistered venue id resolves to the zero address.
-  if (adapter === zeroAddress) throw new UnsupportedVenueAdapterError(adapter, chainId);
+  if (adapter === zeroAddress) {
+    throw new IrisCoreErrors.UnsupportedVenueAdapterError(adapter, chainId);
+  }
 
   const [[collateral, debt], [collateralIndex, debtIndex], lltv, price, block] = await Promise.all([
     readContract(client, {
@@ -105,7 +107,8 @@ export async function fetchVenue(
         : { blockTag: parameters.blockTag ?? "latest" },
     ),
   ]);
-  const view = {
+  const venue = {
+    id: BigInt(venueId),
     pod,
     collateral,
     debt,
@@ -119,13 +122,13 @@ export async function fetchVenue(
   // Chain addresses are checksum validated by lint.
   switch (adapter) {
     case morphoBlueAdapter:
-      return fetchMorphoBlueVenue(view, { pod, data }, client, { ...parameters, chainId });
+      return fetchMorphoBlueVenue(venue, { pod, data }, client, { ...parameters, chainId });
     case aaveV3Adapter:
-      return fetchAaveV3Venue(view, { collateralToken, debtToken }, client, {
+      return fetchAaveV3Venue(venue, { collateralToken, debtToken }, client, {
         ...parameters,
         chainId,
       });
     default:
-      throw new UnsupportedVenueAdapterError(adapter, chainId);
+      throw new IrisCoreErrors.UnsupportedVenueAdapterError(adapter, chainId);
   }
 }

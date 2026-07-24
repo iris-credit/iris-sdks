@@ -581,6 +581,36 @@ describe("PositionUtils", () => {
     });
   });
 
+  describe("getRequiredCollateralValue", () => {
+    const loan = {
+      maturity: 40_000_000n,
+      overduePeriod: 86_400n,
+      fixedRate: 100_000_000_000_000_000n,
+      overdueRate: 0n,
+    };
+
+    test("should charge the debt, the fixed leg and the residual to the deadline", () => {
+      // A year out: 1 debt + 0.025 fixed leg + 0.1 residual.
+      expect(
+        PositionUtils.getRequiredCollateralValue(
+          { debt: MathLib.WAD, fixedLeg: 25_000_000_000_000_000n },
+          loan,
+          40_086_400n - SECONDS_PER_YEAR,
+        ),
+      ).toBe(1_125_000_000_000_000_000n);
+    });
+
+    test("should reserve no residual past the deadline", () => {
+      expect(
+        PositionUtils.getRequiredCollateralValue(
+          { debt: MathLib.WAD, fixedLeg: 25_000_000_000_000_000n },
+          loan,
+          40_086_401n,
+        ),
+      ).toBe(1_025_000_000_000_000_000n);
+    });
+  });
+
   describe("getWithdrawableCollateral", () => {
     const loan = {
       maturity: 32_536_000n,
@@ -793,6 +823,58 @@ describe("PositionUtils", () => {
           { bondLltv: 0n },
         ),
       ).toBe(0n);
+    });
+  });
+
+  describe("isHealthy", () => {
+    const loan = {
+      maturity: 40_000_000n,
+      overduePeriod: 86_400n,
+      fixedRate: 100_000_000_000_000_000n,
+      overdueRate: 0n,
+    };
+    const venue = { price: ORACLE_PRICE_SCALE, lltv: 800_000_000_000_000_000n };
+
+    test("should compare the worst-case payoff to the lltv limit of the collateral value", () => {
+      const position = {
+        collateral: 2n * MathLib.WAD,
+        debt: 1_600_000_000_000_000_000n,
+        fixedLeg: 0n,
+      };
+
+      // At the liquidation deadline the residual is zero: maxDebt = 2 * 0.8 = 1.6.
+      expect(PositionUtils.isHealthy(position, loan, venue, 40_086_400n)).toBe(true);
+      expect(
+        PositionUtils.isHealthy(
+          { ...position, debt: 1_600_000_000_000_000_001n },
+          loan,
+          venue,
+          40_086_400n,
+        ),
+      ).toBe(false);
+    });
+
+    test("should reserve the residual interest until the deadline", () => {
+      // A year out, the 10% fixed rate reserves 0.16 on top of the 1.6 debt.
+      expect(
+        PositionUtils.isHealthy(
+          { collateral: 2n * MathLib.WAD, debt: 1_600_000_000_000_000_000n, fixedLeg: 0n },
+          loan,
+          venue,
+          40_086_400n - SECONDS_PER_YEAR,
+        ),
+      ).toBe(false);
+    });
+
+    test("should be undefined when the price is unknown", () => {
+      expect(
+        PositionUtils.isHealthy(
+          { collateral: MathLib.WAD, debt: 0n, fixedLeg: 0n },
+          loan,
+          { lltv: MathLib.WAD },
+          0n,
+        ),
+      ).toBeUndefined();
     });
   });
 
