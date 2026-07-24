@@ -152,31 +152,10 @@ export class Permit2ExpirationMissingError extends Error {
   }
 }
 
-/** Thrown when a quote's collateral amount is zero. */
-export class ZeroCollateralAmountError extends Error {
-  constructor(collateralToken: Address) {
-    super(`Collateral amount must be positive for token: ${collateralToken}`);
-  }
-}
-
-/** Thrown when a quote's debt amount is zero. */
-export class ZeroDebtAmountError extends Error {
-  constructor(debtToken: Address) {
-    super(`Debt amount must be positive for token: ${debtToken}`);
-  }
-}
-
-/** Thrown when a quote's bond amount is zero. */
-export class ZeroBondAmountError extends Error {
-  constructor(debtToken: Address) {
-    super(`Bond amount must be positive for token: ${debtToken}`);
-  }
-}
-
-/** Thrown when a quote address field the contract requires to be non-zero is the zero address. */
+/** Thrown when an address field the contract requires to be non-zero is the zero address. */
 export class ZeroAddressError extends Error {
   constructor(field: string) {
-    super(`Quote ${field} must not be the zero address. Request a valid quote.`);
+    super(`The ${field} must not be the zero address.`);
   }
 }
 
@@ -193,6 +172,13 @@ export class NotMultipleOfBpError extends Error {
 export class NegativeInputError extends Error {
   constructor(field: string, value: bigint) {
     super(`Input "${field}" must be non-negative, got "${value}".`);
+  }
+}
+
+/** Thrown when an input that must be positive is zero or negative. */
+export class NonPositiveInputError extends Error {
+  constructor(field: string, value: bigint) {
+    super(`Input "${field}" must be positive, got "${value}".`);
   }
 }
 
