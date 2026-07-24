@@ -5,4 +5,5 @@ export * from "./errors.js";
 export * from "./iris.js";
 export * from "./morphoBlue.js";
 export * from "./permit2.js";
+export * from "./venueAdapter.js";
 export * from "./whitelistBlm.js";

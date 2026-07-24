@@ -12,6 +12,7 @@ import {
   AaveV3Venue,
   AdaptiveCurveIrmLib,
   ChainId,
+  MathLib,
   MorphoBlueVenue,
   fetchVenue,
   getChainAddresses,
@@ -99,13 +100,21 @@ describe("venue parity (mainnet fork)", () => {
         ],
       });
 
-      const venue = new MorphoBlueVenue({
-        totalSupplyAssets,
-        totalBorrowAssets,
-        totalBorrowShares,
-        lastUpdate,
+      // Live view placeholders — this test exercises the accrual model only.
+      const venue = new MorphoBlueVenue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          collateral: 0n,
+          debt: 0n,
+          collateralIndex: MathLib.RAY,
+          debtIndex: MathLib.RAY,
+          lltv: 0n,
+          lastUpdate: block.timestamp,
+        },
+        { totalSupplyAssets, totalBorrowAssets, totalBorrowShares, lastUpdate },
+        { borrowShares: 0n, collateral: 0n },
         rateAtTarget,
-      });
+      );
 
       // The Adaptive Curve mirror reproduces the onchain average borrow rate exactly.
       expect(
@@ -116,14 +125,16 @@ describe("venue parity (mainnet fork)", () => {
         ).avgBorrowRate,
       ).toBe(borrowRateView);
 
-      // The projected indices match the venue adapter's onchain `indices` at the same block.
+      // The accrued indices match the venue adapter's onchain `indices` at the same block.
       const [collateralIndex, debtIndex] = await readContract(client, {
         address: morphoBlueAdapter,
         abi: venueAdapterIndicesAbi,
         functionName: "indices",
         args: [tokens.cbBTC, tokens.USDC, data],
       });
-      expect(venue.indices(block.timestamp)).toEqual({ collateralIndex, debtIndex });
+      const accrued = venue.accrueInterest(block.timestamp);
+      expect(accrued.collateralIndex).toBe(collateralIndex);
+      expect(accrued.debtIndex).toBe(debtIndex);
     },
   );
 
@@ -132,7 +143,14 @@ describe("venue parity (mainnet fork)", () => {
     { timeout: 30_000 },
     async ({ client }) => {
       const venue = await fetchVenue(
-        { venueId: 1n, data, collateralToken: tokens.cbBTC, debtToken: tokens.USDC },
+        {
+          // No pod holds this market on the fork: the live view reads as zeroed.
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 1n,
+          data,
+          collateralToken: tokens.cbBTC,
+          debtToken: tokens.USDC,
+        },
         client,
       );
 
@@ -161,18 +179,28 @@ describe("venue parity (mainnet fork)", () => {
         getBlock(client),
       ]);
 
-      const venue = new AaveV3Venue({
-        collateralReserve: {
+      // Live view placeholders — this test exercises the accrual model only.
+      const venue = new AaveV3Venue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          collateral: 0n,
+          debt: 0n,
+          collateralIndex: MathLib.RAY,
+          debtIndex: MathLib.RAY,
+          lltv: 0n,
+          lastUpdate: block.timestamp,
+        },
+        {
           index: collateralReserve.liquidityIndex,
           rate: collateralReserve.currentLiquidityRate,
           lastUpdateTimestamp: BigInt(collateralReserve.lastUpdateTimestamp),
         },
-        debtReserve: {
+        {
           index: debtReserve.variableBorrowIndex,
           rate: debtReserve.currentVariableBorrowRate,
           lastUpdateTimestamp: BigInt(debtReserve.lastUpdateTimestamp),
         },
-      });
+      );
 
       const [collateralIndex, debtIndex] = await readContract(client, {
         address: aaveV3Adapter,
@@ -180,7 +208,9 @@ describe("venue parity (mainnet fork)", () => {
         functionName: "indices",
         args: [tokens.WETH, tokens.USDC, "0x"],
       });
-      expect(venue.indices(block.timestamp)).toEqual({ collateralIndex, debtIndex });
+      const accrued = venue.accrueInterest(block.timestamp);
+      expect(accrued.collateralIndex).toBe(collateralIndex);
+      expect(accrued.debtIndex).toBe(debtIndex);
     },
   );
 });

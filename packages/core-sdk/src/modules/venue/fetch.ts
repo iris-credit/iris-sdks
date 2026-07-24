@@ -2,23 +2,19 @@ import type { Address, Client, Hex } from "viem";
 import type { BigIntish, FetchParameters } from "../../types.js";
 import type { Venue } from "./Venue.js";
 
-import { decodeAbiParameters, encodeAbiParameters, isAddressEqual, keccak256 } from "viem";
-import { getChainId, readContract } from "viem/actions";
-import { aaveV3PoolAbi } from "../../abis/aaveV3.js";
+import { getBlock, getChainId, readContract } from "viem/actions";
 import { irisAbi } from "../../abis/iris.js";
-import {
-  adaptiveCurveIrmAbi,
-  morphoBlueAbi,
-  morphoMarketParamsAbi,
-} from "../../abis/morphoBlue.js";
+import { venueAdapterAbi } from "../../abis/venueAdapter.js";
 import { getChainAddresses } from "../../addresses.js";
 import { ChainUtils } from "../../chain.js";
 import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
-import { AaveV3Venue } from "./AaveV3Venue.js";
-import { MorphoBlueVenue } from "./MorphoBlueVenue.js";
+import { fetchAaveV3Venue } from "./aaveV3/fetch.js";
+import { fetchMorphoBlueVenue } from "./morphoBlue/fetch.js";
 
 /** Parameters identifying the venue backing a loan (all read from its position and loan). */
 export interface FetchVenueArgs {
+  /** The pod holding the position on the venue. */
+  pod: Address;
   /** The position's venue id. */
   venueId: BigIntish;
   /** The position's venue-specific market data (e.g. ABI-encoded Morpho market params). */
@@ -30,16 +26,16 @@ export interface FetchVenueArgs {
 }
 
 /**
- * Fetches the state of the venue backing a loan, hydrated with the rate model matching its
- * venue adapter — so indices can be projected offline to an arbitrary timestamp.
+ * Fetches the venue's live view of a pod — assets, indices, LLTV and price, read from the
+ * venue adapter at the fetched block — hydrated with the rate model matching its venue
+ * adapter, so indices can also be projected offline to an arbitrary timestamp.
  *
  * Resolves the venue adapter from Iris, then dispatches:
  *
- * - **Morpho Blue adapter** — decodes the market params from `data` and reads the market state,
- *   plus the Adaptive Curve IRM's `rateAtTarget` when the market uses it, returning a
- *   {@link MorphoBlueVenue}.
- * - **Aave V3 adapter** — reads the collateral and debt reserves, returning an
- *   {@link AaveV3Venue}.
+ * - **Morpho Blue adapter** — delegates to {@link fetchMorphoBlueVenue} for the market
+ *   state, the pod's position primitives and the IRM's `rateAtTarget`.
+ * - **Aave V3 adapter** — delegates to {@link fetchAaveV3Venue} for the collateral and
+ *   debt reserves.
  *
  * @param args - See {@link FetchVenueArgs}.
  * @param client - Viem client used for the contract reads.
@@ -52,15 +48,14 @@ export interface FetchVenueArgs {
  * @throws {UnsupportedVenueAdapterError} when the venue adapter has no offline rate model.
  */
 export async function fetchVenue(
-  { venueId, data, collateralToken, debtToken }: FetchVenueArgs,
+  { pod, venueId, data, collateralToken, debtToken }: FetchVenueArgs,
   client: Client,
   parameters: FetchParameters = {},
 ): Promise<Venue> {
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
-  const { iris, morphoBlueAdapter, morphoBlue, adaptiveCurveIrm, aaveV3Adapter, aaveV3Pool } =
-    getChainAddresses(chainId);
+  const { iris, morphoBlueAdapter, aaveV3Adapter } = getChainAddresses(chainId);
 
   const adapter = await readContract(client, {
     ...parameters,
@@ -70,71 +65,63 @@ export async function fetchVenue(
     args: [BigInt(venueId)],
   });
 
-  if (isAddressEqual(adapter, morphoBlueAdapter)) {
-    const [marketParams] = decodeAbiParameters(morphoMarketParamsAbi, data);
-    const id = keccak256(encodeAbiParameters(morphoMarketParamsAbi, [marketParams]));
+  const [[collateral, debt], [collateralIndex, debtIndex], lltv, price, block] = await Promise.all([
+    readContract(client, {
+      ...parameters,
+      address: adapter,
+      abi: venueAdapterAbi,
+      functionName: "positionAssets",
+      args: [pod, collateralToken, debtToken, data],
+    }),
+    readContract(client, {
+      ...parameters,
+      address: adapter,
+      abi: venueAdapterAbi,
+      functionName: "indices",
+      args: [collateralToken, debtToken, data],
+    }),
+    readContract(client, {
+      ...parameters,
+      address: adapter,
+      abi: venueAdapterAbi,
+      functionName: "lltv",
+      args: [collateralToken, debtToken, data],
+    }),
+    readContract(client, {
+      ...parameters,
+      address: adapter,
+      abi: venueAdapterAbi,
+      functionName: "price",
+      args: [collateralToken, debtToken, data],
+    }),
+    getBlock(
+      client,
+      parameters.blockNumber != null
+        ? { blockNumber: parameters.blockNumber }
+        : { blockTag: parameters.blockTag ?? "latest" },
+    ),
+  ]);
+  const view = {
+    pod,
+    collateral,
+    debt,
+    collateralIndex,
+    debtIndex,
+    lltv,
+    price,
+    lastUpdate: block.timestamp,
+  };
 
-    const [totalSupplyAssets, , totalBorrowAssets, totalBorrowShares, lastUpdate] =
-      await readContract(client, {
+  // Chain addresses are checksum validated by lint.
+  switch (adapter) {
+    case morphoBlueAdapter:
+      return fetchMorphoBlueVenue(view, { pod, data }, client, { ...parameters, chainId });
+    case aaveV3Adapter:
+      return fetchAaveV3Venue(view, { collateralToken, debtToken }, client, {
         ...parameters,
-        address: morphoBlue,
-        abi: morphoBlueAbi,
-        functionName: "market",
-        args: [id],
+        chainId,
       });
-
-    // Only the canonical Adaptive Curve IRM exposes its state; markets on any other IRM
-    // accrue at a zero rate offline (see `MorphoBlueVenue.indices`).
-    const rateAtTarget = isAddressEqual(marketParams.irm, adaptiveCurveIrm)
-      ? await readContract(client, {
-          ...parameters,
-          address: adaptiveCurveIrm,
-          abi: adaptiveCurveIrmAbi,
-          functionName: "rateAtTarget",
-          args: [id],
-        })
-      : undefined;
-
-    return new MorphoBlueVenue({
-      totalSupplyAssets,
-      totalBorrowAssets,
-      totalBorrowShares,
-      lastUpdate,
-      rateAtTarget,
-    });
+    default:
+      throw new UnsupportedVenueAdapterError(adapter, chainId);
   }
-
-  if (isAddressEqual(adapter, aaveV3Adapter)) {
-    const [collateralReserve, debtReserve] = await Promise.all([
-      readContract(client, {
-        ...parameters,
-        address: aaveV3Pool,
-        abi: aaveV3PoolAbi,
-        functionName: "getReserveData",
-        args: [collateralToken],
-      }),
-      readContract(client, {
-        ...parameters,
-        address: aaveV3Pool,
-        abi: aaveV3PoolAbi,
-        functionName: "getReserveData",
-        args: [debtToken],
-      }),
-    ]);
-
-    return new AaveV3Venue({
-      collateralReserve: {
-        index: collateralReserve.liquidityIndex,
-        rate: collateralReserve.currentLiquidityRate,
-        lastUpdateTimestamp: BigInt(collateralReserve.lastUpdateTimestamp),
-      },
-      debtReserve: {
-        index: debtReserve.variableBorrowIndex,
-        rate: debtReserve.currentVariableBorrowRate,
-        lastUpdateTimestamp: BigInt(debtReserve.lastUpdateTimestamp),
-      },
-    });
-  }
-
-  throw new UnsupportedVenueAdapterError(adapter, chainId);
 }

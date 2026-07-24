@@ -1,29 +1,128 @@
+import type { Address } from "viem";
 import type { BigIntish } from "../../types.js";
 
-/** Venue indices at a point in time. */
-export interface VenueIndices {
-  /** The venue's collateral index. */
+import { IrisCoreErrors } from "../../errors.js";
+
+/** Plain input shape for a venue's view of a pod. */
+export interface IVenue {
+  pod: Address;
+  collateral: bigint;
+  debt: bigint;
   collateralIndex: bigint;
-  /** The venue's debt index. */
   debtIndex: bigint;
+  lltv: bigint;
+  price?: bigint;
+  lastUpdate: bigint;
 }
 
 /**
- * Represents the state of the venue backing a loan — the variable-rate market (Morpho Blue,
- * Aave V3) whose indices drive the position's floating leg and surplus — with the rate model
- * needed to project its indices to an arbitrary timestamp.
+ * Represents a venue's view of a pod: the pair-level observations (indices, price, LLTV)
+ * and the pod's assets on the venue.
  *
- * Each implementation mirrors its venue adapter's onchain `indices` definition, so projected
- * values stay on the same scale as the indices Iris stores on positions, and reproduces its
- * venue's own rate dynamics — projections are exact as long as the venue is untouched in
- * between.
+ * @dev All fields are live onchain observations and MUST be fetched from the venue adapter
+ * at the block being evaluated — never reused from an older block. Position math composed
+ * with stale venue data (e.g. accrual with old indices, health checks with an old price)
+ * silently diverges from Iris's onchain results.
  */
-export abstract class Venue {
+export abstract class Venue implements IVenue {
   /**
-   * Returns the venue indices projected to the given timestamp. A timestamp at or before the
-   * venue state's own last update returns the unprojected indices (no backward projection).
-   *
-   * @param timestamp - The timestamp to project to (in seconds).
+   * The pod this view is of.
    */
-  public abstract indices(timestamp: BigIntish): VenueIndices;
+  public readonly pod: Address;
+  /**
+   * The pod's collateral on the venue, from `IVenueAdapter.positionAssets`, in collateral
+   * token units.
+   */
+  public collateral: bigint;
+  /**
+   * The pod's debt on the venue, from `IVenueAdapter.positionAssets`, in debt token units.
+   */
+  public debt: bigint;
+  /**
+   * The venue's current collateral index, from `IVenueAdapter.indices` (scaled by RAY).
+   */
+  public collateralIndex: bigint;
+  /**
+   * The venue's current debt index, from `IVenueAdapter.indices` (scaled by RAY).
+   */
+  public debtIndex: bigint;
+  /**
+   * The venue's LLTV for the loan's token pair, from `IVenueAdapter.lltv` (scaled by WAD).
+   */
+  public lltv: bigint;
+  /**
+   * The collateral price quoted in debt assets, from `IVenueAdapter.price` (scaled by
+   * ORACLE_PRICE_SCALE), or `undefined` when unknown.
+   */
+  public price?: bigint;
+  /**
+   * The timestamp when the venue data was last updated, in seconds.
+   */
+  public lastUpdate: bigint;
+
+  constructor(venue: IVenue) {
+    this.pod = venue.pod;
+    this.collateral = venue.collateral;
+    this.debt = venue.debt;
+    this.collateralIndex = venue.collateralIndex;
+    this.debtIndex = venue.debtIndex;
+    this.lltv = venue.lltv;
+    this.price = venue.price;
+    this.lastUpdate = venue.lastUpdate;
+  }
+
+  /**
+   * Returns a new venue accrued up to the given timestamp: the indices projected with the
+   * venue's own rate model, the pod's assets grown with them, and the rate model advanced
+   * alongside. A timestamp equal to `lastUpdate` returns an unchanged copy. Leaves this
+   * venue unchanged.
+   *
+   * Accruals assume the venue is untouched in between — exact when it is, an estimate
+   * otherwise.
+   *
+   * @param timestamp - The timestamp to accrue to (in seconds).
+   */
+  public abstract accrueInterest(timestamp: BigIntish): Venue;
+
+  /**
+   * Returns the pod's collateral accrued up to the given timestamp, in collateral token
+   * units.
+   */
+  public abstract getAccrualCollateral(timestamp: BigIntish): bigint;
+
+  /**
+   * Returns the pod's debt accrued up to the given timestamp, in debt token units.
+   */
+  public abstract getAccrualDebt(timestamp: BigIntish): bigint;
+
+  /**
+   * Returns the collateral index accrued up to the given timestamp (scaled by RAY).
+   */
+  public abstract getAccrualCollateralIndex(timestamp: BigIntish): bigint;
+
+  /**
+   * Returns the debt index accrued up to the given timestamp (scaled by RAY).
+   */
+  public abstract getAccrualDebtIndex(timestamp: BigIntish): bigint;
+
+  /**
+   * Returns the view fields accrued up to the given timestamp via the accrual accessors,
+   * advancing `lastUpdate`. Throws when the timestamp is prior to `lastUpdate`.
+   */
+  protected accruedView(timestamp: BigIntish = this.lastUpdate): IVenue {
+    timestamp = BigInt(timestamp);
+
+    if (timestamp < this.lastUpdate) {
+      throw new IrisCoreErrors.InvalidInterestAccrual(timestamp, this.lastUpdate);
+    }
+
+    return {
+      ...this,
+      collateral: this.getAccrualCollateral(timestamp),
+      debt: this.getAccrualDebt(timestamp),
+      collateralIndex: this.getAccrualCollateralIndex(timestamp),
+      debtIndex: this.getAccrualDebtIndex(timestamp),
+      lastUpdate: timestamp,
+    };
+  }
 }

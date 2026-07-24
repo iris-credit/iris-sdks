@@ -9,6 +9,7 @@ import { MorphoBlueVenue } from "./MorphoBlueVenue.js";
 describe("MorphoBlueVenue", () => {
   // Live view placeholders — these tests exercise the accrual model only.
   const view = {
+    pod: "0x0000000000000000000000000000000000000001" as const,
     collateral: 0n,
     debt: 0n,
     collateralIndex: MathLib.RAY,
