@@ -56,9 +56,8 @@ export async function fetchPosition(
  * timestamps.
  *
  * Two-phase read: the stored position and loan first (the venue is identified by the
- * position's `venueId` / `data` and the loan's tokens), then the venue state with its rate
- * model (see {@link fetchVenue}). Accrue with `accrueInterest(timestamp)` or preview a
- * repayment with `getRepaid(timestamp)`.
+ * position's `venueId` / `data` and the loan's tokens), then the venue's live view of the
+ * pod with its rate model (see {@link fetchVenue}). Accrue with `accrueLegs(timestamp)`.
  *
  * @param pod - Pod address identifying the position.
  * @param client - Viem client used for the contract reads.
@@ -79,7 +78,7 @@ export async function fetchPosition(
  * const client = createPublicClient({ chain: mainnet, transport: http() });
  *
  * const position = await fetchAccrualPosition(pod, client);
- * const repaid = position.getRepaid(Time.timestamp());
+ * const accrued = position.accrueLegs(Time.timestamp());
  * ```
  */
 export async function fetchAccrualPosition(
@@ -97,6 +96,7 @@ export async function fetchAccrualPosition(
 
   const venue = await fetchVenue(
     {
+      pod,
       venueId: position.venueId,
       data: position.data,
       collateralToken: loan.collateralToken,

@@ -64,4 +64,14 @@ export namespace IrisCoreErrors {
       super(`invalid ${kind} venue index: ${index} can't be prior to last index ${lastIndex}`);
     }
   }
+
+  /** Error thrown when a position's loan or venue belongs to a different pod. */
+  export class UnexpectedPod extends Error {
+    constructor(
+      public readonly expected: Address,
+      public readonly actual: Address,
+    ) {
+      super(`unexpected pod: expected ${expected}, got ${actual}`);
+    }
+  }
 }

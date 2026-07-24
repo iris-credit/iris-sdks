@@ -3,6 +3,7 @@ import type { BigIntish } from "../../types.js";
 import type { ILoan } from "../loan/Loan.js";
 import type { Venue } from "../venue/Venue.js";
 
+import { IrisCoreErrors } from "../../errors.js";
 import { Loan } from "../loan/Loan.js";
 import { PositionUtils } from "./PositionUtils.js";
 
@@ -101,11 +102,18 @@ export class Position implements IPosition {
  * Represents a position paired with its loan and its venue, for derived and accrued values.
  */
 export class AccrualPosition extends Position {
-  protected readonly _loan: Loan;
+  protected readonly _loan: ILoan;
   protected readonly _venue: Venue;
 
+  /**
+   * @throws {IrisCoreErrors.UnexpectedPod} When the loan or the venue is of a different
+   *   pod than the position.
+   */
   constructor(position: IPosition, loan: ILoan, venue: Venue) {
     super(position);
+
+    if (loan.pod !== position.pod) throw new IrisCoreErrors.UnexpectedPod(position.pod, loan.pod);
+    if (venue.pod !== position.pod) throw new IrisCoreErrors.UnexpectedPod(position.pod, venue.pod);
 
     this._loan = new Loan(loan);
     this._venue = venue;
@@ -119,76 +127,95 @@ export class AccrualPosition extends Position {
   }
 
   /**
-   * The venue backing this position, carrying the rate model that projects its indices.
+   * The venue's live view of the pod.
    */
   get venue() {
     return this._venue;
   }
 
   /**
-   * Whether the position's bond is healthy (see {@link PositionUtils.isHealthyBond}).
-   * Evaluated on the legs as stored on this instance — accrue first for an up-to-date answer.
-   */
-  get isHealthyBond() {
-    return PositionUtils.isHealthyBond(this, this._loan);
-  }
-
-  /**
-   * Returns a new position derived from this position, whose legs have been accrued up to the
-   * given timestamp: the fixed (and overdue) leg from the loan's rates, the floating leg and
-   * surplus from the venue's indices projected to `timestamp` with its rate model
-   * (see {@link Venue.indices}).
+   * Returns a new position with the venue projected to the given timestamp with its own
+   * rate model (see `Venue.accrueInterest`) and the indices and legs accrued against the
+   * projected venue, matching Iris's onchain accrual (see `PositionUtils.getAccruedLegs`).
+   * The returned position carries the projected venue. Leaves this position unchanged.
    *
-   * A never-created position (`lastUpdate === 0n`) is returned unchanged.
+   * Throws when the timestamp is prior to the position's last update or a venue index is
+   * prior to the stored one (both revert onchain), and when the timestamp is prior to the
+   * venue's last update (no stale venue data — see `Venue.accrueInterest`).
    *
-   * @param timestamp - The timestamp at which to accrue interest (in seconds). Must be greater
-   *   than or equal to the position's `lastUpdate`.
-   * @throws {IrisCoreErrors.InvalidInterestAccrual} when `timestamp` is prior to `lastUpdate`.
-   * @throws {IrisCoreErrors.InvalidVenueIndex} when the venue's projected indices regress below
-   *   the position's stored indices (e.g. a venue snapshot older than the position's state).
+   * @param timestamp The timestamp at which to accrue interest (in seconds).
    */
-  public accrueInterest(timestamp: BigIntish): AccrualPosition {
+  public accrueLegs(timestamp: BigIntish = this.lastUpdate) {
     timestamp = BigInt(timestamp);
 
-    const indices = this._venue.indices(timestamp);
+    if (timestamp < this.lastUpdate) {
+      throw new IrisCoreErrors.InvalidInterestAccrual(timestamp, this.lastUpdate);
+    }
+    const venue = this._venue.accrueInterest(timestamp);
 
-    const { collateralIndex, debtIndex, fixedLeg, floatingLeg, surplus } =
-      PositionUtils.getAccruedLegs(
-        this,
-        this._loan,
-        indices.collateralIndex,
-        indices.debtIndex,
-        timestamp,
+    if (venue.collateralIndex < this.collateralIndex) {
+      throw new IrisCoreErrors.InvalidVenueIndex(
+        "collateral",
+        venue.collateralIndex,
+        this.collateralIndex,
       );
+    }
+    if (venue.debtIndex < this.debtIndex) {
+      throw new IrisCoreErrors.InvalidVenueIndex("debt", venue.debtIndex, this.debtIndex);
+    }
+
+    const accrued = PositionUtils.getAccruedLegs(this, this._loan, venue, timestamp);
 
     return new AccrualPosition(
       {
         ...this,
-        collateralIndex,
-        debtIndex,
-        fixedLeg: this.fixedLeg + fixedLeg,
-        floatingLeg: this.floatingLeg + floatingLeg,
-        surplus: this.surplus + surplus,
-        lastUpdate: this.lastUpdate === 0n ? 0n : timestamp,
+        collateralIndex: accrued.collateralIndex,
+        debtIndex: accrued.debtIndex,
+        fixedLeg: this.fixedLeg + accrued.fixedLeg,
+        floatingLeg: this.floatingLeg + accrued.floatingLeg,
+        surplus: this.surplus + accrued.surplus,
+        lastUpdate: timestamp,
       },
       this._loan,
-      this._venue,
+      venue,
     );
   }
 
   /**
-   * Returns the debt-token assets pulled from the payer when the position is repaid at the
-   * given timestamp: accrues the legs to `timestamp`, then applies Iris's settlement math
-   * (see {@link PositionUtils.getRepaid}).
+   * Returns a new position rebased against the venue's view of the pod, matching Iris's
+   * onchain rebase (see `PositionUtils.getRebasedPosition`), or `undefined` when a rebase
+   * is needed but the venue price is unknown. Leaves this position unchanged.
    *
-   * @param timestamp - The repayment timestamp (in seconds).
-   * @throws {IrisCoreErrors.InvalidInterestAccrual} when `timestamp` is prior to `lastUpdate`.
-   * @throws {IrisCoreErrors.InvalidVenueIndex} when the venue's projected indices regress below
-   *   the position's stored indices (e.g. a venue snapshot older than the position's state).
+   * Expects accrued legs: call `accrueLegs` beforehand, as the rebase runs after accrual
+   * onchain.
    */
-  public getRepaid(timestamp: BigIntish): bigint {
-    timestamp = BigInt(timestamp);
+  public rebase() {
+    const rebased = PositionUtils.getRebasedPosition(this, this._venue);
+    if (rebased == null) return;
 
-    return PositionUtils.getRepaid(this.accrueInterest(timestamp), this._loan, timestamp);
+    return new AccrualPosition({ ...this, ...rebased }, this._loan, this._venue);
+  }
+
+  /**
+   * Returns a new position with the fixed leg settled (the residual credited before
+   * maturity) alongside the solver's net and the protocol fee cuts, matching Iris's
+   * onchain settlement at `lastUpdate` (see `PositionUtils.getSettlement`). Leaves this
+   * position unchanged.
+   *
+   * Expects accrued legs: call `accrueLegs` beforehand, as settlement runs after accrual
+   * onchain.
+   */
+  public settleLegs() {
+    const settlement = PositionUtils.getSettlement(this, this._loan, this.lastUpdate);
+    const position = new AccrualPosition(
+      {
+        ...this,
+        fixedLeg: this.fixedLeg + PositionUtils.getResidual(this, this._loan, this.lastUpdate),
+      },
+      this._loan,
+      this._venue,
+    );
+
+    return { position, ...settlement };
   }
 }
