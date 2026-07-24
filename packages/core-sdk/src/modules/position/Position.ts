@@ -195,6 +195,16 @@ export class AccrualPosition extends Position {
   }
 
   /**
+   * The debt assets required to repay the loan at `lastUpdate`: the fixed leg settled
+   * first, as repay does onchain (see `settleLegs`), then Iris's repay charge applied
+   * (see `PositionUtils.getRepayAmount`). Evaluated on the legs as stored on this
+   * instance — accrue first for an up-to-date answer.
+   */
+  get repayAmount() {
+    return PositionUtils.getRepayAmount(this.settleLegs());
+  }
+
+  /**
    * Whether the loan is past maturity at `lastUpdate` — accrue first for an up-to-date
    * answer.
    */
@@ -297,16 +307,14 @@ export class AccrualPosition extends Position {
 
   /**
    * Returns a new position with the fixed leg settled (the residual credited before
-   * maturity) alongside the solver's net and the protocol fee cuts, matching Iris's
-   * onchain settlement at `lastUpdate` (see `PositionUtils.getSettlement`). Leaves this
-   * position unchanged.
+   * maturity), matching Iris's onchain settlement at `lastUpdate` (see
+   * `PositionUtils.getResidual`). Leaves this position unchanged.
    *
    * Expects accrued legs: call `accrueLegs` beforehand, as settlement runs after accrual
    * onchain.
    */
   public settleLegs() {
-    const settlement = PositionUtils.getSettlement(this, this._loan, this.lastUpdate);
-    const position = new AccrualPosition(
+    return new AccrualPosition(
       {
         ...this,
         fixedLeg: this.fixedLeg + PositionUtils.getResidual(this, this._loan, this.lastUpdate),
@@ -314,18 +322,5 @@ export class AccrualPosition extends Position {
       this._loan,
       this._venue,
     );
-
-    return { position, ...settlement };
-  }
-
-  /**
-   * Returns the debt assets required to repay the loan at the given timestamp: the legs
-   * accrued to `timestamp` (see `accrueLegs`), the fixed leg settled (see `settleLegs`)
-   * and Iris's repay charge applied (see `PositionUtils.getRepayAmount`).
-   *
-   * @param timestamp The repayment timestamp (in seconds). Defaults to `lastUpdate`.
-   */
-  public getRepayAmount(timestamp: BigIntish = this.lastUpdate) {
-    return PositionUtils.getRepayAmount(this.accrueLegs(timestamp).settleLegs().position);
   }
 }

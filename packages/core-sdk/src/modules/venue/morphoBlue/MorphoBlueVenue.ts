@@ -64,9 +64,10 @@ export class MorphoBlueVenue extends Venue {
 
   /**
    * Returns a new venue accrued up to the given timestamp, compounding the market's borrow
-   * assets from its `lastUpdate` at the Adaptive Curve IRM's average borrow rate — markets
-   * without {@link rateAtTarget} (not on the canonical IRM) accrue at a zero rate. The
-   * market and its rate-at-target re-anchor at the accrued state; the collateral index
+   * assets from its `lastUpdate` at the Adaptive Curve IRM's average borrow rate and
+   * crediting the interest to the supply assets, as Morpho's `_accrueInterest` does —
+   * markets without {@link rateAtTarget} (not on the canonical IRM) accrue at a zero rate.
+   * The market and its rate-at-target re-anchor at the accrued state; the collateral index
    * stays pinned (idle collateral).
    *
    * @param timestamp - The timestamp to accrue to (in seconds).
@@ -74,11 +75,14 @@ export class MorphoBlueVenue extends Venue {
   public accrueInterest(timestamp: BigIntish): MorphoBlueVenue {
     timestamp = BigInt(timestamp);
 
+    const interest = this.getAccrualTotalBorrowAssets(timestamp) - this.market.totalBorrowAssets;
+
     return new MorphoBlueVenue(
       this.accruedView(timestamp),
       {
         ...this.market,
-        totalBorrowAssets: this.getAccrualTotalBorrowAssets(timestamp),
+        totalSupplyAssets: this.market.totalSupplyAssets + interest,
+        totalBorrowAssets: this.market.totalBorrowAssets + interest,
         lastUpdate: timestamp,
       },
       this.position,

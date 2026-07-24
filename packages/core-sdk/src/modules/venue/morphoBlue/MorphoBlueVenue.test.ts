@@ -96,12 +96,17 @@ describe("MorphoBlueVenue", () => {
 
     expect(accrued.market.lastUpdate).toBe(1_000n + SECONDS_PER_YEAR);
     expect(accrued.market.totalBorrowAssets).toBeGreaterThan(market.totalBorrowAssets);
+    // The interest is credited to both sides, as Morpho's _accrueInterest does.
+    expect(accrued.market.totalSupplyAssets - market.totalSupplyAssets).toBe(
+      accrued.market.totalBorrowAssets - market.totalBorrowAssets,
+    );
     // Below-target utilization: the adaptive rate decays over the window.
     expect(accrued.rateAtTarget).toBeLessThan(rateAtTarget);
   });
 
   test("should throw on a timestamp prior to the last update", () => {
-    expect(() => venue.accrueInterest(500n)).toThrow(IrisCoreErrors.InvalidInterestAccrual);
+    // Not pinned to an error class: which accrual guard fires first is an implementation detail.
+    expect(() => venue.accrueInterest(500n)).toThrow("can't be prior to last update");
     expect(() => venue.getAccrualDebtIndex(500n)).toThrow(
       IrisCoreErrors.InvalidVenueInterestAccrual,
     );

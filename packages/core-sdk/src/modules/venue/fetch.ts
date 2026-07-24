@@ -2,6 +2,7 @@ import type { Address, Client, Hex } from "viem";
 import type { BigIntish, FetchParameters } from "../../types.js";
 import type { Venue } from "./Venue.js";
 
+import { zeroAddress } from "viem";
 import { getBlock, getChainId, readContract } from "viem/actions";
 import { irisAbi } from "../../abis/iris.js";
 import { venueAdapterAbi } from "../../abis/venueAdapter.js";
@@ -45,7 +46,8 @@ export interface FetchVenueArgs {
  * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
  * @returns The hydrated `Venue` entity.
  * @throws {UnsupportedChainIdError} when the chain has no registered addresses.
- * @throws {UnsupportedVenueAdapterError} when the venue adapter has no offline rate model.
+ * @throws {UnsupportedVenueAdapterError} when no venue adapter is registered for the venue
+ *   id or the adapter has no offline rate model.
  */
 export async function fetchVenue(
   { pod, venueId, data, collateralToken, debtToken }: FetchVenueArgs,
@@ -64,6 +66,8 @@ export async function fetchVenue(
     functionName: "venueAdapter",
     args: [BigInt(venueId)],
   });
+  // An unregistered venue id resolves to the zero address.
+  if (adapter === zeroAddress) throw new UnsupportedVenueAdapterError(adapter, chainId);
 
   const [[collateral, debt], [collateralIndex, debtIndex], lltv, price, block] = await Promise.all([
     readContract(client, {

@@ -30,8 +30,8 @@ export namespace PositionUtils {
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
    * @param loan.overdueRate The loan's annual overdue rate, added on top of the fixed rate past maturity (scaled by WAD).
-   * @param venue.collateralIndex The venue's current collateral index, from `IVenueAdapter.indices` (scaled by WAD).
-   * @param venue.debtIndex The venue's current debt index, from `IVenueAdapter.indices` (scaled by WAD).
+   * @param venue.collateralIndex The venue's current collateral index, from `IVenueAdapter.indices` (scaled by RAY).
+   * @param venue.debtIndex The venue's current debt index, from `IVenueAdapter.indices` (scaled by RAY).
    * @param timestamp The timestamp at which to accrue interest (in seconds).
    * @returns The new venue indices (scaled by RAY) and the `fixedLeg`, `floatingLeg` & `surplus` increments.
    * @example

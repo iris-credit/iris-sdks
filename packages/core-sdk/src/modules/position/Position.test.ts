@@ -199,6 +199,15 @@ describe("AccrualPosition", () => {
     });
   });
 
+  describe("repayAmount", () => {
+    test("should charge the debt and the full-term fixed leg before maturity", () => {
+      // Accrued 0.025 + residual 0.025: the fixed interest of the whole remaining term.
+      expect(
+        accrualPosition.accrueLegs(position.lastUpdate + SECONDS_PER_YEAR / 4n).repayAmount,
+      ).toBe(MathLib.WAD + 50_000_000_000_000_000n);
+    });
+  });
+
   test("should expose the loan status at lastUpdate", () => {
     expect(accrualPosition.isOverdue).toBe(false);
     expect(accrualPosition.isLiquidatable).toBe(false);
@@ -311,25 +320,13 @@ describe("AccrualPosition", () => {
   });
 
   describe("settleLegs", () => {
-    test("should credit the residual and return the settlement", () => {
-      // 10% over the half year to maturity: a 0.05 * debt residual, with a 20% fee cut.
-      const { position: settled, net, performanceFee, surplusFee } = accrualPosition.settleLegs();
+    test("should credit the residual to the fixed leg", () => {
+      // 10% over the half year to maturity: a 0.05 * debt residual.
+      const settled = accrualPosition.settleLegs();
 
       expect(settled.fixedLeg).toBe(50_000_000_000_000_000n);
-      expect(net).toBe(50_000_000_000_000_000n);
-      expect(performanceFee).toBe(10_000_000_000_000_000n);
-      expect(surplusFee).toBe(0n);
       // The original position is left unchanged.
       expect(accrualPosition.fixedLeg).toBe(0n);
-    });
-  });
-
-  describe("getRepayAmount", () => {
-    test("should charge the debt and the full-term fixed leg before maturity", () => {
-      // Accrued 0.025 + residual 0.025: the fixed interest of the whole remaining term.
-      expect(accrualPosition.getRepayAmount(position.lastUpdate + SECONDS_PER_YEAR / 4n)).toBe(
-        MathLib.WAD + 50_000_000_000_000_000n,
-      );
     });
   });
 });
