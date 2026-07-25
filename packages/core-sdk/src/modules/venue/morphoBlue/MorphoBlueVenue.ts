@@ -64,24 +64,29 @@ export class MorphoBlueVenue extends Venue {
 
   /**
    * Returns a new venue accrued up to the given timestamp, compounding the market's borrow
-   * assets from its `lastUpdate` at the Adaptive Curve IRM's average borrow rate — markets
-   * without {@link rateAtTarget} (not on the canonical IRM) accrue at a zero rate. The
-   * market and its rate-at-target re-anchor at the accrued state; the collateral index
+   * assets from its `lastUpdate` at the Adaptive Curve IRM's average borrow rate and
+   * crediting the interest to the supply assets, as Morpho's `_accrueInterest` does —
+   * markets without {@link rateAtTarget} (not on the canonical IRM) accrue at a zero rate.
+   * The market and its rate-at-target re-anchor at the accrued state; the collateral index
    * stays pinned (idle collateral).
    *
-   * @param timestamp - The timestamp to accrue to (in seconds).
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
    */
-  public accrueInterest(timestamp: BigIntish): MorphoBlueVenue {
+  public accrueInterest(timestamp: BigIntish = this.lastUpdate): MorphoBlueVenue {
     timestamp = BigInt(timestamp);
+
+    const interest = this.getAccrualTotalBorrowAssets(timestamp) - this.market.totalBorrowAssets;
 
     return new MorphoBlueVenue(
       this.accruedView(timestamp),
       {
         ...this.market,
-        totalBorrowAssets: this.getAccrualTotalBorrowAssets(timestamp),
+        totalSupplyAssets: this.market.totalSupplyAssets + interest,
+        totalBorrowAssets: this.market.totalBorrowAssets + interest,
         lastUpdate: timestamp,
       },
-      this.position,
+      // Copied, so operations mutating the accrued venue never reach back to this one.
+      { ...this.position },
       this.rateAtTarget != null
         ? AdaptiveCurveIrmLib.getBorrowRate(
             this.utilization,
@@ -181,5 +186,111 @@ export class MorphoBlueVenue extends Venue {
         MorphoBlueMath.wTaylorCompounded(borrowRate, elapsed),
       )
     );
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral supplied on
+   * top — both the live view and the pod's position primitive move (Morpho Blue
+   * collateral is idle).
+   *
+   * @param amount - The collateral amount to supply.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public supplyCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral += amount;
+    venue.position.collateral += amount;
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral withdrawn —
+   * both the live view and the pod's position primitive move — keeping the pod's venue
+   * position healthy (see `Venue.isHealthy`).
+   *
+   * @param amount - The collateral amount to withdraw.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
+   *   the venue position unhealthy.
+   */
+  public withdrawCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
+
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral -= amount;
+    venue.position.collateral -= amount;
+
+    if (venue.collateral < 0n || !venue.isHealthy) {
+      throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
+    }
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt repaid, on the live
+   * view and on the market and pod primitives alike.
+   *
+   * @param amount - The debt amount to repay.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InsufficientVenuePosition} When the repayment exceeds the
+   *   pod's debt.
+   */
+  public repay(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    const venue = this.accrueInterest(timestamp);
+    // The repayment burns shares on both the market and the pod, as Morpho's `repay` does.
+    // A full repayment burns the pod's shares outright: its debt was priced up from them,
+    // so converting that back down would burn more than it holds.
+    const shares =
+      amount === venue.debt
+        ? venue.position.borrowShares
+        : MorphoBlueMath.toSharesDown(
+            amount,
+            venue.market.totalBorrowAssets,
+            venue.market.totalBorrowShares,
+          );
+
+    venue.debt -= amount;
+    venue.market.totalBorrowAssets = MathLib.zeroFloorSub(venue.market.totalBorrowAssets, amount);
+    venue.market.totalBorrowShares -= shares;
+    venue.position.borrowShares -= shares;
+
+    if (venue.debt < 0n || venue.position.borrowShares < 0n) {
+      throw new IrisCoreErrors.InsufficientVenuePosition(venue.pod, venue.id);
+    }
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt borrowed, on the live
+   * view and on the market and pod primitives alike.
+   *
+   * @param amount - The debt amount to borrow.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public borrow(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    const venue = this.accrueInterest(timestamp);
+    // Shares round up against the borrower, as Morpho's `borrow` does.
+    const shares = MorphoBlueMath.toSharesUp(
+      amount,
+      venue.market.totalBorrowAssets,
+      venue.market.totalBorrowShares,
+    );
+
+    venue.debt += amount;
+    venue.market.totalBorrowAssets += amount;
+    venue.market.totalBorrowShares += shares;
+    venue.position.borrowShares += shares;
+
+    if (venue.market.totalBorrowAssets > venue.market.totalSupplyAssets) {
+      throw new IrisCoreErrors.InsufficientVenueLiquidity(venue.pod, venue.id);
+    }
+
+    return venue;
   }
 }

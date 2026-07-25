@@ -42,10 +42,14 @@ export class AaveV3Venue extends Venue {
    * liquidity index, compounded for the variable borrow index. The reserves re-anchor at
    * the accrued indices and timestamp.
    *
-   * @param timestamp - The timestamp to accrue to (in seconds).
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
    */
-  public accrueInterest(timestamp: BigIntish): AaveV3Venue {
+  public accrueInterest(timestamp: BigIntish = this.lastUpdate): AaveV3Venue {
     timestamp = BigInt(timestamp);
+
+    if (timestamp < this.lastUpdate) {
+      throw new IrisCoreErrors.InvalidInterestAccrual(timestamp, this.lastUpdate);
+    }
 
     return new AaveV3Venue(
       this.accruedView(timestamp),
@@ -126,5 +130,86 @@ export class AaveV3Venue extends Venue {
       AaveV3Math.getCompoundedInterest(this.debtReserve.rate, elapsed),
       this.debtReserve.index,
     );
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral supplied on
+   * top. Supplies don't refresh the reserve rates, so repeated operations drift further
+   * from onchain results.
+   *
+   * @param amount - The collateral amount to supply.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public supplyCollateral(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral += amount;
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral withdrawn,
+   * keeping the pod's venue position healthy (see `Venue.isHealthy`). Withdrawals don't
+   * refresh the reserve rates, so repeated operations drift further from onchain results.
+   *
+   * @param amount - The collateral amount to withdraw.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
+   *   the venue position unhealthy.
+   */
+  public withdrawCollateral(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
+    if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
+
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral -= amount;
+
+    if (venue.collateral < 0n || !venue.isHealthy) {
+      throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
+    }
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt repaid. Repayments
+   * don't refresh the reserve rates, so repeated operations drift further from onchain
+   * results.
+   *
+   * @param amount - The debt amount to repay.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InsufficientVenuePosition} When the repayment exceeds the
+   *   pod's debt.
+   */
+  public repay(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
+    const venue = this.accrueInterest(timestamp);
+
+    // The scaled debt is re-derived from the balance on every accrual, so cutting the
+    // balance is the whole repayment.
+    venue.debt -= amount;
+
+    if (venue.debt < 0n) {
+      throw new IrisCoreErrors.InsufficientVenuePosition(venue.pod, venue.id);
+    }
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt borrowed. Borrows
+   * don't refresh the reserve rates, so repeated operations drift further from onchain
+   * results.
+   *
+   * @param amount - The debt amount to borrow.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public borrow(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
+    const venue = this.accrueInterest(timestamp);
+
+    venue.debt += amount;
+
+    return venue;
   }
 }

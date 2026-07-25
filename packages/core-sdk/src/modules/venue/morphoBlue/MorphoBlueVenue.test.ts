@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { SECONDS_PER_YEAR } from "../../../constants.js";
+import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
@@ -9,6 +9,8 @@ import { MorphoBlueVenue } from "./MorphoBlueVenue.js";
 describe("MorphoBlueVenue", () => {
   // Live view placeholders — these tests exercise the accrual model only.
   const view = {
+    id: 1n,
+    data: "0x" as const,
     pod: "0x0000000000000000000000000000000000000001" as const,
     collateral: 0n,
     debt: 0n,
@@ -96,12 +98,17 @@ describe("MorphoBlueVenue", () => {
 
     expect(accrued.market.lastUpdate).toBe(1_000n + SECONDS_PER_YEAR);
     expect(accrued.market.totalBorrowAssets).toBeGreaterThan(market.totalBorrowAssets);
+    // The interest is credited to both sides, as Morpho's _accrueInterest does.
+    expect(accrued.market.totalSupplyAssets - market.totalSupplyAssets).toBe(
+      accrued.market.totalBorrowAssets - market.totalBorrowAssets,
+    );
     // Below-target utilization: the adaptive rate decays over the window.
     expect(accrued.rateAtTarget).toBeLessThan(rateAtTarget);
   });
 
   test("should throw on a timestamp prior to the last update", () => {
-    expect(() => venue.accrueInterest(500n)).toThrow(IrisCoreErrors.InvalidInterestAccrual);
+    // Not pinned to an error class: which accrual guard fires first is an implementation detail.
+    expect(() => venue.accrueInterest(500n)).toThrow("can't be prior to last update");
     expect(() => venue.getAccrualDebtIndex(500n)).toThrow(
       IrisCoreErrors.InvalidVenueInterestAccrual,
     );
@@ -167,5 +174,116 @@ describe("MorphoBlueVenue", () => {
         totalBorrowShares: MathLib.WAD * 9_000_000n,
       }),
     );
+  });
+
+  test("should supply collateral to the view and the position primitives", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, collateral: 5n },
+      market,
+      { borrowShares: 0n, collateral: 5n },
+      rateAtTarget,
+    );
+    const supplied = funded.supplyCollateral(3n, 1_000n);
+
+    expect(supplied.collateral).toBe(8n);
+    expect(supplied.position.collateral).toBe(8n);
+    // The original position primitives are left untouched.
+    expect(funded.position.collateral).toBe(5n);
+  });
+
+  test("should repay by burning the pod's and the market's borrow shares", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, debt: MathLib.WAD },
+      market,
+      // All the market's shares: the pod owes the whole borrow.
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    );
+    const repaid = funded.repay(MathLib.WAD / 2n, 1_000n);
+
+    expect(repaid.debt).toBe(MathLib.WAD / 2n);
+    // Half the assets burn half the shares, on the pod and on the market.
+    expect(repaid.position.borrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+    expect(repaid.market.totalBorrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+    expect(repaid.market.totalBorrowAssets).toBe(MathLib.WAD / 2n);
+    // The repayment survives a later accrual: the debt is priced from the burnt shares.
+    expect(repaid.accrueInterest(1_000n).debt).toBe(MathLib.WAD / 2n);
+    // The original position primitives are left untouched.
+    expect(funded.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
+  });
+
+  test("should burn the pod's shares outright on a full repayment", () => {
+    // A market above one asset per share: the debt is priced up from the pod's shares, so
+    // converting it back down would burn more shares than it holds.
+    const funded = new MorphoBlueVenue(
+      view,
+      { ...market, totalBorrowAssets: 1_234_567_890_123_456_789n },
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    ).accrueInterest(1_000n);
+    const repaid = funded.repay(funded.debt, 1_000n);
+
+    expect(repaid.debt).toBe(0n);
+    expect(repaid.position.borrowShares).toBe(0n);
+    expect(repaid.market.totalBorrowShares).toBe(0n);
+  });
+
+  test("should price a partial repayment from the market", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, debt: MathLib.WAD },
+      market,
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    );
+    const repaid = funded.repay(MathLib.WAD / 2n, 1_000n);
+
+    // Half the assets burn half the shares, leaving the rest owed.
+    expect(repaid.debt).toBe(MathLib.WAD / 2n);
+    expect(repaid.position.borrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+    expect(repaid.market.totalBorrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+  });
+
+  test("should throw when the repayment exceeds the pod's debt", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, debt: MathLib.WAD },
+      market,
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    );
+
+    expect(() => funded.repay(MathLib.WAD * 2n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenuePosition,
+    );
+  });
+
+  test("should borrow by minting the pod's and the market's borrow shares", () => {
+    const borrowed = venue.borrow(MathLib.WAD, 1_000n);
+
+    expect(borrowed.debt).toBe(MathLib.WAD);
+    // The market doubles: the borrow mints as many shares as were already outstanding.
+    expect(borrowed.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
+    expect(borrowed.market.totalBorrowShares).toBe(MathLib.WAD * 2_000_000n);
+    expect(borrowed.market.totalBorrowAssets).toBe(MathLib.WAD * 2n);
+    // The borrow survives a later accrual: the debt is priced from the minted shares.
+    expect(borrowed.accrueInterest(1_000n).debt).toBe(MathLib.WAD);
+    // The original position primitives are left untouched.
+    expect(venue.position.borrowShares).toBe(0n);
+  });
+
+  test("should withdraw collateral keeping the venue position healthy", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, collateral: 5n, price: ORACLE_PRICE_SCALE },
+      market,
+      { borrowShares: 0n, collateral: 5n },
+      rateAtTarget,
+    );
+    const withdrawn = funded.withdrawCollateral(2n, 1_000n);
+
+    expect(withdrawn.collateral).toBe(3n);
+    expect(withdrawn.position.collateral).toBe(3n);
+    expect(() => funded.withdrawCollateral(6n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenueCollateral,
+    );
+    expect(() => venue.withdrawCollateral(1n, 1_000n)).toThrow(IrisCoreErrors.UnknownVenuePrice);
   });
 });

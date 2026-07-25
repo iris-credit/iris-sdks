@@ -103,6 +103,8 @@ describe("venue parity (mainnet fork)", () => {
       // Live view placeholders — this test exercises the accrual model only.
       const venue = new MorphoBlueVenue(
         {
+          id: 0n,
+          data: "0x",
           pod: "0x000000000000000000000000000000000000dEaD",
           collateral: 0n,
           debt: 0n,
@@ -182,6 +184,8 @@ describe("venue parity (mainnet fork)", () => {
       // Live view placeholders — this test exercises the accrual model only.
       const venue = new AaveV3Venue(
         {
+          id: 0n,
+          data: "0x",
           pod: "0x000000000000000000000000000000000000dEaD",
           collateral: 0n,
           debt: 0n,

@@ -41,4 +41,52 @@ export namespace MorphoBlueMath {
 
     return firstTerm + secondTerm + thirdTerm;
   };
+
+  /**
+   * Returns the borrow shares equivalent to the given borrow assets, rounding down, matching
+   * Morpho Blue's onchain `SharesMathLib.toSharesDown` (the amount of shares a repayment
+   * burns).
+   *
+   * @param assets The borrow assets to convert.
+   * @param totalAssets The market's total borrow assets.
+   * @param totalShares The market's total borrow shares.
+   * @returns The equivalent borrow shares.
+   * @example
+   * ```ts
+   * import { MathLib, MorphoBlueMath } from "@iris-credit/core-sdk";
+   *
+   * const shares = MorphoBlueMath.toSharesDown(MathLib.WAD, MathLib.WAD, MathLib.WAD * 1_000_000n);
+   * // shares === 1000000000000000000000000n
+   * ```
+   */
+  export const toSharesDown = (assets: BigIntish, totalAssets: BigIntish, totalShares: BigIntish) =>
+    MathLib.mulDivDown(
+      assets,
+      BigInt(totalShares) + VIRTUAL_SHARES,
+      BigInt(totalAssets) + VIRTUAL_ASSETS,
+    );
+
+  /**
+   * Returns the borrow shares equivalent to the given borrow assets, rounding up, matching
+   * Morpho Blue's onchain `SharesMathLib.toSharesUp` (the amount of shares a borrow mints,
+   * rounded against the borrower).
+   *
+   * @param assets The borrow assets to convert.
+   * @param totalAssets The market's total borrow assets.
+   * @param totalShares The market's total borrow shares.
+   * @returns The equivalent borrow shares.
+   * @example
+   * ```ts
+   * import { MathLib, MorphoBlueMath } from "@iris-credit/core-sdk";
+   *
+   * const shares = MorphoBlueMath.toSharesUp(MathLib.WAD, MathLib.WAD, MathLib.WAD * 1_000_000n);
+   * // shares === 1000000000000000000000000n
+   * ```
+   */
+  export const toSharesUp = (assets: BigIntish, totalAssets: BigIntish, totalShares: BigIntish) =>
+    MathLib.mulDivUp(
+      assets,
+      BigInt(totalShares) + VIRTUAL_SHARES,
+      BigInt(totalAssets) + VIRTUAL_ASSETS,
+    );
 }

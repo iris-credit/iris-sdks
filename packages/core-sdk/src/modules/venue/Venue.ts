@@ -1,10 +1,14 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import type { BigIntish } from "../../types.js";
 
 import { IrisCoreErrors } from "../../errors.js";
+import { MathLib } from "../../math/index.js";
+import { PositionUtils } from "../position/PositionUtils.js";
 
 /** Plain input shape for a venue's view of a pod. */
 export interface IVenue {
+  id: bigint;
+  data: Hex;
   pod: Address;
   collateral: bigint;
   debt: bigint;
@@ -25,6 +29,14 @@ export interface IVenue {
  * silently diverges from Iris's onchain results.
  */
 export abstract class Venue implements IVenue {
+  /**
+   * The venue ID.
+   */
+  public readonly id: bigint;
+  /**
+   * The venue-specific market data identifying this venue to its adapter.
+   */
+  public readonly data: Hex;
   /**
    * The pod this view is of.
    */
@@ -61,6 +73,8 @@ export abstract class Venue implements IVenue {
   public lastUpdate: bigint;
 
   constructor(venue: IVenue) {
+    this.id = venue.id;
+    this.data = venue.data;
     this.pod = venue.pod;
     this.collateral = venue.collateral;
     this.debt = venue.debt;
@@ -72,10 +86,25 @@ export abstract class Venue implements IVenue {
   }
 
   /**
+   * Whether the pod's position is healthy on the venue: the debt within the venue's LLTV
+   * limit of the collateral's value, or `undefined` when the price is unknown.
+   */
+  get isHealthy() {
+    const collateralValue = PositionUtils.getCollateralValue(
+      { collateral: this.collateral },
+      { price: this.price },
+    );
+    if (collateralValue == null) return;
+
+    const maxDebt = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
+
+    return this.debt <= maxDebt;
+  }
+
+  /**
    * Returns a new venue accrued up to the given timestamp: the indices projected with the
    * venue's own rate model, the pod's assets grown with them, and the rate model advanced
-   * alongside. A timestamp equal to `lastUpdate` returns an unchanged copy. Leaves this
-   * venue unchanged.
+   * alongside. A timestamp equal to `lastUpdate` returns an unchanged copy.
    *
    * Accruals assume the venue is untouched in between — exact when it is, an estimate
    * otherwise.
@@ -104,6 +133,48 @@ export abstract class Venue implements IVenue {
    * Returns the debt index accrued up to the given timestamp (scaled by RAY).
    */
   public abstract getAccrualDebtIndex(timestamp: BigIntish): bigint;
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral supplied on
+   * top (see `accrueInterest`).
+   *
+   * @param amount - The collateral amount to supply.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public abstract supplyCollateral(amount: bigint, timestamp?: BigIntish): Venue;
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the collateral withdrawn,
+   * keeping the pod's venue position healthy (see `isHealthy`).
+   *
+   * @param amount - The collateral amount to withdraw.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
+   *   the venue position unhealthy.
+   */
+  public abstract withdrawCollateral(amount: bigint, timestamp?: BigIntish): Venue;
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt repaid, both on the
+   * live view and on the venue's own primitives, so the repayment survives a later
+   * accrual.
+   *
+   * @param amount - The debt amount to repay.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InsufficientVenuePosition} When the repayment exceeds the
+   *   pod's debt.
+   */
+  public abstract repay(amount: bigint, timestamp?: BigIntish): Venue;
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt borrowed, both on the
+   * live view and on the venue's own primitives, so the borrow survives a later accrual.
+   *
+   * @param amount - The debt amount to borrow.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public abstract borrow(amount: bigint, timestamp?: BigIntish): Venue;
 
   /**
    * Returns the view fields accrued up to the given timestamp via the accrual accessors,

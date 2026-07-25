@@ -2,12 +2,13 @@ import type { Address, Client, Hex } from "viem";
 import type { BigIntish, FetchParameters } from "../../types.js";
 import type { Venue } from "./Venue.js";
 
+import { zeroAddress } from "viem";
 import { getBlock, getChainId, readContract } from "viem/actions";
 import { irisAbi } from "../../abis/iris.js";
 import { venueAdapterAbi } from "../../abis/venueAdapter.js";
 import { getChainAddresses } from "../../addresses.js";
 import { ChainUtils } from "../../chain.js";
-import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
+import { UnsupportedChainIdError, IrisCoreErrors } from "../../errors.js";
 import { fetchAaveV3Venue } from "./aaveV3/fetch.js";
 import { fetchMorphoBlueVenue } from "./morphoBlue/fetch.js";
 
@@ -45,7 +46,8 @@ export interface FetchVenueArgs {
  * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
  * @returns The hydrated `Venue` entity.
  * @throws {UnsupportedChainIdError} when the chain has no registered addresses.
- * @throws {UnsupportedVenueAdapterError} when the venue adapter has no offline rate model.
+ * @throws {UnsupportedVenueAdapterError} when no venue adapter is registered for the venue
+ *   id or the adapter has no offline rate model.
  */
 export async function fetchVenue(
   { pod, venueId, data, collateralToken, debtToken }: FetchVenueArgs,
@@ -64,6 +66,10 @@ export async function fetchVenue(
     functionName: "venueAdapter",
     args: [BigInt(venueId)],
   });
+  // An unregistered venue id resolves to the zero address.
+  if (adapter === zeroAddress) {
+    throw new IrisCoreErrors.UnsupportedVenueAdapterError(adapter, chainId);
+  }
 
   const [[collateral, debt], [collateralIndex, debtIndex], lltv, price, block] = await Promise.all([
     readContract(client, {
@@ -101,7 +107,9 @@ export async function fetchVenue(
         : { blockTag: parameters.blockTag ?? "latest" },
     ),
   ]);
-  const view = {
+  const venue = {
+    id: BigInt(venueId),
+    data,
     pod,
     collateral,
     debt,
@@ -115,13 +123,13 @@ export async function fetchVenue(
   // Chain addresses are checksum validated by lint.
   switch (adapter) {
     case morphoBlueAdapter:
-      return fetchMorphoBlueVenue(view, { pod, data }, client, { ...parameters, chainId });
+      return fetchMorphoBlueVenue(venue, { pod, data }, client, { ...parameters, chainId });
     case aaveV3Adapter:
-      return fetchAaveV3Venue(view, { collateralToken, debtToken }, client, {
+      return fetchAaveV3Venue(venue, { collateralToken, debtToken }, client, {
         ...parameters,
         chainId,
       });
     default:
-      throw new UnsupportedVenueAdapterError(adapter, chainId);
+      throw new IrisCoreErrors.UnsupportedVenueAdapterError(adapter, chainId);
   }
 }
