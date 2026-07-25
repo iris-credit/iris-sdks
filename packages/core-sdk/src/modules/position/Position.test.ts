@@ -35,6 +35,10 @@ class TestVenue extends Venue {
   public withdrawCollateral(amount: bigint) {
     return new TestVenue({ ...this, collateral: this.collateral - amount });
   }
+
+  public repay(amount: bigint) {
+    return new TestVenue({ ...this, debt: this.debt - amount });
+  }
 }
 
 const loan = {
@@ -356,56 +360,84 @@ describe("AccrualPosition", () => {
     });
   });
 
-  // TODO: re-enable once repay is reworked (accrual composed in).
-  // describe("repay", () => {
-  //   test("should settle the legs and resolve the loan", () => {
-  //     const { position: value, repaid } = accrualPosition.repay();
-  //
-  //     expect(repaid).toBe(MathLib.WAD + 50_000_000_000_000_000n);
-  //     expect(repaid).toBe(accrualPosition.repayAmount);
-  //     expect(value.debt).toBe(0n);
-  //     // No negative net: the bond is untouched.
-  //     expect(value.bond).toBe(position.bond);
-  //     expect(value.bondRequirement).toBe(0n);
-  //     expect(value.fixedLeg).toBe(0n);
-  //     expect(value.floatingLeg).toBe(0n);
-  //     expect(value.surplus).toBe(0n);
-  //     // The original position is left unchanged.
-  //     expect(accrualPosition.debt).toBe(position.debt);
-  //   });
-  // });
+  describe("repay", () => {
+    test("should settle the legs and resolve the loan", () => {
+      const { position: value, repaid } = accrualPosition.repay();
 
-  // TODO: re-enable once liquidate is reworked (accrual composed in).
-  // describe("liquidate", () => {
-  //   test("should throw while the loan is not liquidatable", () => {
-  //     expect(() => accrualPosition.liquidate()).toThrow(IrisCoreErrors.HealthyLoan);
-  //   });
-  //
-  //   test("should seize the priced repay amount and resolve the loan", () => {
-  //     // Repaid 1 (zero legs past maturity) at a 1:1 price with the max lif reached: 1.15.
-  //     const value = new AccrualPosition(
-  //       { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },
-  //       loan,
-  //       venue,
-  //     ).liquidate();
-  //
-  //     expect(value?.repaid).toBe(MathLib.WAD);
-  //     expect(value?.seized).toBe(1_150_000_000_000_000_000n);
-  //     expect(value?.position.collateral).toBe(850_000_000_000_000_000n);
-  //     expect(value?.position.debt).toBe(0n);
-  //     expect(value?.position.bondRequirement).toBe(0n);
-  //   });
-  //
-  //   test("should be undefined when the price is unknown", () => {
-  //     expect(
-  //       new AccrualPosition(
-  //         { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },
-  //         loan,
-  //         new TestVenue({ ...venue, price: undefined }),
-  //       ).liquidate(),
-  //     ).toBeUndefined();
-  //   });
-  // });
+      // Debt 1 plus the full-term fixed leg credited at settlement.
+      expect(repaid).toBe(MathLib.WAD + 50_000_000_000_000_000n);
+      expect(repaid).toBe(accrualPosition.repayAmount);
+      expect(value.debt).toBe(0n);
+      // No negative net: the bond is untouched.
+      expect(value.bond).toBe(position.bond);
+      expect(value.bondRequirement).toBe(0n);
+      expect(value.fixedLeg).toBe(0n);
+      expect(value.floatingLeg).toBe(0n);
+      expect(value.surplus).toBe(0n);
+      // The borrower keeps the collateral, on the position and on the venue.
+      expect(value.collateral).toBe(position.collateral);
+      expect(value.venue.collateral).toBe(venue.collateral);
+      // The venue is repaid in full.
+      expect(value.venue.debt).toBe(0n);
+      // The original position is left unchanged.
+      expect(accrualPosition.debt).toBe(position.debt);
+    });
+
+    test("should slash the bond by the negative net", () => {
+      // Floating 0.06 over the 0.05 settled fixed leg: 0.01 slashed off the 0.1 bond.
+      const { position: value, repaid } = new AccrualPosition(
+        { ...position, floatingLeg: 60_000_000_000_000_000n },
+        loan,
+        venue,
+      ).repay();
+
+      expect(value.bond).toBe(90_000_000_000_000_000n);
+      // The bond absorbs the negative net, so no bad bond is charged to the payer.
+      expect(repaid).toBe(MathLib.WAD + 50_000_000_000_000_000n);
+    });
+
+    test("should throw when the price is unknown", () => {
+      expect(() =>
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, price: undefined })).repay(),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+    });
+  });
+
+  describe("liquidate", () => {
+    const liquidatable = { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n };
+
+    test("should throw while the loan is not liquidatable", () => {
+      expect(() => accrualPosition.liquidate()).toThrow(IrisCoreErrors.HealthyLoan);
+    });
+
+    test("should seize the priced repay amount and resolve the loan", () => {
+      // Repaid 1 (zero legs past maturity) at a 1:1 price with the max lif reached: 1.15.
+      const {
+        position: value,
+        repaid,
+        seized,
+      } = new AccrualPosition(liquidatable, loan, venue).liquidate();
+
+      expect(repaid).toBe(MathLib.WAD);
+      expect(seized).toBe(1_150_000_000_000_000_000n);
+      expect(value.collateral).toBe(850_000_000_000_000_000n);
+      expect(value.debt).toBe(0n);
+      expect(value.bondRequirement).toBe(0n);
+      // The venue is repaid in full and the seized collateral withdrawn from it.
+      expect(value.venue.debt).toBe(0n);
+      expect(value.venue.collateral).toBe(850_000_000_000_000_000n);
+    });
+
+    test("should throw when the price is unknown", () => {
+      expect(() =>
+        new AccrualPosition(
+          liquidatable,
+          loan,
+          new TestVenue({ ...venue, price: undefined }),
+        ).liquidate(),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+    });
+  });
 
   describe("supplyCollateral", () => {
     test("should add the collateral to the position and the venue", () => {

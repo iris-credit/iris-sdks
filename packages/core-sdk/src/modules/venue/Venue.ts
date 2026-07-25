@@ -148,6 +148,16 @@ export abstract class Venue implements IVenue {
   public abstract withdrawCollateral(amount: bigint, timestamp?: BigIntish): Venue;
 
   /**
+   * Returns a new venue accrued to the given timestamp with the debt repaid, both on the
+   * live view and on the venue's own primitives, so the repayment survives a later
+   * accrual.
+   *
+   * @param amount - The debt amount to repay.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public abstract repay(amount: bigint, timestamp?: BigIntish): Venue;
+
+  /**
    * Returns the view fields accrued up to the given timestamp via the accrual accessors,
    * advancing `lastUpdate`. Throws when the timestamp is prior to `lastUpdate`.
    */

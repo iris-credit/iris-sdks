@@ -190,6 +190,27 @@ describe("MorphoBlueVenue", () => {
     expect(funded.position.collateral).toBe(5n);
   });
 
+  test("should repay by burning the pod's and the market's borrow shares", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, debt: MathLib.WAD },
+      market,
+      // All the market's shares: the pod owes the whole borrow.
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    );
+    const repaid = funded.repay(MathLib.WAD / 2n, 1_000n);
+
+    expect(repaid.debt).toBe(MathLib.WAD / 2n);
+    // Half the assets burn half the shares, on the pod and on the market.
+    expect(repaid.position.borrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+    expect(repaid.market.totalBorrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+    expect(repaid.market.totalBorrowAssets).toBe(MathLib.WAD / 2n);
+    // The repayment survives a later accrual: the debt is priced from the burnt shares.
+    expect(repaid.accrueInterest(1_000n).debt).toBe(MathLib.WAD / 2n);
+    // The original position primitives are left untouched.
+    expect(funded.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
+  });
+
   test("should withdraw collateral keeping the venue position healthy", () => {
     const funded = new MorphoBlueVenue(
       { ...view, collateral: 5n, price: ORACLE_PRICE_SCALE },

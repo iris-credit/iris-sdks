@@ -90,6 +90,21 @@ describe("AaveV3Venue", () => {
     );
   });
 
+  test("should repay the debt balance", () => {
+    const funded = new AaveV3Venue(
+      { ...view, debt: MathLib.WAD },
+      venue.collateralReserve,
+      venue.debtReserve,
+    );
+    const repaid = funded.repay(MathLib.WAD / 2n, 1_000n);
+
+    expect(repaid.debt).toBe(MathLib.WAD / 2n);
+    // The repayment survives a later accrual: the scaled debt re-derives from the balance.
+    expect(repaid.accrueInterest(1_000n).debt).toBe(MathLib.WAD / 2n);
+    // The original venue is left unchanged.
+    expect(funded.debt).toBe(MathLib.WAD);
+  });
+
   test("should withdraw collateral keeping the venue position healthy", () => {
     const funded = new AaveV3Venue(
       { ...view, collateral: MathLib.WAD, price: ORACLE_PRICE_SCALE },

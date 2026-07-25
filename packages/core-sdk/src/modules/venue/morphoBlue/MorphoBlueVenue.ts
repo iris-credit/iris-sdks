@@ -184,6 +184,31 @@ export class MorphoBlueVenue extends Venue {
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
    *   the venue position unhealthy.
    */
+  public repay(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    const venue = this.accrueInterest(timestamp);
+    // The pod's debt is priced from its borrow shares, so the repayment burns shares on
+    // both the market and the pod, as Morpho's `repay` does.
+    const shares = MorphoBlueMath.toSharesDown(
+      amount,
+      venue.market.totalBorrowAssets,
+      venue.market.totalBorrowShares,
+    );
+
+    venue.debt -= amount;
+    venue.market.totalBorrowAssets = MathLib.zeroFloorSub(venue.market.totalBorrowAssets, amount);
+    venue.market.totalBorrowShares -= shares;
+
+    return new MorphoBlueVenue(
+      venue,
+      venue.market,
+      {
+        ...venue.position,
+        borrowShares: venue.position.borrowShares - shares,
+      },
+      venue.rateAtTarget,
+    );
+  }
+
   public withdrawCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
     if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
 

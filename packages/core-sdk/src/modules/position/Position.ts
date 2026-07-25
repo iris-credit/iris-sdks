@@ -340,90 +340,95 @@ export class AccrualPosition extends Position {
     );
   }
 
-  // /**
-  //  * Returns a new position with the loan repaid at `lastUpdate` — the fixed leg settled,
-  //  * the bond slashed by the solver's negative net, then the debt, legs and surplus cleared
-  //  * and the loan resolved — alongside the debt assets pulled from the payer, matching
-  //  * Iris's `repay` (see `PositionUtils.getRepayAmount`).
-  //  *
-  //  * Expects accrued legs: call `accrueLegs` (and `rebase`) beforehand, as repayment runs
-  //  * after accrual and rebase onchain.
-  //  */
-  // public repay() {
-  //   const settled = this.settleLegs();
-  //   const bondSlashed = MathLib.min(
-  //     MathLib.zeroFloorSub(settled.floatingLeg, settled.fixedLeg),
-  //     settled.bond,
-  //   );
-  //   const repaid = PositionUtils.getRepayAmount(settled);
+  /**
+   * Returns a new position with the loan repaid — the legs accrued to `timestamp`, rebased
+   * and settled, then the bond slashed by the solver's negative net and the debt, legs and
+   * surplus cleared, resolving the loan — alongside the debt assets pulled from the payer,
+   * matching Iris's `repay` (see `PositionUtils.getRepayAmount`).
+   *
+   * The venue is repaid in full and the surplus withdrawn from it, but keeps the
+   * borrower's collateral: Iris leaves it on the venue for the pod.
+   *
+   * @param timestamp The repayment timestamp (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   */
+  public repay(timestamp?: BigIntish) {
+    if (this.venue.price == null) {
+      throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
+    }
 
-  //   const position = new AccrualPosition(
-  //     {
-  //       ...settled,
-  //       debt: 0n,
-  //       bond: settled.bond - bondSlashed,
-  //       bondRequirement: 0n,
-  //       fixedLeg: 0n,
-  //       floatingLeg: 0n,
-  //       surplus: 0n,
-  //     },
-  //     this._loan,
-  //     this._venue,
-  //   );
+    const position = this.accrueLegs(timestamp).rebase().settleLegs();
+    const repaid = PositionUtils.getRepayAmount(position);
+    const bondSlashed = MathLib.min(
+      MathLib.zeroFloorSub(position.floatingLeg, position.fixedLeg),
+      position.bond,
+    );
+    const venue = position.venue
+      .repay(position.venue.debt, timestamp)
+      .withdrawCollateral(position.surplus, timestamp);
 
-  //   return { position, repaid };
-  // }
+    position.debt = 0n;
+    position.bond -= bondSlashed;
+    position.bondRequirement = 0n;
+    position.fixedLeg = 0n;
+    position.floatingLeg = 0n;
+    position.surplus = 0n;
 
-  // /**
-  //  * Returns a new position with the loan liquidated at `lastUpdate` — the seized
-  //  * collateral removed, the bond slashed by the solver's negative net, then the debt, legs
-  //  * and surplus cleared and the loan resolved — alongside the debt assets pulled from the
-  //  * liquidator and the collateral seized in exchange, matching Iris's `liquidate` (see
-  //  * `PositionUtils.getLiquidationSeizedCollateral`), or `undefined` when the venue price
-  //  * is unknown.
-  //  *
-  //  * Expects accrued legs: call `accrueLegs` (and `rebase`) beforehand, as liquidation runs
-  //  * after accrual and rebase onchain (past the deadline, settlement credits no residual).
-  //  *
-  //  * @throws {IrisCoreErrors.HealthyLoan} When the loan is not liquidatable at `lastUpdate`.
-  //  */
-  // public liquidate() {
-  //   if (!LoanUtils.isLiquidatable(this._loan, this.lastUpdate)) {
-  //     throw new IrisCoreErrors.HealthyLoan(this.pod);
-  //   }
+    return { position: new AccrualPosition(position, position._loan, venue), repaid };
+  }
 
-  //   const settled = this.settleLegs();
-  //   const seized = PositionUtils.getLiquidationSeizedCollateral(
-  //     settled,
-  //     this._loan,
-  //     this._venue,
-  //     this.lastUpdate,
-  //   );
-  //   if (seized == null) return;
+  /**
+   * Returns a new position with the loan liquidated — the legs accrued to `timestamp`,
+   * rebased and settled, then the seized collateral removed, the bond slashed by the
+   * solver's negative net and the debt, legs and surplus cleared, resolving the loan —
+   * alongside the debt assets pulled from the liquidator and the collateral seized in
+   * exchange, matching Iris's `liquidate` (see
+   * `PositionUtils.getLiquidationSeizedCollateral`).
+   *
+   * The venue is repaid in full, and the seized collateral withdrawn from it alongside
+   * the surplus (capped at the venue's collateral).
+   *
+   * @param timestamp The liquidation timestamp (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.HealthyLoan} When the loan is not liquidatable once accrued.
+   */
+  public liquidate(timestamp?: BigIntish) {
+    if (this.venue.price == null) {
+      throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
+    }
 
-  //   const bondSlashed = MathLib.min(
-  //     MathLib.zeroFloorSub(settled.floatingLeg, settled.fixedLeg),
-  //     settled.bond,
-  //   );
-  //   const repaid = PositionUtils.getRepayAmount(settled);
+    const position = this.accrueLegs(timestamp).rebase().settleLegs();
 
-  //   const position = new AccrualPosition(
-  //     {
-  //       ...settled,
-  //       collateral: settled.collateral - seized,
-  //       debt: 0n,
-  //       bond: settled.bond - bondSlashed,
-  //       bondRequirement: 0n,
-  //       fixedLeg: 0n,
-  //       floatingLeg: 0n,
-  //       surplus: 0n,
-  //     },
-  //     this._loan,
-  //     this._venue,
-  //   );
+    if (!position.isLiquidatable) throw new IrisCoreErrors.HealthyLoan(position.pod);
 
-  //   return { position, repaid, seized };
-  // }
+    const repaid = PositionUtils.getRepayAmount(position);
+    const seized = PositionUtils.getLiquidationSeizedCollateral(
+      position,
+      position._loan,
+      position._venue,
+      position.lastUpdate,
+    )!;
+    const bondSlashed = MathLib.min(
+      MathLib.zeroFloorSub(position.floatingLeg, position.fixedLeg),
+      position.bond,
+    );
+    const venue = position.venue
+      .repay(position.venue.debt, timestamp)
+      .withdrawCollateral(
+        MathLib.min(seized + position.surplus, position.venue.collateral),
+        timestamp,
+      );
+
+    position.collateral -= seized;
+    position.debt = 0n;
+    position.bond -= bondSlashed;
+    position.bondRequirement = 0n;
+    position.fixedLeg = 0n;
+    position.floatingLeg = 0n;
+    position.surplus = 0n;
+
+    return { position: new AccrualPosition(position, position._loan, venue), repaid, seized };
+  }
 
   /**
    * Returns a new position with the collateral supplied, matching Iris's
@@ -547,6 +552,8 @@ export class AccrualPosition extends Position {
 
     if (position.isHealthyBond) throw new IrisCoreErrors.HealthyBond(position.pod);
 
+    const venue = position.venue.repay(repaid, timestamp);
+
     position.collateral = 0n;
     position.debt = 0n;
     position.bond -= bondSlashed;
@@ -554,11 +561,7 @@ export class AccrualPosition extends Position {
     position.fixedLeg = 0n;
     position.floatingLeg = 0n;
     position.surplus = 0n;
-    // TODO: syncs the venue's view only — a Morpho venue re-derives its debt from the pod's
-    // borrow shares, so re-accruing the returned venue resurrects the repaid amount. A
-    // venue-level repay (needed by repay/liquidate too) would sync the primitives as well.
-    position.venue.debt -= repaid;
 
-    return { position, seized, repaid };
+    return { position: new AccrualPosition(position, position._loan, venue), seized, repaid };
   }
 }

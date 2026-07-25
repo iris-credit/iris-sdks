@@ -32,6 +32,10 @@ class TestVenue extends Venue {
   public withdrawCollateral(amount: bigint) {
     return new TestVenue({ ...this, collateral: this.collateral - amount });
   }
+
+  public repay(amount: bigint) {
+    return new TestVenue({ ...this, debt: this.debt - amount });
+  }
 }
 
 describe("Venue", () => {
