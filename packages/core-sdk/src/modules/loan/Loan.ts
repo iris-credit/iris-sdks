@@ -5,6 +5,7 @@ import { LoanUtils } from "./LoanUtils.js";
 
 /** Plain input shape for an Iris loan. */
 export interface ILoan {
+  pod: Address;
   borrower: Address;
   solver: Address;
   collateralToken: Address;
@@ -22,6 +23,10 @@ export interface ILoan {
  * Represents an Iris loan.
  */
 export class Loan implements ILoan {
+  /**
+   * The pod holding this loan (identifies it).
+   */
+  public readonly pod: Address;
   /**
    * The user pays the fixed rate and posts the collateral.
    */
@@ -68,6 +73,7 @@ export class Loan implements ILoan {
   public readonly fee: bigint;
 
   constructor(loan: ILoan) {
+    this.pod = loan.pod;
     this.borrower = loan.borrower;
     this.solver = loan.solver;
     this.collateralToken = loan.collateralToken;

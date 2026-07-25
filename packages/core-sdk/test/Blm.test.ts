@@ -2,7 +2,7 @@ import { parseEther } from "viem";
 import { describe, expect } from "vitest";
 import { randomAddress } from "@iris-credit/test";
 import { irisAbi } from "../src/abis/iris.js";
-import { whitelistBlmAbi } from "../src/abis/whitelist-blm.js";
+import { whitelistBlmAbi } from "../src/abis/whitelistBlm.js";
 import { Blm } from "../src/augment/Blm.js";
 import { ChainId, fetchIsWhitelisted, getChainAddresses } from "../src/index.js";
 import { test } from "./setup.js";

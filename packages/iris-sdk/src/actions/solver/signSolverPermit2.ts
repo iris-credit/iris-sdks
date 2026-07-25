@@ -14,7 +14,7 @@ import { validateUserAddress } from "../../helpers/index.js";
 import {
   ChainIdMismatchError,
   InvalidSignatureError,
-  ZeroBondAmountError,
+  NonPositiveInputError,
 } from "../../types/index.js";
 
 /** Parameters for {@link signSolverPermit2}. */
@@ -60,7 +60,7 @@ export interface SignSolverPermit2Params {
  * @param params - See {@link SignSolverPermit2Params}.
  * @returns A deep-frozen {@link SolverPermit2} ready to attach to the RFQ quote response.
  * @throws {ChainIdMismatchError} when `client.chain?.id !== params.chainId`.
- * @throws {ZeroBondAmountError} when `params.bond` is zero.
+ * @throws {NonPositiveInputError} when `params.bond` is not positive.
  * @throws {MissingClientPropertyError} when the client has no `account.address`.
  * @throws {AddressMismatchError} when the client account differs from `params.solver`.
  * @throws {InvalidSignatureError} when EIP-712 verification fails.
@@ -88,7 +88,7 @@ export const signSolverPermit2 = async (
   }
 
   if (bond <= 0n) {
-    throw new ZeroBondAmountError(debtToken);
+    throw new NonPositiveInputError("bond", bond);
   }
 
   const account = client.account;

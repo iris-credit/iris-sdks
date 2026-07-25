@@ -83,9 +83,9 @@ export namespace LoanUtils {
    * Whether the loan is liquidatable at `timestamp`.
    */
   export const isLiquidatable = (
-    loan: { maturity: BigIntish; overduePeriod: BigIntish },
+    { maturity, overduePeriod }: { maturity: BigIntish; overduePeriod: BigIntish },
     timestamp: BigIntish,
-  ) => BigInt(timestamp) >= liquidatableAt(loan);
+  ) => BigInt(timestamp) >= liquidatableAt({ maturity, overduePeriod });
 
   /**
    * Whether `venueId` is allowed by the loan's venue bitmap (bit `venueId` set).
