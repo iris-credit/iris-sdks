@@ -263,7 +263,8 @@ export class AccrualPosition extends Position {
    * prior to the stored one (both revert onchain), and when the timestamp is prior to the
    * venue's last update (no stale venue data — see `Venue.accrueInterest`).
    *
-   * @param timestamp The timestamp at which to accrue interest (in seconds).
+   * @param timestamp The timestamp at which to accrue interest (in seconds). Defaults to
+   *   `lastUpdate`.
    */
   public accrueLegs(timestamp: BigIntish = this.lastUpdate) {
     timestamp = BigInt(timestamp);
@@ -513,15 +514,18 @@ export class AccrualPosition extends Position {
       throw new IrisCoreErrors.InsufficientBond(position.pod);
     }
 
-    return new AccrualPosition(position, position._loan, position._venue);
+    return position;
   }
 
   /**
    * Returns a new position with the bond liquidated — the legs accrued to `timestamp` and
    * rebased, then the bond slashed by the negative net plus the seized incentive and the
-   * position cleared, resolving the loan — alongside the bond assets seized by the
-   * caller, matching Iris's `liquidateBond` (bond liquidation does not settle; see
-   * `PositionUtils.getBondLiquidationSeizedAmount`).
+   * position cleared, resolving the loan — alongside the bond assets seized by the caller
+   * and the debt assets repaid to the venue, matching Iris's `liquidateBond` (bond
+   * liquidation does not settle; see `PositionUtils.getBondLiquidationSeizedAmount`).
+   *
+   * The returned venue is repaid alongside the position, but keeps its collateral: Iris
+   * stops tracking the pod's collateral without withdrawing it from the venue.
    *
    * @param timestamp The liquidation timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
@@ -538,6 +542,8 @@ export class AccrualPosition extends Position {
       MathLib.zeroFloorSub(position.floatingLeg, position.fixedLeg) + seized,
       position.bond,
     );
+    // The slashed bond beyond the liquidator's cut repays the pod's venue debt.
+    const repaid = MathLib.min(bondSlashed - seized, position.venue.debt);
 
     if (position.isHealthyBond) throw new IrisCoreErrors.HealthyBond(position.pod);
 
@@ -548,7 +554,11 @@ export class AccrualPosition extends Position {
     position.fixedLeg = 0n;
     position.floatingLeg = 0n;
     position.surplus = 0n;
+    // TODO: syncs the venue's view only — a Morpho venue re-derives its debt from the pod's
+    // borrow shares, so re-accruing the returned venue resurrects the repaid amount. A
+    // venue-level repay (needed by repay/liquidate too) would sync the primitives as well.
+    position.venue.debt -= repaid;
 
-    return { position, seized };
+    return { position, seized, repaid };
   }
 }

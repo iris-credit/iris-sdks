@@ -428,11 +428,9 @@ describe("AccrualPosition", () => {
 
   describe("withdrawCollateral", () => {
     test("should withdraw up to the withdrawable limit", () => {
-      const value = new AccrualPosition(
-        { ...position, lastUpdate: loan.maturity + loan.overduePeriod },
-        loan,
-        venue,
-      );
+      // At the liquidation deadline the residual is zero: 1 debt / 0.8 lltv = 1.25 reserved.
+      const deadline = loan.maturity + loan.overduePeriod;
+      const value = new AccrualPosition({ ...position, lastUpdate: deadline }, loan, venue);
 
       expect(value.withdrawCollateral(750_000_000_000_000_000n).collateral).toBe(
         1_250_000_000_000_000_000n,
@@ -500,7 +498,11 @@ describe("AccrualPosition", () => {
 
     test("should slash the negative net plus the seized incentive", () => {
       // Drawdown 0.6 > 0.5: seized = 0.1 * 0.05 and slashed = 0.06 + 0.005.
-      const { position: value, seized } = new AccrualPosition(
+      const {
+        position: value,
+        seized,
+        repaid,
+      } = new AccrualPosition(
         { ...position, floatingLeg: 60_000_000_000_000_000n },
         loan,
         venue,
@@ -511,6 +513,22 @@ describe("AccrualPosition", () => {
       expect(value.collateral).toBe(0n);
       expect(value.debt).toBe(0n);
       expect(value.bondRequirement).toBe(0n);
+      // The slashed bond beyond the seized cut repays the venue debt: 0.065 - 0.005.
+      expect(repaid).toBe(60_000_000_000_000_000n);
+      expect(value.venue.debt).toBe(MathLib.WAD - 60_000_000_000_000_000n);
+      // Iris stops tracking the collateral without withdrawing it from the venue.
+      expect(value.venue.collateral).toBe(venue.collateral);
+    });
+
+    test("should cap the repaid amount at the venue debt", () => {
+      const { repaid, position: value } = new AccrualPosition(
+        { ...position, floatingLeg: 60_000_000_000_000_000n },
+        loan,
+        new TestVenue({ ...venue, debt: 10_000_000_000_000_000n }),
+      ).liquidateBond();
+
+      expect(repaid).toBe(10_000_000_000_000_000n);
+      expect(value.venue.debt).toBe(0n);
     });
 
     test("should throw when the price is unknown", () => {
