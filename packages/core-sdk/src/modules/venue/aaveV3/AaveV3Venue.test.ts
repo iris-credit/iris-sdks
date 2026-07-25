@@ -8,6 +8,7 @@ describe("AaveV3Venue", () => {
   // Live view placeholders — these tests exercise the accrual model only.
   const view = {
     id: 1n,
+    data: "0x" as const,
     pod: "0x0000000000000000000000000000000000000001" as const,
     collateral: 0n,
     debt: 0n,
@@ -103,6 +104,18 @@ describe("AaveV3Venue", () => {
     expect(repaid.accrueInterest(1_000n).debt).toBe(MathLib.WAD / 2n);
     // The original venue is left unchanged.
     expect(funded.debt).toBe(MathLib.WAD);
+  });
+
+  test("should borrow onto the debt balance", () => {
+    const funded = new AaveV3Venue(
+      { ...view, debt: MathLib.WAD },
+      venue.collateralReserve,
+      venue.debtReserve,
+    );
+    const borrowed = funded.borrow(MathLib.WAD, 1_000n);
+
+    expect(borrowed.debt).toBe(2n * MathLib.WAD);
+    expect(borrowed.accrueInterest(1_000n).debt).toBe(2n * MathLib.WAD);
   });
 
   test("should withdraw collateral keeping the venue position healthy", () => {

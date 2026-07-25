@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import type { BigIntish } from "../../types.js";
 
 import { IrisCoreErrors } from "../../errors.js";
@@ -8,6 +8,7 @@ import { PositionUtils } from "../position/PositionUtils.js";
 /** Plain input shape for a venue's view of a pod. */
 export interface IVenue {
   id: bigint;
+  data: Hex;
   pod: Address;
   collateral: bigint;
   debt: bigint;
@@ -28,8 +29,14 @@ export interface IVenue {
  * silently diverges from Iris's onchain results.
  */
 export abstract class Venue implements IVenue {
-  /** The venue ID. */
+  /**
+   * The venue ID.
+   */
   public readonly id: bigint;
+  /**
+   * The venue-specific market data identifying this venue to its adapter.
+   */
+  public readonly data: Hex;
   /**
    * The pod this view is of.
    */
@@ -67,6 +74,7 @@ export abstract class Venue implements IVenue {
 
   constructor(venue: IVenue) {
     this.id = venue.id;
+    this.data = venue.data;
     this.pod = venue.pod;
     this.collateral = venue.collateral;
     this.debt = venue.debt;
@@ -156,6 +164,15 @@ export abstract class Venue implements IVenue {
    * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
    */
   public abstract repay(amount: bigint, timestamp?: BigIntish): Venue;
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt borrowed, both on the
+   * live view and on the venue's own primitives, so the borrow survives a later accrual.
+   *
+   * @param amount - The debt amount to borrow.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public abstract borrow(amount: bigint, timestamp?: BigIntish): Venue;
 
   /**
    * Returns the view fields accrued up to the given timestamp via the accrual accessors,

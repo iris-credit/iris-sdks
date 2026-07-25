@@ -110,12 +110,16 @@ export class AccrualPosition extends Position {
   /**
    * @throws {IrisCoreErrors.UnexpectedPod} When the loan or the venue is of a different
    *   pod than the position.
+   * @throws {IrisCoreErrors.UnexpectedVenue} When the venue is not the one the position
+   *   is held on — its indices, rate model and constraints would silently be the wrong
+   *   ones.
    */
   constructor(position: IPosition, loan: ILoan, venue: Venue) {
     super(position);
 
     if (loan.pod !== position.pod) throw new IrisCoreErrors.UnexpectedPod(position.pod, loan.pod);
     if (venue.pod !== position.pod) throw new IrisCoreErrors.UnexpectedPod(position.pod, venue.pod);
+    if (venue.id !== position.venueId) throw new IrisCoreErrors.UnexpectedVenue(position.venueId, venue.id); // prettier-ignore
 
     this._loan = new Loan(loan);
     this._venue = venue;
@@ -328,8 +332,13 @@ export class AccrualPosition extends Position {
    *
    * Expects accrued legs: call `accrueLegs` beforehand, as settlement runs after accrual
    * onchain.
+   *
+   * @dev Kept internal because settlement is not idempotent: the residual is derived from
+   * the debt and the time to maturity, which settling does not change, so a second call
+   * credits it twice. `repay` and `liquidate` settle exactly once, and `repayAmount`
+   * settles a copy.
    */
-  public settleLegs() {
+  protected settleLegs() {
     return new AccrualPosition(
       {
         ...this,
@@ -563,5 +572,48 @@ export class AccrualPosition extends Position {
     position.surplus = 0n;
 
     return { position: new AccrualPosition(position, position._loan, venue), seized, repaid };
+  }
+
+  /**
+   * Returns a new position migrated to the given venue, matching Iris's `refinance`: the
+   * legs are accrued to `timestamp` and rebased, the pod's assets are moved onto the new
+   * venue, and the position re-anchors on the new venue's indices, id and data. The
+   * tracked collateral and debt are unchanged — only the index basis moves.
+   *
+   * The new venue is expected as fetched for the pod, i.e. holding no assets on it yet.
+   *
+   * @param venue The venue to migrate to.
+   * @param timestamp The refinancing timestamp (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} When the current venue price is unknown.
+   * @throws {IrisCoreErrors.LoanResolved} When the loan is already resolved.
+   * @throws {IrisCoreErrors.NotAllowedVenue} When the loan's venue bitmap disallows the
+   *   venue.
+   */
+  public refinance(venue: Venue, timestamp?: BigIntish) {
+    if (this.venue.price == null) {
+      throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
+    }
+    if (this.bondRequirement === 0n) throw new IrisCoreErrors.LoanResolved(this.pod);
+    if (!LoanUtils.isVenueAllowed(this._loan, venue.id)) {
+      throw new IrisCoreErrors.NotAllowedVenue(this.pod, venue.id);
+    }
+
+    const position = this.accrueLegs(timestamp).rebase();
+    // The pod exits its old venue entirely and enters the new one with the same assets.
+    const migrated = venue
+      .supplyCollateral(position.venue.collateral, timestamp)
+      .borrow(position.venue.debt, timestamp);
+
+    return new AccrualPosition(
+      {
+        ...position,
+        collateralIndex: migrated.collateralIndex,
+        debtIndex: migrated.debtIndex,
+        venueId: migrated.id,
+        data: migrated.data,
+      },
+      position._loan,
+      migrated,
+    );
   }
 }

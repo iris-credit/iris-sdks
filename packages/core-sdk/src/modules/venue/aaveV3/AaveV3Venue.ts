@@ -145,7 +145,7 @@ export class AaveV3Venue extends Venue {
 
     venue.collateral += amount;
 
-    return new AaveV3Venue(venue, venue.collateralReserve, venue.debtReserve);
+    return venue;
   }
 
   /**
@@ -158,16 +158,6 @@ export class AaveV3Venue extends Venue {
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
    *   the venue position unhealthy.
    */
-  public repay(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
-    const venue = this.accrueInterest(timestamp);
-
-    // The scaled debt is re-derived from the balance on every accrual, so cutting the
-    // balance is the whole repayment.
-    venue.debt -= amount;
-
-    return new AaveV3Venue(venue, venue.collateralReserve, venue.debtReserve);
-  }
-
   public withdrawCollateral(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
     if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
 
@@ -179,6 +169,38 @@ export class AaveV3Venue extends Venue {
       throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
     }
 
-    return new AaveV3Venue(venue, venue.collateralReserve, venue.debtReserve);
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt repaid.
+   *
+   * @param amount - The debt amount to repay.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public repay(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
+    const venue = this.accrueInterest(timestamp);
+
+    // The scaled debt is re-derived from the balance on every accrual, so cutting the
+    // balance is the whole repayment.
+    venue.debt -= amount;
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt borrowed. Borrows
+   * don't refresh the reserve rates, so repeated operations drift further from onchain
+   * results.
+   *
+   * @param amount - The debt amount to borrow.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public borrow(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
+    const venue = this.accrueInterest(timestamp);
+
+    venue.debt += amount;
+
+    return venue;
   }
 }

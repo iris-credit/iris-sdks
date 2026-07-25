@@ -109,6 +109,7 @@ export async function fetchVenue(
   ]);
   const venue = {
     id: BigInt(venueId),
+    data,
     pod,
     collateral,
     debt,

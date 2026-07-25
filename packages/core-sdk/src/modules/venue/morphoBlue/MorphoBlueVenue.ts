@@ -85,7 +85,8 @@ export class MorphoBlueVenue extends Venue {
         totalBorrowAssets: this.market.totalBorrowAssets + interest,
         lastUpdate: timestamp,
       },
-      this.position,
+      // Copied, so operations mutating the accrued venue never reach back to this one.
+      { ...this.position },
       this.rateAtTarget != null
         ? AdaptiveCurveIrmLib.getBorrowRate(
             this.utilization,
@@ -184,6 +185,28 @@ export class MorphoBlueVenue extends Venue {
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
    *   the venue position unhealthy.
    */
+  public withdrawCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
+    if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
+
+    const venue = this.accrueInterest(timestamp);
+
+    venue.collateral -= amount;
+    venue.position.collateral -= amount;
+
+    if (venue.collateral < 0n || !venue.isHealthy) {
+      throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
+    }
+
+    return venue;
+  }
+
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt repaid, on the live
+   * view and on the market and pod primitives alike.
+   *
+   * @param amount - The debt amount to repay.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
   public repay(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
     const venue = this.accrueInterest(timestamp);
     // The pod's debt is priced from its borrow shares, so the repayment burns shares on
@@ -197,31 +220,33 @@ export class MorphoBlueVenue extends Venue {
     venue.debt -= amount;
     venue.market.totalBorrowAssets = MathLib.zeroFloorSub(venue.market.totalBorrowAssets, amount);
     venue.market.totalBorrowShares -= shares;
+    venue.position.borrowShares -= shares;
 
-    return new MorphoBlueVenue(
-      venue,
-      venue.market,
-      {
-        ...venue.position,
-        borrowShares: venue.position.borrowShares - shares,
-      },
-      venue.rateAtTarget,
-    );
+    return venue;
   }
 
-  public withdrawCollateral(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
-    if (this.price == null) throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.id);
-
+  /**
+   * Returns a new venue accrued to the given timestamp with the debt borrowed, on the live
+   * view and on the market and pod primitives alike.
+   *
+   * @param amount - The debt amount to borrow.
+   * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   */
+  public borrow(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
     const venue = this.accrueInterest(timestamp);
+    // Shares round up against the borrower, as Morpho's `borrow` does.
+    const shares = MorphoBlueMath.toSharesUp(
+      amount,
+      venue.market.totalBorrowAssets,
+      venue.market.totalBorrowShares,
+    );
 
-    venue.collateral -= amount;
-    venue.position = { ...venue.position, collateral: venue.position.collateral - amount };
+    venue.debt += amount;
+    venue.market.totalBorrowAssets += amount;
+    venue.market.totalBorrowShares += shares;
+    venue.position.borrowShares += shares;
 
-    if (venue.collateral < 0n || !venue.isHealthy) {
-      throw new IrisCoreErrors.InsufficientVenueCollateral(venue.pod, venue.id);
-    }
-
-    return new MorphoBlueVenue(venue, venue.market, venue.position, venue.rateAtTarget);
+    return venue;
   }
 
   /**

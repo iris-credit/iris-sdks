@@ -39,6 +39,10 @@ class TestVenue extends Venue {
   public repay(amount: bigint) {
     return new TestVenue({ ...this, debt: this.debt - amount });
   }
+
+  public borrow(amount: bigint) {
+    return new TestVenue({ ...this, debt: this.debt + amount });
+  }
 }
 
 const loan = {
@@ -75,6 +79,7 @@ const position = {
 // Venue assets match the tracked collateral + surplus and debt + floating leg: no rebase.
 const venue = new TestVenue({
   id: 0n,
+  data: "0x",
   pod: "0x0000000000000000000000000000000000000005",
   collateral: 2n * MathLib.WAD,
   debt: MathLib.WAD,
@@ -110,6 +115,12 @@ describe("AccrualPosition", () => {
     );
     expect(() => new AccrualPosition(position, loan, new TestVenue({ ...venue, pod }))).toThrow(
       IrisCoreErrors.UnexpectedPod,
+    );
+  });
+
+  test("should throw when the venue is not the one the position is held on", () => {
+    expect(() => new AccrualPosition(position, loan, new TestVenue({ ...venue, id: 1n }))).toThrow(
+      IrisCoreErrors.UnexpectedVenue,
     );
   });
 
@@ -349,17 +360,6 @@ describe("AccrualPosition", () => {
     });
   });
 
-  describe("settleLegs", () => {
-    test("should credit the residual to the fixed leg", () => {
-      // 10% over the half year to maturity: a 0.05 * debt residual.
-      const settled = accrualPosition.settleLegs();
-
-      expect(settled.fixedLeg).toBe(50_000_000_000_000_000n);
-      // The original position is left unchanged.
-      expect(accrualPosition.fixedLeg).toBe(0n);
-    });
-  });
-
   describe("repay", () => {
     test("should settle the legs and resolve the loan", () => {
       const { position: value, repaid } = accrualPosition.repay();
@@ -435,6 +435,56 @@ describe("AccrualPosition", () => {
           loan,
           new TestVenue({ ...venue, price: undefined }),
         ).liquidate(),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+    });
+  });
+
+  describe("refinance", () => {
+    // A freshly fetched venue holds no assets for the pod until the migration.
+    const target = new TestVenue({
+      ...venue,
+      id: 0n,
+      data: "0xabcd",
+      collateral: 0n,
+      debt: 0n,
+      collateralIndex: 2n * MathLib.WAD,
+      debtIndex: 3n * MathLib.WAD,
+    });
+
+    test("should migrate the assets and re-anchor on the new venue", () => {
+      const value = accrualPosition.refinance(target);
+
+      // The tracked amounts are unchanged: only the index basis moves.
+      expect(value.collateral).toBe(position.collateral);
+      expect(value.debt).toBe(position.debt);
+      expect(value.collateralIndex).toBe(2n * MathLib.WAD);
+      expect(value.debtIndex).toBe(3n * MathLib.WAD);
+      expect(value.venueId).toBe(target.id);
+      expect(value.data).toBe(target.data);
+      // The pod's assets moved onto the new venue.
+      expect(value.venue.collateral).toBe(venue.collateral);
+      expect(value.venue.debt).toBe(venue.debt);
+    });
+
+    test("should throw when the venue is not allowed by the loan", () => {
+      expect(() => accrualPosition.refinance(new TestVenue({ ...target, id: 1n }))).toThrow(
+        IrisCoreErrors.NotAllowedVenue,
+      );
+    });
+
+    test("should throw once the loan is resolved", () => {
+      expect(() =>
+        new AccrualPosition({ ...position, bondRequirement: 0n }, loan, venue).refinance(target),
+      ).toThrow(IrisCoreErrors.LoanResolved);
+    });
+
+    test("should throw when the price is unknown", () => {
+      expect(() =>
+        new AccrualPosition(
+          position,
+          loan,
+          new TestVenue({ ...venue, price: undefined }),
+        ).refinance(target),
       ).toThrow(IrisCoreErrors.UnknownVenuePrice);
     });
   });

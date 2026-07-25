@@ -36,12 +36,17 @@ class TestVenue extends Venue {
   public repay(amount: bigint) {
     return new TestVenue({ ...this, debt: this.debt - amount });
   }
+
+  public borrow(amount: bigint) {
+    return new TestVenue({ ...this, debt: this.debt + amount });
+  }
 }
 
 describe("Venue", () => {
   test("stores all fields", () => {
     const venue = new TestVenue({
       id: 1n,
+      data: "0x",
       pod: "0x0000000000000000000000000000000000000001",
       collateral: 10n * MathLib.WAD,
       debt: 5n * MathLib.WAD,
@@ -66,6 +71,7 @@ describe("Venue", () => {
   test("keeps an unknown price undefined", () => {
     const venue = new TestVenue({
       id: 1n,
+      data: "0x",
       pod: "0x0000000000000000000000000000000000000001",
       collateral: 0n,
       debt: 0n,
@@ -81,6 +87,7 @@ describe("Venue", () => {
   test("should check health against the lltv limit of the collateral value", () => {
     const venue = new TestVenue({
       id: 1n,
+      data: "0x",
       pod: "0x0000000000000000000000000000000000000001",
       collateral: 10n * MathLib.WAD,
       debt: 5n * MathLib.WAD,

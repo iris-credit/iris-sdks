@@ -10,6 +10,7 @@ describe("MorphoBlueVenue", () => {
   // Live view placeholders — these tests exercise the accrual model only.
   const view = {
     id: 1n,
+    data: "0x" as const,
     pod: "0x0000000000000000000000000000000000000001" as const,
     collateral: 0n,
     debt: 0n,
@@ -209,6 +210,20 @@ describe("MorphoBlueVenue", () => {
     expect(repaid.accrueInterest(1_000n).debt).toBe(MathLib.WAD / 2n);
     // The original position primitives are left untouched.
     expect(funded.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
+  });
+
+  test("should borrow by minting the pod's and the market's borrow shares", () => {
+    const borrowed = venue.borrow(MathLib.WAD, 1_000n);
+
+    expect(borrowed.debt).toBe(MathLib.WAD);
+    // The market doubles: the borrow mints as many shares as were already outstanding.
+    expect(borrowed.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
+    expect(borrowed.market.totalBorrowShares).toBe(MathLib.WAD * 2_000_000n);
+    expect(borrowed.market.totalBorrowAssets).toBe(MathLib.WAD * 2n);
+    // The borrow survives a later accrual: the debt is priced from the minted shares.
+    expect(borrowed.accrueInterest(1_000n).debt).toBe(MathLib.WAD);
+    // The original position primitives are left untouched.
+    expect(venue.position.borrowShares).toBe(0n);
   });
 
   test("should withdraw collateral keeping the venue position healthy", () => {

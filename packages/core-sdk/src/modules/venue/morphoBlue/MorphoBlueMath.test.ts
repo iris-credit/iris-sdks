@@ -26,6 +26,13 @@ describe("MorphoBlueMath", () => {
       ).toBe((MathLib.WAD * 1_000_000n) / 2n);
     });
 
+    test("should round down where toSharesUp rounds up", () => {
+      // Accrued interest leaves the market above one asset per share, so 1 wei is worth
+      // less than a share: repaying burns none, borrowing mints one.
+      expect(MorphoBlueMath.toSharesDown(1n, MathLib.WAD * 2n, MathLib.WAD)).toBe(0n);
+      expect(MorphoBlueMath.toSharesUp(1n, MathLib.WAD * 2n, MathLib.WAD)).toBe(1n);
+    });
+
     test("should price against the virtual offsets on an empty market", () => {
       // VIRTUAL_SHARES per VIRTUAL_ASSET on a market with nothing borrowed.
       expect(MorphoBlueMath.toSharesDown(MathLib.WAD, 0n, 0n)).toBe(

@@ -116,6 +116,33 @@ export namespace IrisCoreErrors {
     }
   }
 
+  /** Error thrown when a venue does not match the position's venue id. */
+  export class UnexpectedVenue extends Error {
+    constructor(
+      public readonly expected: bigint,
+      public readonly actual: bigint,
+    ) {
+      super(`unexpected venue: expected ${expected}, got ${actual}`);
+    }
+  }
+
+  /** Error thrown when an operation requires an open loan but the loan is resolved. */
+  export class LoanResolved extends Error {
+    constructor(public readonly pod: Address) {
+      super(`loan resolved for pod ${pod}`);
+    }
+  }
+
+  /** Error thrown when a venue is not allowed by the loan's venue bitmap. */
+  export class NotAllowedVenue extends Error {
+    constructor(
+      public readonly pod: Address,
+      public readonly venueId: bigint,
+    ) {
+      super(`venue ${venueId} is not allowed for pod ${pod}`);
+    }
+  }
+
   /** Error thrown when a bond withdrawal would leave the bond unhealthy. */
   export class InsufficientBond extends Error {
     constructor(public readonly pod: Address) {
