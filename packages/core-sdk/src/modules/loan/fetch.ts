@@ -38,6 +38,7 @@ export async function fetchLoan(pod: Address, client: Client, parameters: FetchP
 
   return new Loan({
     ...loan,
+    pod,
     maturity: BigInt(loan.maturity),
     overduePeriod: BigInt(loan.overduePeriod),
     fixedRate: BigInt(loan.fixedRate) * BP,

@@ -3,7 +3,7 @@ import type { FetchParameters } from "../../types.js";
 
 import { readContract } from "viem/actions";
 import { blmAbi } from "../../abis/blm.js";
-import { whitelistBlmAbi } from "../../abis/whitelist-blm.js";
+import { whitelistBlmAbi } from "../../abis/whitelistBlm.js";
 import { Blm } from "./Blm.js";
 
 /**
