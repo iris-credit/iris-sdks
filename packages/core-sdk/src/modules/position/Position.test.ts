@@ -259,6 +259,9 @@ describe("AccrualPosition", () => {
     expect(accrualPosition.liquidatableAt).toBe(loan.maturity + loan.overduePeriod + 1n);
     expect(accrualPosition.lif).toBe(0n);
     expect(accrualPosition.bondLif).toBe(50_000_000_000_000_000n);
+    // The loan's bitmap allows venue 0 only.
+    expect(accrualPosition.isVenueAllowed(0n)).toBe(true);
+    expect(accrualPosition.isVenueAllowed(1n)).toBe(false);
 
     const overdue = new AccrualPosition(
       { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 900n },

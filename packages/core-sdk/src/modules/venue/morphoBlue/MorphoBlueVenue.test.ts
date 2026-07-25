@@ -212,33 +212,35 @@ describe("MorphoBlueVenue", () => {
     expect(funded.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
   });
 
-  test("should throw when the repayment burns more shares than the pod holds", () => {
+  test("should burn the pod's shares outright on a full repayment", () => {
     // A market above one asset per share: the debt is priced up from the pod's shares, so
-    // converting it back down burns more shares than it holds — even for its whole debt.
+    // converting it back down would burn more shares than it holds.
     const funded = new MorphoBlueVenue(
       view,
       { ...market, totalBorrowAssets: 1_234_567_890_123_456_789n },
       { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
       rateAtTarget,
     ).accrueInterest(1_000n);
+    const repaid = funded.repay(funded.debt, 1_000n);
 
-    expect(() => funded.repay(funded.debt, 1_000n)).toThrow(
-      IrisCoreErrors.InsufficientVenuePosition,
-    );
+    expect(repaid.debt).toBe(0n);
+    expect(repaid.position.borrowShares).toBe(0n);
+    expect(repaid.market.totalBorrowShares).toBe(0n);
   });
 
-  test("should clear the pod's shares when the market prices them exactly", () => {
+  test("should price a partial repayment from the market", () => {
     const funded = new MorphoBlueVenue(
       { ...view, debt: MathLib.WAD },
       market,
       { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
       rateAtTarget,
     );
-    const repaid = funded.repay(MathLib.WAD, 1_000n);
+    const repaid = funded.repay(MathLib.WAD / 2n, 1_000n);
 
-    expect(repaid.debt).toBe(0n);
-    expect(repaid.position.borrowShares).toBe(0n);
-    expect(repaid.market.totalBorrowShares).toBe(0n);
+    // Half the assets burn half the shares, leaving the rest owed.
+    expect(repaid.debt).toBe(MathLib.WAD / 2n);
+    expect(repaid.position.borrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
+    expect(repaid.market.totalBorrowShares).toBe((MathLib.WAD * 1_000_000n) / 2n);
   });
 
   test("should throw when the repayment exceeds the pod's debt", () => {

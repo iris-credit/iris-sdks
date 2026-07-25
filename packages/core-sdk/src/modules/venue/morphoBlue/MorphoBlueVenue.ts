@@ -158,6 +158,37 @@ export class MorphoBlueVenue extends Venue {
   }
 
   /**
+   * Returns the market's total borrow assets accrued up to the given timestamp at the
+   * IRM's average borrow rate. Throws on a timestamp prior to the market's last update.
+   */
+  protected getAccrualTotalBorrowAssets(timestamp: BigIntish): bigint {
+    timestamp = BigInt(timestamp);
+
+    const elapsed = timestamp - this.market.lastUpdate;
+    if (elapsed < 0n) {
+      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
+        "debt",
+        timestamp,
+        this.market.lastUpdate,
+      );
+    }
+
+    const borrowRate =
+      this.rateAtTarget != null
+        ? AdaptiveCurveIrmLib.getBorrowRate(this.utilization, this.rateAtTarget, elapsed)
+            .avgBorrowRate
+        : 0n;
+
+    return (
+      this.market.totalBorrowAssets +
+      MathLib.wMulDown(
+        this.market.totalBorrowAssets,
+        MorphoBlueMath.wTaylorCompounded(borrowRate, elapsed),
+      )
+    );
+  }
+
+  /**
    * Returns a new venue accrued to the given timestamp with the collateral supplied on
    * top — both the live view and the pod's position primitive move (Morpho Blue
    * collateral is idle).
@@ -169,9 +200,9 @@ export class MorphoBlueVenue extends Venue {
     const venue = this.accrueInterest(timestamp);
 
     venue.collateral += amount;
-    venue.position = { ...venue.position, collateral: venue.position.collateral + amount };
+    venue.position.collateral += amount;
 
-    return new MorphoBlueVenue(venue, venue.market, venue.position, venue.rateAtTarget);
+    return venue;
   }
 
   /**
@@ -211,14 +242,17 @@ export class MorphoBlueVenue extends Venue {
    */
   public repay(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
     const venue = this.accrueInterest(timestamp);
-    // The pod's debt is priced from its borrow shares, so the repayment burns shares on
-    // both the market and the pod, as Morpho's `repay` does. That pricing rounds up, so
-    // converting the debt back down can exceed the shares the pod holds: burn at most them.
-    const shares = MorphoBlueMath.toSharesDown(
-      amount,
-      venue.market.totalBorrowAssets,
-      venue.market.totalBorrowShares,
-    );
+    // The repayment burns shares on both the market and the pod, as Morpho's `repay` does.
+    // A full repayment burns the pod's shares outright: its debt was priced up from them,
+    // so converting that back down would burn more than it holds.
+    const shares =
+      amount === venue.debt
+        ? venue.position.borrowShares
+        : MorphoBlueMath.toSharesDown(
+            amount,
+            venue.market.totalBorrowAssets,
+            venue.market.totalBorrowShares,
+          );
 
     venue.debt -= amount;
     venue.market.totalBorrowAssets = MathLib.zeroFloorSub(venue.market.totalBorrowAssets, amount);
@@ -253,37 +287,10 @@ export class MorphoBlueVenue extends Venue {
     venue.market.totalBorrowShares += shares;
     venue.position.borrowShares += shares;
 
-    return venue;
-  }
-
-  /**
-   * Returns the market's total borrow assets accrued up to the given timestamp at the
-   * IRM's average borrow rate. Throws on a timestamp prior to the market's last update.
-   */
-  protected getAccrualTotalBorrowAssets(timestamp: BigIntish): bigint {
-    timestamp = BigInt(timestamp);
-
-    const elapsed = timestamp - this.market.lastUpdate;
-    if (elapsed < 0n) {
-      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
-        "debt",
-        timestamp,
-        this.market.lastUpdate,
-      );
+    if (venue.market.totalBorrowAssets > venue.market.totalSupplyAssets) {
+      throw new IrisCoreErrors.InsufficientVenueLiquidity(venue.pod, venue.id);
     }
 
-    const borrowRate =
-      this.rateAtTarget != null
-        ? AdaptiveCurveIrmLib.getBorrowRate(this.utilization, this.rateAtTarget, elapsed)
-            .avgBorrowRate
-        : 0n;
-
-    return (
-      this.market.totalBorrowAssets +
-      MathLib.wMulDown(
-        this.market.totalBorrowAssets,
-        MorphoBlueMath.wTaylorCompounded(borrowRate, elapsed),
-      )
-    );
+    return venue;
   }
 }

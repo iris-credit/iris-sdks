@@ -265,6 +265,16 @@ export class AccrualPosition extends Position {
   }
 
   /**
+   * Whether the loan's venue bitmap allows the given venue (see
+   * `LoanUtils.isVenueAllowed`).
+   *
+   * @param venueId The venue id to check.
+   */
+  public isVenueAllowed(venueId: BigIntish) {
+    return LoanUtils.isVenueAllowed(this._loan, venueId);
+  }
+
+  /**
    * Returns a new position with the venue projected to the given timestamp with its own
    * rate model (see `Venue.accrueInterest`) and the indices and legs accrued against the
    * projected venue, matching Iris's onchain accrual (see `PositionUtils.getAccruedLegs`).
@@ -613,6 +623,9 @@ export class AccrualPosition extends Position {
       .supplyCollateral(position.venue.collateral, timestamp)
       .borrow(position.venue.debt, timestamp);
 
+    if (migrated.price == null) {
+      throw new IrisCoreErrors.UnknownVenuePrice(migrated.pod, migrated.id);
+    }
     // Entering the venue reverts onchain when its LLTV or price can't carry the debt.
     if (!migrated.isHealthy) {
       throw new IrisCoreErrors.InsufficientVenueCollateral(migrated.pod, migrated.id);

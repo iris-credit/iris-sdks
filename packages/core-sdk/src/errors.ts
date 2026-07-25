@@ -95,6 +95,16 @@ export namespace IrisCoreErrors {
     }
   }
 
+  /** Error thrown when a venue borrow would exceed the market's total supply. */
+  export class InsufficientVenueLiquidity extends Error {
+    constructor(
+      public readonly pod: Address,
+      public readonly venueId: bigint,
+    ) {
+      super(`insufficient venue liquidity for pod ${pod} and venue ${venueId}`);
+    }
+  }
+
   /** Error thrown when a position's loan or venue belongs to a different pod. */
   export class UnexpectedPod extends Error {
     constructor(
