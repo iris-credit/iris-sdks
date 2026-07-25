@@ -206,11 +206,14 @@ export class MorphoBlueVenue extends Venue {
    *
    * @param amount - The debt amount to repay.
    * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InsufficientVenuePosition} When the repayment exceeds the
+   *   pod's debt.
    */
   public repay(amount: bigint, timestamp?: BigIntish): MorphoBlueVenue {
     const venue = this.accrueInterest(timestamp);
     // The pod's debt is priced from its borrow shares, so the repayment burns shares on
-    // both the market and the pod, as Morpho's `repay` does.
+    // both the market and the pod, as Morpho's `repay` does. That pricing rounds up, so
+    // converting the debt back down can exceed the shares the pod holds: burn at most them.
     const shares = MorphoBlueMath.toSharesDown(
       amount,
       venue.market.totalBorrowAssets,
@@ -221,6 +224,10 @@ export class MorphoBlueVenue extends Venue {
     venue.market.totalBorrowAssets = MathLib.zeroFloorSub(venue.market.totalBorrowAssets, amount);
     venue.market.totalBorrowShares -= shares;
     venue.position.borrowShares -= shares;
+
+    if (venue.debt < 0n || venue.position.borrowShares < 0n) {
+      throw new IrisCoreErrors.InsufficientVenuePosition(venue.pod, venue.id);
+    }
 
     return venue;
   }

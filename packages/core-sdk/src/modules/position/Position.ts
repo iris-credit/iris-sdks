@@ -119,7 +119,14 @@ export class AccrualPosition extends Position {
 
     if (loan.pod !== position.pod) throw new IrisCoreErrors.UnexpectedPod(position.pod, loan.pod);
     if (venue.pod !== position.pod) throw new IrisCoreErrors.UnexpectedPod(position.pod, venue.pod);
-    if (venue.id !== position.venueId) throw new IrisCoreErrors.UnexpectedVenue(position.venueId, venue.id); // prettier-ignore
+    if (venue.id !== position.venueId || venue.data !== position.data) {
+      throw new IrisCoreErrors.UnexpectedVenue(
+        position.venueId,
+        venue.id,
+        position.data,
+        venue.data,
+      );
+    }
 
     this._loan = new Loan(loan);
     this._venue = venue;
@@ -588,6 +595,8 @@ export class AccrualPosition extends Position {
    * @throws {IrisCoreErrors.LoanResolved} When the loan is already resolved.
    * @throws {IrisCoreErrors.NotAllowedVenue} When the loan's venue bitmap disallows the
    *   venue.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the venue cannot support the
+   *   migrated position, which Iris rejects when entering it.
    */
   public refinance(venue: Venue, timestamp?: BigIntish) {
     if (this.venue.price == null) {
@@ -603,6 +612,11 @@ export class AccrualPosition extends Position {
     const migrated = venue
       .supplyCollateral(position.venue.collateral, timestamp)
       .borrow(position.venue.debt, timestamp);
+
+    // Entering the venue reverts onchain when its LLTV or price can't carry the debt.
+    if (!migrated.isHealthy) {
+      throw new IrisCoreErrors.InsufficientVenueCollateral(migrated.pod, migrated.id);
+    }
 
     return new AccrualPosition(
       {

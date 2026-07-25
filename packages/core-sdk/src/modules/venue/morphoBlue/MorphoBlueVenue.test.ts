@@ -212,6 +212,48 @@ describe("MorphoBlueVenue", () => {
     expect(funded.position.borrowShares).toBe(MathLib.WAD * 1_000_000n);
   });
 
+  test("should throw when the repayment burns more shares than the pod holds", () => {
+    // A market above one asset per share: the debt is priced up from the pod's shares, so
+    // converting it back down burns more shares than it holds — even for its whole debt.
+    const funded = new MorphoBlueVenue(
+      view,
+      { ...market, totalBorrowAssets: 1_234_567_890_123_456_789n },
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    ).accrueInterest(1_000n);
+
+    expect(() => funded.repay(funded.debt, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenuePosition,
+    );
+  });
+
+  test("should clear the pod's shares when the market prices them exactly", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, debt: MathLib.WAD },
+      market,
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    );
+    const repaid = funded.repay(MathLib.WAD, 1_000n);
+
+    expect(repaid.debt).toBe(0n);
+    expect(repaid.position.borrowShares).toBe(0n);
+    expect(repaid.market.totalBorrowShares).toBe(0n);
+  });
+
+  test("should throw when the repayment exceeds the pod's debt", () => {
+    const funded = new MorphoBlueVenue(
+      { ...view, debt: MathLib.WAD },
+      market,
+      { borrowShares: MathLib.WAD * 1_000_000n, collateral: 0n },
+      rateAtTarget,
+    );
+
+    expect(() => funded.repay(MathLib.WAD * 2n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenuePosition,
+    );
+  });
+
   test("should borrow by minting the pod's and the market's borrow shares", () => {
     const borrowed = venue.borrow(MathLib.WAD, 1_000n);
 

@@ -162,6 +162,8 @@ export abstract class Venue implements IVenue {
    *
    * @param amount - The debt amount to repay.
    * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InsufficientVenuePosition} When the repayment exceeds the
+   *   pod's debt.
    */
   public abstract repay(amount: bigint, timestamp?: BigIntish): Venue;
 

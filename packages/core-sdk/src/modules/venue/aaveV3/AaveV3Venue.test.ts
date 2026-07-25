@@ -104,6 +104,10 @@ describe("AaveV3Venue", () => {
     expect(repaid.accrueInterest(1_000n).debt).toBe(MathLib.WAD / 2n);
     // The original venue is left unchanged.
     expect(funded.debt).toBe(MathLib.WAD);
+    // Repaying past the debt is rejected rather than going negative.
+    expect(() => funded.repay(MathLib.WAD * 2n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenuePosition,
+    );
   });
 
   test("should borrow onto the debt balance", () => {

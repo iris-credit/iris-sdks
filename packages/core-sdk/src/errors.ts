@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 import type { ChainId } from "./chain.js";
 
 /** Error thrown when a chain id has no registered chain addresses or metadata. */
@@ -85,6 +85,16 @@ export namespace IrisCoreErrors {
     }
   }
 
+  /** Error thrown when a venue position is negative. */
+  export class InsufficientVenuePosition extends Error {
+    constructor(
+      public readonly pod: Address,
+      public readonly venueId: bigint,
+    ) {
+      super(`insufficient venue position for pod ${pod} and venue ${venueId}`);
+    }
+  }
+
   /** Error thrown when a position's loan or venue belongs to a different pod. */
   export class UnexpectedPod extends Error {
     constructor(
@@ -116,13 +126,20 @@ export namespace IrisCoreErrors {
     }
   }
 
-  /** Error thrown when a venue does not match the position's venue id. */
+  /**
+   * Error thrown when a venue is not the market the position is held on. The id alone does
+   * not identify it: one adapter serves many markets, told apart by their data.
+   */
   export class UnexpectedVenue extends Error {
     constructor(
-      public readonly expected: bigint,
-      public readonly actual: bigint,
+      public readonly expectedId: bigint,
+      public readonly actualId: bigint,
+      public readonly expectedData: Hex,
+      public readonly actualData: Hex,
     ) {
-      super(`unexpected venue: expected ${expected}, got ${actual}`);
+      super(
+        `unexpected venue: expected ${expectedId} (${expectedData}), got ${actualId} (${actualData})`,
+      );
     }
   }
 

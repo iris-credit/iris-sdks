@@ -150,7 +150,8 @@ export class AaveV3Venue extends Venue {
 
   /**
    * Returns a new venue accrued to the given timestamp with the collateral withdrawn,
-   * keeping the pod's venue position healthy (see `Venue.isHealthy`).
+   * keeping the pod's venue position healthy (see `Venue.isHealthy`). Withdrawals don't
+   * refresh the reserve rates, so repeated operations drift further from onchain results.
    *
    * @param amount - The collateral amount to withdraw.
    * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
@@ -173,10 +174,14 @@ export class AaveV3Venue extends Venue {
   }
 
   /**
-   * Returns a new venue accrued to the given timestamp with the debt repaid.
+   * Returns a new venue accrued to the given timestamp with the debt repaid. Repayments
+   * don't refresh the reserve rates, so repeated operations drift further from onchain
+   * results.
    *
    * @param amount - The debt amount to repay.
    * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InsufficientVenuePosition} When the repayment exceeds the
+   *   pod's debt.
    */
   public repay(amount: bigint, timestamp?: BigIntish): AaveV3Venue {
     const venue = this.accrueInterest(timestamp);
@@ -184,6 +189,10 @@ export class AaveV3Venue extends Venue {
     // The scaled debt is re-derived from the balance on every accrual, so cutting the
     // balance is the whole repayment.
     venue.debt -= amount;
+
+    if (venue.debt < 0n) {
+      throw new IrisCoreErrors.InsufficientVenuePosition(venue.pod, venue.id);
+    }
 
     return venue;
   }

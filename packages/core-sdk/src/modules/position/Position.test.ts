@@ -122,6 +122,10 @@ describe("AccrualPosition", () => {
     expect(() => new AccrualPosition(position, loan, new TestVenue({ ...venue, id: 1n }))).toThrow(
       IrisCoreErrors.UnexpectedVenue,
     );
+    // One adapter serves many markets, so the id alone does not identify the venue.
+    expect(
+      () => new AccrualPosition(position, loan, new TestVenue({ ...venue, data: "0xdead" })),
+    ).toThrow(IrisCoreErrors.UnexpectedVenue);
   });
 
   describe("isHealthy", () => {
@@ -470,6 +474,13 @@ describe("AccrualPosition", () => {
       expect(() => accrualPosition.refinance(new TestVenue({ ...target, id: 1n }))).toThrow(
         IrisCoreErrors.NotAllowedVenue,
       );
+    });
+
+    test("should throw when the venue cannot support the migrated position", () => {
+      // Debt 1 against 2 collateral needs a 0.5 lltv: the target caps borrowing at 0.8.
+      expect(() =>
+        accrualPosition.refinance(new TestVenue({ ...target, lltv: 400_000_000_000_000_000n })),
+      ).toThrow(IrisCoreErrors.InsufficientVenueCollateral);
     });
 
     test("should throw once the loan is resolved", () => {
