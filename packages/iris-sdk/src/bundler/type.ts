@@ -2,7 +2,7 @@ import type { Address, Hex } from "viem";
 import type { Authorization, Quote } from "@iris-credit/core-sdk";
 
 /** Permit2 `PermitDetails` struct, as encoded in the Permit2 `permit` call. */
-export interface PermitDetails {
+export interface Permit2PermitSingleDetails {
   token: Address; // ERC20 token address.
   amount: bigint; // The maximum amount allowed to spend.
   expiration: number; // Timestamp at which a spender's token allowance becomes invalid.
@@ -15,7 +15,7 @@ export interface PermitDetails {
  * never approve an arbitrary spender.
  */
 export interface Permit2PermitSingle {
-  details: PermitDetails;
+  details: Permit2PermitSingleDetails;
   sigDeadline: bigint;
 }
 
