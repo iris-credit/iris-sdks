@@ -53,7 +53,10 @@ export interface IrisWithdrawBondAction extends BaseAction<
 // TODO: complete below iris action interfaces.
 export interface IrisRefinanceAction extends BaseAction<"irisRefinance"> {}
 
-export interface IrisEscapeAction extends BaseAction<"irisEscape"> {}
+export interface IrisEscapeAction extends BaseAction<
+  "irisEscape",
+  { pod: Address; token: Address; transferAmount: bigint; receiver: Address; nativeAmount?: bigint }
+> {}
 
 export interface IrisClaimAction extends BaseAction<
   "irisClaim",
