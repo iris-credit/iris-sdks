@@ -308,8 +308,8 @@ const signature = await walletClient.signTypedData(getQuoteTypedData(ChainId.Eth
 
 - `getQuoteTypedData(chainId, quote)`: a solver's [`Quote`](./src/signatures/quote.ts), consumed by `take`
 - `getAuthorizationTypedData(chainId, authorization)`: an [`Authorization`](./src/signatures/authorization.ts) granting or revoking a manager on Iris
-- `getPermitTypedData(args, chainId, erc2612Nonce)`: an ERC-2612 [permit](./src/signatures/permit.ts)
-- `getPermit2PermitTypedData(args, chainId)`: a [Permit2](./src/signatures/permit2.ts) `PermitSingle`
+- `getPermitTypedData(args, chainId)`: an ERC-2612 [permit](./src/signatures/permit.ts), with the token's `nonce` carried in `args`
+- `getPermit2PermitTypedData(chainId, permitSingle)`: a [Permit2](./src/signatures/permit2.ts) `PermitSingle`
 
 ### Addresses & registries
 
@@ -332,7 +332,7 @@ marketDatas["morphoBlue:cbBTC/USDC"].data; // The enabled abi.encode(MarketParam
 Enablement is append-only onchain, so registry entries can only ever be stale-incomplete — never stale-wrong. Solvers can therefore quote from the registry offline, while the fetchers re-verify mutable state (BLM params, whitelist entries, fee) at runtime.
 
 > [!NOTE]
-> Both sources are compile-time constants — there is no runtime registration — so supporting a new chain means adding an entry to [`addresses.ts`](./src/addresses.ts) and [`registries.ts`](./src/registries.ts). Unsupported chain ids throw `UnsupportedChainIdError` at the fetcher boundary; narrow untrusted ids with `ChainUtils.isSupportedChainId`.
+> Both sources are compile-time constants — there is no runtime registration — so supporting a new chain means adding an entry to [`addresses.ts`](./src/addresses.ts) and [`registries.ts`](./src/registries.ts). Fetchers that resolve a contract from the registry throw `UnsupportedChainIdError` on an unknown chain; those taking an explicit address (`fetchBlm`, `fetchIsWhitelisted`) never read the registry and so never throw it. Narrow untrusted ids with `ChainUtils.isSupportedChainId`.
 
 ## Development
 
