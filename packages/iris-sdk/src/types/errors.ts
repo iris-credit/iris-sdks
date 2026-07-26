@@ -224,6 +224,23 @@ export class WithdrawExceedsWithdrawableBondError extends Error {
   }
 }
 
+/**
+ * Thrown when a claim exceeds the account's claimable balance for the token — `Iris.claim` debits
+ * that balance directly, so an oversized claim reverts with a bare arithmetic underflow.
+ */
+export class ClaimExceedsClaimableError extends Error {
+  constructor(params: {
+    readonly token: Address;
+    readonly account: Address;
+    readonly amount: bigint;
+    readonly claimable: bigint;
+  }) {
+    super(
+      `Claim amount ${params.amount} exceeds the claimable ${params.claimable} of account "${params.account}" for token "${params.token}". Claim at most the claimable balance.`,
+    );
+  }
+}
+
 /** Thrown when the solver's Permit2 payload was signed for a token other than the quote's debt token. */
 export class SolverPermit2AssetMismatchError extends Error {
   constructor(debtToken: Address, signedToken: Address) {

@@ -6,6 +6,7 @@ import type {
   DepositAmountArgs,
   ERC20ApprovalAction,
   IrisAuthorizationAction,
+  IrisClaimAction,
   IrisSupplyBondAction,
   IrisSupplyCollateralAction,
   IrisTakeAction,
@@ -21,6 +22,7 @@ import { isAddressEqual, zeroAddress } from "viem";
 import {
   BP,
   fetchAccrualPosition,
+  fetchClaimable,
   fetchLoan,
   MathLib,
   MAX_DURATION,
@@ -31,6 +33,7 @@ import {
   PositionUtils,
 } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
+import { irisClaim } from "../actions/iris/claim.js";
 import { irisSupplyBond } from "../actions/iris/supplyBond.js";
 import { irisSupplyCollateral } from "../actions/iris/supplyCollateral.js";
 import { irisTake } from "../actions/iris/take.js";
@@ -44,6 +47,7 @@ import {
   validateUserAddress,
 } from "../helpers/index.js";
 import {
+  ClaimExceedsClaimableError,
   LoanNotCreatedError,
   NativeAmountExceedsCollateralError,
   NegativeInputError,
@@ -82,6 +86,20 @@ export interface IrisActions {
    * @returns The hydrated `AccrualPosition`.
    */
   getPositionData: (pod: Address, parameters?: FetchParameters) => Promise<AccrualPosition>;
+
+  /**
+   * Fetches the balance an account can claim from Iris for one token.
+   *
+   * @param account - Account owning the claimable balance.
+   * @param token - Token the balance is denominated in.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The claimable balance, the `claimableData` the claim flow takes.
+   */
+  getClaimableData: (
+    account: Address,
+    token: Address,
+    parameters?: FetchParameters,
+  ) => Promise<bigint>;
 
   /**
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
@@ -197,6 +215,34 @@ export interface IrisActions {
   }) => {
     buildTx: () => Readonly<Transaction<IrisWithdrawBondAction>>;
   };
+
+  /**
+   * Prepares a claim transaction drawing down `userAddress`'s claimable Iris balance.
+   *
+   * Takes the pre-fetched `claimableData` for the account and token — from
+   * {@link Iris.getClaimableData} — and validates the claim against it, so an oversized claim
+   * surfaces as a typed error instead of the bare arithmetic underflow `Iris.claim` reverts with.
+   * `amount` defaults to the whole balance: `Iris.claim` debits an exact amount with no max-sweep
+   * sentinel, so claiming everything is otherwise a manual round-trip through the same value.
+   *
+   * Direct call to `Iris.claim`, claiming to `userAddress`. The caller (`msg.sender`) must be
+   * `userAddress` or be authorized by them on Iris. Reach for the `irisClaim` action directly to
+   * claim on another account's behalf or to send the tokens elsewhere.
+   *
+   * No `getRequirements` — no token approval or Iris authorization is needed (the tokens flow out
+   * of Iris, not in).
+   *
+   * @param params - Claim parameters.
+   * @returns Object with `buildTx`.
+   */
+  claim: (params: {
+    userAddress: Address;
+    token: Address;
+    claimableData: bigint;
+    amount?: bigint;
+  }) => {
+    buildTx: () => Readonly<Transaction<IrisClaimAction>>;
+  };
 }
 
 /** Chain-scoped Iris entity: validates flows and returns lazy transaction handles. */
@@ -237,6 +283,27 @@ export class Iris implements IrisActions {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
     return fetchAccrualPosition(pod, this.client.viemClient, {
+      ...parameters,
+      chainId: this.chainId,
+    });
+  }
+
+  /**
+   * Fetches the balance an account can claim from Iris for one token.
+   *
+   * Settlement credits the solver's net and surplus, and the fee recipient's fees, to this balance.
+   *
+   * @param account - Account owning the claimable balance.
+   * @param token - Token the balance is denominated in.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The claimable balance.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {UnsupportedChainIdError} from `fetchClaimable` when the chain is not supported.
+   */
+  async getClaimableData(account: Address, token: Address, parameters?: FetchParameters) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    return fetchClaimable(account, token, this.client.viemClient, {
       ...parameters,
       chainId: this.chainId,
     });
@@ -595,6 +662,59 @@ export class Iris implements IrisActions {
         irisWithdrawBond({
           chainId: this.chainId,
           args: { pod, amount, receiver: userAddress },
+        }),
+    };
+  }
+
+  /**
+   * Prepares a claim transaction drawing down `userAddress`'s claimable Iris balance.
+   *
+   * Validates the claim against the pre-fetched `claimableData`: `Iris.claim` debits the balance
+   * directly, so a claim above it reverts with a bare arithmetic underflow rather than a named
+   * error.
+   *
+   * @param params.userAddress - The account sending the transaction, whose claimable balance is
+   *   drawn down and which receives the tokens; must be that account or be authorized by it on
+   *   Iris.
+   * @param params.token - Token the claimable balance is denominated in.
+   * @param params.claimableData - Pre-fetched claimable balance for `userAddress` and `token`,
+   *   from {@link Iris.getClaimableData}.
+   * @param params.amount - The amount to claim. Defaults to `claimableData` — the whole balance.
+   * @returns Object with `buildTx`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {NonPositiveInputError} when `amount` is not positive — including a defaulted `amount`
+   *   on an account with nothing to claim.
+   * @throws {ClaimExceedsClaimableError} when `amount` exceeds `claimableData`.
+   */
+  claim({
+    userAddress,
+    token,
+    claimableData,
+    amount = claimableData,
+  }: {
+    userAddress: Address;
+    token: Address;
+    claimableData: bigint;
+    amount?: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    if (amount <= 0n) throw new NonPositiveInputError("amount", amount);
+
+    if (amount > claimableData) {
+      throw new ClaimExceedsClaimableError({
+        token,
+        account: userAddress,
+        amount,
+        claimable: claimableData,
+      });
+    }
+
+    return {
+      buildTx: () =>
+        irisClaim({
+          chainId: this.chainId,
+          args: { token, amount, onBehalf: userAddress, receiver: userAddress },
         }),
     };
   }
