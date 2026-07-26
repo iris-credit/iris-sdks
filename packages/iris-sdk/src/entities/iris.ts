@@ -12,6 +12,7 @@ import type {
   IrisSupplyCollateralAction,
   IrisTakeAction,
   IrisWithdrawBondAction,
+  IrisWithdrawCollateralAction,
   PermitRequirementSignature,
   Requirement,
   RequirementSignature,
@@ -25,6 +26,7 @@ import {
   fetchAccrualPosition,
   fetchClaimable,
   fetchLoan,
+  IrisCoreErrors,
   MathLib,
   MAX_DURATION,
   MAX_FIXED_RATE,
@@ -40,6 +42,7 @@ import { irisSupplyBond } from "../actions/iris/supplyBond.js";
 import { irisSupplyCollateral } from "../actions/iris/supplyCollateral.js";
 import { irisTake } from "../actions/iris/take.js";
 import { irisWithdrawBond } from "../actions/iris/withdrawBond.js";
+import { irisWithdrawCollateral } from "../actions/iris/withdrawCollateral.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
 import {
@@ -64,6 +67,7 @@ import {
   SolverPermit2ExpiredError,
   VenueNotSupportedError,
   WithdrawExceedsWithdrawableBondError,
+  WithdrawExceedsWithdrawableCollateralError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -200,6 +204,36 @@ export interface IrisActions {
     }) => Promise<
       (Readonly<Transaction<ERC20ApprovalAction>> | Requirement<PermitRequirementSignature>)[]
     >;
+  };
+
+  /**
+   * Prepares a withdraw-collateral transaction withdrawing from an existing Iris loan's collateral.
+   *
+   * Takes the pre-fetched `positionData` for the pod — the health Iris re-checks is derived from
+   * the accrued legs and the venue's price and LLTV, so the loan alone does not carry it — and
+   * validates that the remaining collateral clears both Iris's check and the venue's own, which
+   * Iris's does not imply.
+   *
+   * The ceilings are measured on `positionData` as given, so accrue and rebase it (see
+   * `AccrualPosition.accrueLegs` / `rebase`) to the timestamp the withdrawal targets.
+   *
+   * Direct call to `Iris.withdrawCollateral`, withdrawing to `userAddress`. The caller
+   * (`msg.sender`) must be the loan's borrower or be authorized by them on Iris. Reach for the
+   * `irisWithdrawCollateral` action directly to send the collateral somewhere other than
+   * `userAddress`.
+   *
+   * No `getRequirements` — no token approval or Iris authorization is needed (the collateral
+   * flows out of the venue, not in).
+   *
+   * @param params - Withdraw-collateral parameters.
+   * @returns Object with `buildTx`.
+   */
+  withdrawCollateral: (params: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    amount: bigint;
+  }) => {
+    buildTx: () => Readonly<Transaction<IrisWithdrawCollateralAction>>;
   };
 
   /**
@@ -663,6 +697,76 @@ export class Iris implements IrisActions {
           },
         });
       },
+    };
+  }
+
+  /**
+   * Prepares a withdraw-collateral transaction withdrawing from an existing Iris loan's collateral.
+   *
+   * Validates the withdrawal against the pre-fetched `positionData`: it may not exceed the
+   * collateral withdrawable under both Iris's check and the venue's own (see
+   * `PositionUtils.getWithdrawableCollateral`), measured against the venue's LLTV minus
+   * `DEFAULT_LLTV_BUFFER` so a withdrawal sized to the fetched state still clears them once it
+   * lands — and, for the venue's, so it does not land one accrual away from being liquidated
+   * there.
+   *
+   * @param params.userAddress - The account sending the transaction and receiving the collateral;
+   *   must be the loan's borrower or be authorized by them on Iris.
+   * @param params.positionData - Pre-fetched position for the pod, from
+   *   {@link Iris.getPositionData}, accrued and rebased by the caller to the timestamp the
+   *   withdrawal targets; both ceilings are measured on it as given.
+   * @param params.amount - The collateral to withdraw.
+   * @returns Object with `buildTx`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
+   * @throws {NonPositiveInputError} when `amount` is not positive.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} when the venue price is unknown, which leaves both
+   *   ceilings underivable.
+   * @throws {WithdrawExceedsWithdrawableCollateralError} when `amount` would leave the position
+   *   unhealthy.
+   */
+  withdrawCollateral({
+    userAddress,
+    positionData,
+    amount,
+  }: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    amount: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+    validateUserAddress(userAddress, positionData.loan.borrower);
+
+    if (amount <= 0n) throw new NonPositiveInputError("amount", amount);
+
+    const { pod, lastUpdate, venue } = positionData;
+
+    if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
+
+    const withdrawable = PositionUtils.getWithdrawableCollateral(
+      positionData,
+      positionData.loan,
+      { ...venue, lltv: MathLib.zeroFloorSub(venue.lltv, DEFAULT_LLTV_BUFFER) },
+      lastUpdate,
+    );
+
+    if (withdrawable == null) throw new IrisCoreErrors.UnknownVenuePrice(pod, venue.id);
+
+    if (amount > withdrawable) {
+      throw new WithdrawExceedsWithdrawableCollateralError({
+        pod,
+        withdrawAmount: amount,
+        withdrawable,
+      });
+    }
+
+    return {
+      buildTx: () =>
+        irisWithdrawCollateral({
+          chainId: this.chainId,
+          args: { pod, amount, receiver: userAddress },
+        }),
     };
   }
 

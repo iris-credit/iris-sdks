@@ -373,10 +373,13 @@ export namespace PositionUtils {
    * Mirror of Iris's `withdrawCollateral` limit: returns the maximum collateral
    * withdrawable while keeping the loan collateralized through the liquidation deadline.
    *
-   * The withdrawal check reserves the worst-case payoff (see `getRequiredCollateralValue`)
-   * against the venue LLTV limit on the remaining collateral's value. Returns `undefined`
-   * when the collateral price is unknown, zero once the worst-case payoff reaches the LLTV
-   * limit of the collateral's value (notably on a zero price or LLTV), and the full
+   * Two limits bind, and the lower one is returned. Iris's own check reserves the worst-case
+   * payoff (see `getRequiredCollateralValue`) against the venue LLTV limit on the remaining
+   * collateral's value. The venue's, which the withdrawal exits through, does not follow from it:
+   * Iris never reserves the floating leg, so a solver deep enough underwater makes it the tighter.
+   *
+   * Returns `undefined` when the collateral price is unknown, zero once either payoff reaches the
+   * LLTV limit of its collateral's value (notably on a zero price or LLTV), and the full
    * collateral when nothing is owed.
    *
    * Iris accepts `withdrawCollateral(pod, amount, receiver)` iff `amount` does not exceed
@@ -391,6 +394,8 @@ export namespace PositionUtils {
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
    * @param loan.overdueRate The loan's annual overdue rate, added on top of the fixed rate past maturity (scaled by WAD).
+   * @param venue.collateral The pod's collateral on the venue, from `IVenueAdapter.positionAssets`.
+   * @param venue.debt The pod's debt on the venue, from `IVenueAdapter.positionAssets`.
    * @param venue.price The collateral price quoted in debt assets, from `IVenueAdapter.price` (scaled by ORACLE_PRICE_SCALE), or `undefined` when unknown.
    * @param venue.lltv The venue's LLTV for the loan's token pair, from `IVenueAdapter.lltv` (scaled by WAD).
    * @param timestamp The withdrawal timestamp (in seconds).
@@ -402,7 +407,12 @@ export namespace PositionUtils {
    * const withdrawable = PositionUtils.getWithdrawableCollateral(
    *   { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n },
    *   { maturity: 1_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
-   *   { price: ORACLE_PRICE_SCALE, lltv: 50_0000000000000000n },
+   *   {
+   *     collateral: 5n * MathLib.WAD,
+   *     debt: 2n * MathLib.WAD,
+   *     price: ORACLE_PRICE_SCALE,
+   *     lltv: 50_0000000000000000n,
+   *   },
    *   1_086_400n,
    * );
    * // withdrawable === 1000000000000000000n
@@ -416,32 +426,48 @@ export namespace PositionUtils {
       fixedRate: BigIntish;
       overdueRate: BigIntish;
     },
-    { price, lltv }: { price?: BigIntish; lltv: BigIntish },
+    venue: { collateral: BigIntish; debt: BigIntish; price?: BigIntish; lltv: BigIntish },
     timestamp: BigIntish,
   ) => {
     position.collateral = BigInt(position.collateral);
+    venue.collateral = BigInt(venue.collateral);
+    venue.debt = BigInt(venue.debt);
 
-    if (price == null) return;
+    if (venue.price == null) return;
 
-    price = BigInt(price);
-    lltv = BigInt(lltv);
+    const price = BigInt(venue.price);
+    const lltv = BigInt(venue.lltv);
 
+    // The venue holds the solver's surplus on top of the collateral Iris tracks for the borrower.
     const maxDebt = MathLib.mulDivDown(
       getCollateralValue({ collateral: position.collateral }, { price })!,
       lltv,
       MathLib.WAD,
     );
+    const maxVenueDebt = MathLib.mulDivDown(
+      getCollateralValue({ collateral: venue.collateral }, { price })!,
+      lltv,
+      MathLib.WAD,
+    );
     const requiredCollateralValue = getRequiredCollateralValue(position, loan, timestamp);
 
-    if (requiredCollateralValue >= maxDebt) return 0n;
+    if (requiredCollateralValue >= maxDebt || venue.debt >= maxVenueDebt) return 0n;
 
     const requiredCollateral = MathLib.mulDivUp(
       MathLib.mulDivUp(requiredCollateralValue, MathLib.WAD, lltv),
       ORACLE_PRICE_SCALE,
       price,
     );
+    const requiredVenueCollateral = MathLib.mulDivUp(
+      MathLib.mulDivUp(venue.debt, MathLib.WAD, lltv),
+      ORACLE_PRICE_SCALE,
+      price,
+    );
 
-    return MathLib.zeroFloorSub(position.collateral, requiredCollateral);
+    return MathLib.min(
+      MathLib.zeroFloorSub(position.collateral, requiredCollateral),
+      MathLib.zeroFloorSub(venue.collateral, requiredVenueCollateral),
+    );
   };
 
   /**

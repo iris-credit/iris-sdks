@@ -5,3 +5,4 @@ export * from "./supplyBond.js";
 export * from "./supplyCollateral.js";
 export * from "./take.js";
 export * from "./withdrawBond.js";
+export * from "./withdrawCollateral.js";

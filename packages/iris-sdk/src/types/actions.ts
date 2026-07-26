@@ -35,8 +35,10 @@ export interface IrisSupplyCollateralAction extends BaseAction<
   { pod: Address; token: Address; amount: bigint; nativeAmount?: bigint }
 > {}
 
-// TODO: complete below iris action interfaces.
-export interface IrisWithdrawCollateralAction extends BaseAction<"irisWithdrawCollateral"> {}
+export interface IrisWithdrawCollateralAction extends BaseAction<
+  "irisWithdrawCollateral",
+  { pod: Address; amount: bigint; receiver: Address }
+> {}
 
 export interface IrisSupplyBondAction extends BaseAction<
   "irisSupplyBond",
@@ -48,6 +50,7 @@ export interface IrisWithdrawBondAction extends BaseAction<
   { pod: Address; amount: bigint; receiver: Address }
 > {}
 
+// TODO: complete below iris action interfaces.
 export interface IrisRefinanceAction extends BaseAction<"irisRefinance"> {}
 
 export interface IrisEscapeAction extends BaseAction<"irisEscape"> {}
