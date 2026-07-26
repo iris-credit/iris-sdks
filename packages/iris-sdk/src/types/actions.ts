@@ -28,11 +28,17 @@ export interface IrisTakeAction extends BaseAction<
 // TODO: complete below iris action interfaces.
 export interface IrisRepayAction extends BaseAction<"irisRepay"> {}
 
-export interface IrisSupplyCollateralAction extends BaseAction<"irisSupplyCollateral"> {}
+export interface IrisSupplyCollateralAction extends BaseAction<
+  "irisSupplyCollateral",
+  { pod: Address; token: Address; amount: bigint; nativeAmount?: bigint }
+> {}
 
 export interface IrisWithdrawCollateralAction extends BaseAction<"irisWithdrawCollateral"> {}
 
-export interface IrisSupplyBondAction extends BaseAction<"irisSupplyBond"> {}
+export interface IrisSupplyBondAction extends BaseAction<
+  "irisSupplyBond",
+  { pod: Address; token: Address; amount: bigint; nativeAmount?: bigint }
+> {}
 
 export interface IrisWithdrawBondAction extends BaseAction<"irisWithdrawBond"> {}
 
@@ -69,6 +75,17 @@ export interface Transaction<TAction extends BaseAction = TransactionAction> {
   readonly data: Hex;
   readonly action: TAction;
 }
+
+/**
+ * Enforces that at least one funding source is provided on an additive deposit.
+ *
+ * - `amount` alone: standard ERC-20 deposit.
+ * - `nativeAmount` alone: pure native-wrap deposit (the funded token must be wNative).
+ * - Both: mixed deposit (ERC-20 transfer + native wrap); the deposited total is their sum.
+ */
+export type DepositAmountArgs =
+  | { amount: bigint; nativeAmount?: bigint }
+  | { nativeAmount: bigint; amount?: bigint };
 
 export interface PermitArgs {
   owner: Address;

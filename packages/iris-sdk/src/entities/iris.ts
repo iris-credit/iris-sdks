@@ -1,10 +1,13 @@
 import type { Address, Hex } from "viem";
-import type { ChainId, Quote } from "@iris-credit/core-sdk";
+import type { AccrualPosition, ChainId, FetchParameters, Loan, Quote } from "@iris-credit/core-sdk";
 import type { IrisClientType } from "../types/client.js";
 import type {
   AuthorizationRequirementSignature,
+  DepositAmountArgs,
   ERC20ApprovalAction,
   IrisAuthorizationAction,
+  IrisSupplyBondAction,
+  IrisSupplyCollateralAction,
   IrisTakeAction,
   PermitRequirementSignature,
   Requirement,
@@ -16,6 +19,8 @@ import type {
 import { isAddressEqual, zeroAddress } from "viem";
 import {
   BP,
+  fetchAccrualPosition,
+  fetchLoan,
   MAX_DURATION,
   MAX_FIXED_RATE,
   MAX_OVERDUE_PERIOD,
@@ -23,11 +28,14 @@ import {
   MIN_DURATION,
 } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
+import { irisSupplyBond } from "../actions/iris/supplyBond.js";
+import { irisSupplyCollateral } from "../actions/iris/supplyCollateral.js";
 import { irisTake } from "../actions/iris/take.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
 import { validateChainId, validateNativeAsset, validateUserAddress } from "../helpers/index.js";
 import {
+  LoanNotCreatedError,
   NativeAmountExceedsCollateralError,
   NegativeInputError,
   NonPositiveInputError,
@@ -44,6 +52,27 @@ import {
 
 /** Flow methods exposed by the chain-scoped Iris entity. */
 export interface IrisActions {
+  /**
+   * Fetches the pod's loan — its parties, tokens and terms — in a single read.
+   *
+   * @param pod - Pod identifying the loan.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The hydrated `Loan`, the `loanData` the supply flows take.
+   */
+  getLoanData: (pod: Address, parameters?: FetchParameters) => Promise<Loan>;
+
+  /**
+   * Fetches the pod's position with its loan and venue, ready for accrual math.
+   *
+   * Reads the whole venue state, so prefer `getLoanData` for flows that only need the loan; a
+   * caller holding an `AccrualPosition` can hand its `loan` to those flows instead of re-fetching.
+   *
+   * @param pod - Pod identifying the loan.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The hydrated `AccrualPosition`.
+   */
+  getPositionData: (pod: Address, parameters?: FetchParameters) => Promise<AccrualPosition>;
+
   /**
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
    *
@@ -89,6 +118,50 @@ export interface IrisActions {
       )[]
     >;
   };
+
+  /**
+   * Prepares a supply-collateral transaction topping up an existing Iris loan's collateral.
+   *
+   * Takes the pre-fetched `loanData` for the pod and supplies its collateral token.
+   * Because the supply is permissionless, `getRequirements` resolves only the collateral-token
+   * approval `Transaction` / permit / Permit2 signature `Requirement` for `GeneralAdapter1`,
+   * funded by `userAddress` — no Iris authorization.
+   *
+   * @param params - Supply-collateral parameters.
+   * @returns Object with `buildTx` and `getRequirements`.
+   */
+  supplyCollateral: (params: { userAddress: Address; loanData: Loan } & DepositAmountArgs) => {
+    buildTx: (
+      signatures?: readonly RequirementSignature[],
+    ) => Readonly<Transaction<IrisSupplyCollateralAction>>;
+    getRequirements: (params?: {
+      useSimplePermit?: boolean;
+    }) => Promise<
+      (Readonly<Transaction<ERC20ApprovalAction>> | Requirement<PermitRequirementSignature>)[]
+    >;
+  };
+
+  /**
+   * Prepares a supply-bond transaction topping up an existing Iris loan's solver bond.
+   *
+   * Takes the pre-fetched `loanData` for the pod and supplies its debt token — the
+   * asset the bond is denominated in. Because the supply is permissionless, `getRequirements`
+   * resolves only the debt-token approval `Transaction` / permit / Permit2 signature
+   * `Requirement` for `GeneralAdapter1`, funded by `userAddress` — no Iris authorization.
+   *
+   * @param params - Supply-bond parameters.
+   * @returns Object with `buildTx` and `getRequirements`.
+   */
+  supplyBond: (params: { userAddress: Address; loanData: Loan } & DepositAmountArgs) => {
+    buildTx: (
+      signatures?: readonly RequirementSignature[],
+    ) => Readonly<Transaction<IrisSupplyBondAction>>;
+    getRequirements: (params?: {
+      useSimplePermit?: boolean;
+    }) => Promise<
+      (Readonly<Transaction<ERC20ApprovalAction>> | Requirement<PermitRequirementSignature>)[]
+    >;
+  };
 }
 
 /** Chain-scoped Iris entity: validates flows and returns lazy transaction handles. */
@@ -97,6 +170,42 @@ export class Iris implements IrisActions {
     private readonly client: IrisClientType,
     private readonly chainId: ChainId,
   ) {}
+
+  /**
+   * Fetches the pod's loan — its parties, tokens and terms — in a single read.
+   *
+   * @param pod - Pod identifying the loan.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The hydrated `Loan`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {UnsupportedChainIdError} from `fetchLoan` when the chain is not supported.
+   */
+  async getLoanData(pod: Address, parameters?: FetchParameters) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    return fetchLoan(pod, this.client.viemClient, { ...parameters, chainId: this.chainId });
+  }
+
+  /**
+   * Fetches the pod's position with its loan and venue, ready for accrual math.
+   *
+   * Reads the whole venue state, so prefer {@link Iris.getLoanData} for flows that only need the
+   * loan; a caller holding an `AccrualPosition` can hand its `loan` to those flows instead.
+   *
+   * @param pod - Pod identifying the loan.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The hydrated `AccrualPosition`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {UnsupportedChainIdError} from `fetchAccrualPosition` when the chain is not supported.
+   */
+  async getPositionData(pod: Address, parameters?: FetchParameters) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    return fetchAccrualPosition(pod, this.client.viemClient, {
+      ...parameters,
+      chainId: this.chainId,
+    });
+  }
 
   /**
    * Prepares a take transaction opening an Iris loan from a solver-signed quote.
@@ -257,6 +366,144 @@ export class Iris implements IrisActions {
             requirementSignature: permit,
             authorizationSignature: authorization,
           },
+        });
+      },
+    };
+  }
+
+  /**
+   * Prepares a supply-collateral transaction topping up an existing Iris loan's collateral.
+   *
+   * The supply is permissionless, so `userAddress` is just the payer funding the top-up — it need
+   * not be the loan's borrower.
+   *
+   * @param params.userAddress - Account funding the collateral (the bundle initiator).
+   * @param params.loanData - Pre-fetched loan for the pod, from {@link Iris.getLoanData} or an
+   *   `AccrualPosition.loan`; supplies the pod and the collateral token.
+   * @param params.amount - ERC-20 collateral to supply. At least one of `amount` or
+   *   `nativeAmount` must be positive. Defaults to `0n`.
+   * @param params.nativeAmount - Optional collateral paid in the native token and wrapped
+   *   in-bundle; the loan's collateral token must be the chain's wNative.
+   * @returns Object with `buildTx` and `getRequirements`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {NegativeInputError} when `amount` or `nativeAmount` is negative.
+   * @throws {NonPositiveInputError} when `amount` and `nativeAmount` both resolve to zero.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's
+   *   collateral token is not the chain's wNative.
+   */
+  supplyCollateral({
+    userAddress,
+    loanData,
+    amount = 0n,
+    nativeAmount,
+  }: { userAddress: Address; loanData: Loan } & DepositAmountArgs) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    if (amount < 0n) throw new NegativeInputError("amount", amount);
+    if (nativeAmount !== undefined && nativeAmount < 0n) {
+      throw new NegativeInputError("nativeAmount", nativeAmount);
+    }
+
+    const totalCollateral = amount + (nativeAmount ?? 0n);
+    if (totalCollateral === 0n) {
+      throw new NonPositiveInputError("totalCollateral", totalCollateral);
+    }
+
+    const { pod, collateralToken } = loanData;
+    if (isAddressEqual(collateralToken, zeroAddress)) throw new LoanNotCreatedError(pod);
+
+    if (nativeAmount !== undefined && nativeAmount > 0n) {
+      validateNativeAsset(this.chainId, collateralToken);
+    }
+
+    return {
+      getRequirements: (params?: { useSimplePermit?: boolean }) =>
+        getGeneralAdapterRequirements(this.client.viemClient, {
+          address: collateralToken,
+          chainId: this.chainId,
+          supportSignature: this.client.options.supportSignature,
+          useSimplePermit: params?.useSimplePermit,
+          args: { amount, from: userAddress },
+        }),
+
+      buildTx: (signatures?: readonly RequirementSignature[]) => {
+        const { permit } = selectRequirementSignatures(signatures, { permit: true });
+
+        return irisSupplyCollateral({
+          chainId: this.chainId,
+          args: {
+            pod,
+            token: collateralToken,
+            amount,
+            nativeAmount,
+            requirementSignature: permit,
+          },
+        });
+      },
+    };
+  }
+
+  /**
+   * Prepares a supply-bond transaction topping up an existing Iris loan's solver bond.
+   *
+   * The bond is denominated in the loan's debt token. The supply is permissionless, so
+   * `userAddress` is just the payer funding the top-up — it need not be the loan's solver.
+   *
+   * @param params.userAddress - Account funding the bond (the bundle initiator).
+   * @param params.loanData - Pre-fetched loan for the pod, from {@link Iris.getLoanData} or an
+   *   `AccrualPosition.loan`; supplies the pod and the debt token.
+   * @param params.amount - ERC-20 bond to supply. At least one of `amount` or `nativeAmount` must
+   *   be positive. Defaults to `0n`.
+   * @param params.nativeAmount - Optional bond paid in the native token and wrapped in-bundle; the
+   *   loan's debt token must be the chain's wNative.
+   * @returns Object with `buildTx` and `getRequirements`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {NegativeInputError} when `amount` or `nativeAmount` is negative.
+   * @throws {NonPositiveInputError} when `amount` and `nativeAmount` both resolve to zero.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt
+   *   token is not the chain's wNative.
+   */
+  supplyBond({
+    userAddress,
+    loanData,
+    amount = 0n,
+    nativeAmount,
+  }: { userAddress: Address; loanData: Loan } & DepositAmountArgs) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    if (amount < 0n) throw new NegativeInputError("amount", amount);
+    if (nativeAmount !== undefined && nativeAmount < 0n) {
+      throw new NegativeInputError("nativeAmount", nativeAmount);
+    }
+
+    const totalBond = amount + (nativeAmount ?? 0n);
+    if (totalBond === 0n) throw new NonPositiveInputError("totalBond", totalBond);
+
+    const { pod, debtToken } = loanData;
+    if (isAddressEqual(debtToken, zeroAddress)) throw new LoanNotCreatedError(pod);
+
+    if (nativeAmount !== undefined && nativeAmount > 0n) {
+      validateNativeAsset(this.chainId, debtToken);
+    }
+
+    return {
+      getRequirements: (params?: { useSimplePermit?: boolean }) =>
+        getGeneralAdapterRequirements(this.client.viemClient, {
+          address: debtToken,
+          chainId: this.chainId,
+          supportSignature: this.client.options.supportSignature,
+          useSimplePermit: params?.useSimplePermit,
+          args: { amount, from: userAddress },
+        }),
+
+      buildTx: (signatures?: readonly RequirementSignature[]) => {
+        const { permit } = selectRequirementSignatures(signatures, { permit: true });
+
+        return irisSupplyBond({
+          chainId: this.chainId,
+          args: { pod, token: debtToken, amount, nativeAmount, requirementSignature: permit },
         });
       },
     };

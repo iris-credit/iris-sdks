@@ -152,6 +152,16 @@ export class Permit2ExpirationMissingError extends Error {
   }
 }
 
+/**
+ * Thrown when a pod has no Iris loan — its loan struct is still zeroed, which every loan
+ * operation rejects.
+ */
+export class LoanNotCreatedError extends Error {
+  constructor(pod: Address) {
+    super(`No Iris loan exists for pod "${pod}". Check the pod address.`);
+  }
+}
+
 /** Thrown when an address field the contract requires to be non-zero is the zero address. */
 export class ZeroAddressError extends Error {
   constructor(field: string) {
