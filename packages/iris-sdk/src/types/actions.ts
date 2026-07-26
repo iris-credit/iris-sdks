@@ -40,7 +40,10 @@ export interface IrisSupplyBondAction extends BaseAction<
   { pod: Address; token: Address; amount: bigint; nativeAmount?: bigint }
 > {}
 
-export interface IrisWithdrawBondAction extends BaseAction<"irisWithdrawBond"> {}
+export interface IrisWithdrawBondAction extends BaseAction<
+  "irisWithdrawBond",
+  { pod: Address; amount: bigint; receiver: Address }
+> {}
 
 export interface IrisRefinanceAction extends BaseAction<"irisRefinance"> {}
 
