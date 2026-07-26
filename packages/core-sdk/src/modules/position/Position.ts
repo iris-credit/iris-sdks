@@ -6,7 +6,6 @@ import type { Venue } from "../venue/Venue.js";
 import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { Loan } from "../loan/Loan.js";
-import { LoanUtils } from "../loan/LoanUtils.js";
 import { PositionUtils } from "./PositionUtils.js";
 
 /** Plain input shape for an Iris pod position. */
@@ -271,7 +270,7 @@ export class AccrualPosition extends Position {
    * @param venueId The venue id to check.
    */
   public isVenueAllowed(venueId: BigIntish) {
-    return LoanUtils.isVenueAllowed(this._loan, venueId);
+    return this._loan.isVenueAllowed(venueId);
   }
 
   /**
@@ -613,7 +612,7 @@ export class AccrualPosition extends Position {
       throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
     }
     if (this.bondRequirement === 0n) throw new IrisCoreErrors.LoanResolved(this.pod);
-    if (!LoanUtils.isVenueAllowed(this._loan, venue.id)) {
+    if (!this._loan.isVenueAllowed(venue.id)) {
       throw new IrisCoreErrors.NotAllowedVenue(this.pod, venue.id);
     }
 
