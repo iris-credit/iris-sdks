@@ -1,12 +1,23 @@
 import type { Address, Hex } from "viem";
-import type { Authorization, PermitSingle, Quote } from "@iris-credit/core-sdk";
+import type { Authorization, Quote } from "@iris-credit/core-sdk";
+
+/** Permit2 `PermitDetails` struct, as encoded in the Permit2 `permit` call. */
+export interface Permit2PermitSingleDetails {
+  token: Address; // ERC20 token address.
+  amount: bigint; // The maximum amount allowed to spend.
+  expiration: number; // Timestamp at which a spender's token allowance becomes invalid.
+  nonce: number; // An incrementing value indexed per owner, token, and spender for each signature.
+}
 
 /**
  * Permit2 single-permit payload accepted by the `approve2` action, without a
  * `spender`: the encoder always injects GeneralAdapter1 or Iris so a signature can
  * never approve an arbitrary spender.
  */
-export type Permit2PermitSingle = Omit<PermitSingle, "spender">;
+export interface Permit2PermitSingle {
+  details: Permit2PermitSingleDetails;
+  sigDeadline: bigint;
+}
 
 /**
  * Argument tuples for Bundler3 actions supported by `iris-sdk`.

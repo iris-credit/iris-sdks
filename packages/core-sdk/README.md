@@ -309,7 +309,8 @@ const signature = await walletClient.signTypedData(getQuoteTypedData(ChainId.Eth
 - `getQuoteTypedData(chainId, quote)`: a solver's [`Quote`](./src/signatures/quote.ts), consumed by `take`
 - `getAuthorizationTypedData(chainId, authorization)`: an [`Authorization`](./src/signatures/authorization.ts) granting or revoking a manager on Iris
 - `getPermitTypedData(args, chainId)`: an ERC-2612 [permit](./src/signatures/permit.ts), with the token's `nonce` carried in `args`
-- `getPermit2PermitTypedData(chainId, permitSingle)`: a [Permit2](./src/signatures/permit2.ts) `PermitSingle`
+- `getPermit2PermitTypedData(args, chainId)`: a [Permit2](./src/signatures/permit2.ts) allowance (`PermitSingle`)
+- `getPermit2TransferFromTypedData(args, chainId)`: a [Permit2](./src/signatures/permit2.ts) signature transfer (`PermitTransferFrom`)
 
 ### Addresses & registries
 
