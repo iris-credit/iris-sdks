@@ -104,7 +104,7 @@ export class Position implements IPosition {
  * Represents a position paired with its loan and its venue, for derived and accrued values.
  */
 export class AccrualPosition extends Position {
-  protected readonly _loan: ILoan;
+  protected readonly _loan: Loan;
   protected readonly _venue: Venue;
 
   /**
@@ -231,7 +231,7 @@ export class AccrualPosition extends Position {
    * answer.
    */
   get isOverdue() {
-    return LoanUtils.isOverdue(this._loan, this.lastUpdate);
+    return this._loan.isOverdue(this.lastUpdate);
   }
 
   /**
@@ -239,14 +239,14 @@ export class AccrualPosition extends Position {
    * answer.
    */
   get isLiquidatable() {
-    return LoanUtils.isLiquidatable(this._loan, this.lastUpdate);
+    return this._loan.isLiquidatable(this.lastUpdate);
   }
 
   /**
    * The earliest timestamp at which the loan is liquidatable.
    */
   get liquidatableAt() {
-    return LoanUtils.liquidatableAt(this._loan);
+    return this._loan.liquidatableAt;
   }
 
   /**
@@ -254,14 +254,14 @@ export class AccrualPosition extends Position {
    * an up-to-date answer.
    */
   get lif() {
-    return LoanUtils.getLif(this._loan, this.lastUpdate);
+    return this._loan.getLif(this.lastUpdate);
   }
 
   /**
    * The bond liquidation incentive factor (scaled by WAD).
    */
   get bondLif() {
-    return LoanUtils.getBondLif(this._loan);
+    return this._loan.bondLif;
   }
 
   /**
