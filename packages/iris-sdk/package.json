@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "viem": "^2.41.2"
+    "viem": "^2.55.8"
   },
   "peerDependencies": {
     "viem": "^2"

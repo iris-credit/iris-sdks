@@ -1,11 +1,12 @@
 {
-  "name": "@iris-credit/core-sdk",
+  "name": "@iris-credit/evm-simulation",
   "version": "0.0.0",
+  "description": "EVM simulation engine for Iris transactions.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/iris-credit/iris-sdks.git",
-    "directory": "packages/core-sdk"
+    "directory": "packages/evm-simulation"
   },
   "files": [
     "lib"
@@ -17,28 +18,18 @@
       "types": "./lib/esm/index.d.ts",
       "import": "./lib/esm/index.js",
       "require": "./lib/cjs/index.js"
-    },
-    "./augment": {
-      "types": "./lib/esm/augment/index.d.ts",
-      "import": "./lib/esm/augment/index.js",
-      "require": "./lib/cjs/augment/index.js"
     }
   },
   "publishConfig": {
-    "registry": "https://registry.npmjs.org",
-    "access": "public",
     "exports": {
       ".": {
         "types": "./lib/esm/index.d.ts",
         "import": "./lib/esm/index.js",
         "require": "./lib/cjs/index.js"
-      },
-      "./augment": {
-        "types": "./lib/esm/augment/index.d.ts",
-        "import": "./lib/esm/augment/index.js",
-        "require": "./lib/cjs/augment/index.js"
       }
-    }
+    },
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "scripts": {
     "prepublish": "$npm_execpath build",
@@ -47,14 +38,17 @@
     "build:esm": "tsc --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@iris-credit/core-sdk": "workspace:^",
+    "@iris-credit/iris-ts": "workspace:^",
+    "zod": "^4.4.3"
+  },
   "devDependencies": {
     "@iris-credit/test": "workspace:^",
     "@types/node": "^22.0.0",
-    "dotenv": "^17.4.2",
     "viem": "^2.55.8"
   },
   "peerDependencies": {
-    "@iris-credit/iris-ts": "workspace:^",
     "viem": "^2"
   }
 }
