@@ -162,6 +162,18 @@ export class LoanNotCreatedError extends Error {
   }
 }
 
+/**
+ * Thrown when an operation needs an open loan but the pod's loan is already resolved — its debt,
+ * legs and bond requirement are cleared, which every closing operation rejects.
+ */
+export class LoanResolvedError extends Error {
+  constructor(pod: Address) {
+    super(
+      `The Iris loan of pod "${pod}" is already resolved and owes nothing. Withdraw its collateral instead.`,
+    );
+  }
+}
+
 /** Thrown when an address field the contract requires to be non-zero is the zero address. */
 export class ZeroAddressError extends Error {
   constructor(field: string) {

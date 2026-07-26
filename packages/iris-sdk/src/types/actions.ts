@@ -25,14 +25,17 @@ export interface IrisTakeAction extends BaseAction<
   { quote: Quote; quoteSignature: Hex }
 > {}
 
-// TODO: complete below iris action interfaces.
-export interface IrisRepayAction extends BaseAction<"irisRepay"> {}
+export interface IrisRepayAction extends BaseAction<
+  "irisRepay",
+  { pod: Address; token: Address; transferAmount: bigint; receiver: Address; nativeAmount?: bigint }
+> {}
 
 export interface IrisSupplyCollateralAction extends BaseAction<
   "irisSupplyCollateral",
   { pod: Address; token: Address; amount: bigint; nativeAmount?: bigint }
 > {}
 
+// TODO: complete below iris action interfaces.
 export interface IrisWithdrawCollateralAction extends BaseAction<"irisWithdrawCollateral"> {}
 
 export interface IrisSupplyBondAction extends BaseAction<
