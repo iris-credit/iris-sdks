@@ -92,16 +92,17 @@ export const encodeErc20Permit2Approve = (
       const account = client.account;
       validateUserAddress(account?.address, userAddress);
 
-      const typedData = getPermit2PermitTypedData(chainId, {
-        details: {
-          token,
-          amount,
-          expiration: Number(expiration),
+      const typedData = getPermit2PermitTypedData(
+        {
+          erc20: token,
+          allowance: amount,
           nonce: Number(nonce),
+          deadline,
+          spender: generalAdapter1,
+          expiration: Number(expiration),
         },
-        spender: generalAdapter1,
-        sigDeadline: deadline,
-      });
+        chainId,
+      );
       const signature = await signTypedData(client, {
         ...typedData,
         account,
