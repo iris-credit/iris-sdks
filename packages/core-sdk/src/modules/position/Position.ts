@@ -156,11 +156,53 @@ export class AccrualPosition extends Position {
   }
 
   /**
+   * Whether the pod's position is healthy on the venue itself: the venue debt within the
+   * venue LLTV limit of the venue collateral's value (see `Venue.isHealthy`), or
+   * `undefined` when the venue price is unknown. Evaluated on the venue's live view —
+   * accrue first for an up-to-date answer.
+   */
+  get isHealthyVenue() {
+    return this._venue.isHealthy;
+  }
+
+  /**
    * Whether the position's bond is healthy (see `PositionUtils.isHealthyBond`). Evaluated
    * on the legs as stored on this instance — accrue first for an up-to-date answer.
    */
   get isHealthyBond() {
     return PositionUtils.isHealthyBond(this, this._loan);
+  }
+
+  /**
+   * The collateral price quoted in debt assets below which the venue can liquidate the
+   * pod's position (see `Venue.liquidationPrice`), or `null` when the pod has no venue
+   * debt. Evaluated on the venue's live view — accrue first for an up-to-date answer.
+   */
+  get liquidationPrice() {
+    return this._venue.liquidationPrice;
+  }
+
+  /**
+   * The price variation required for the pod's position to reach its liquidation price
+   * (scaled by WAD): negative when healthy (the price needs to drop x%), positive when
+   * unhealthy (the price needs to soar x%; see `Venue.priceVariationToLiquidationPrice`).
+   * `undefined` when the venue price is unknown; `null` on a zero price or when the pod
+   * has no venue debt. Evaluated on the venue's live view — accrue first for an
+   * up-to-date answer.
+   */
+  get priceVariationToLiquidationPrice() {
+    return this._venue.priceVariationToLiquidationPrice;
+  }
+
+  /**
+   * The health factor of the pod's position on the venue: the venue's LLTV limit of the
+   * collateral's value over the venue debt (scaled by WAD; `MathLib.MAX_UINT_256` when
+   * the pod has no venue debt; see `Venue.healthFactor`), or `undefined` when the venue
+   * price is unknown. Evaluated on the venue's live view — accrue first for an
+   * up-to-date answer.
+   */
+  get healthFactor() {
+    return this._venue.healthFactor;
   }
 
   /**

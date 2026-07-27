@@ -1,6 +1,7 @@
 import type { Address, Hex } from "viem";
 import type { BigIntish } from "../../types.js";
 
+import { ORACLE_PRICE_SCALE } from "../../constants.js";
 import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { PositionUtils } from "../position/PositionUtils.js";
@@ -99,6 +100,57 @@ export abstract class Venue implements IVenue {
     const maxDebt = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
 
     return this.debt <= maxDebt;
+  }
+
+  /**
+   * The collateral price quoted in debt assets below which the venue can liquidate the
+   * pod's position: the venue debt no longer fits the venue's LLTV limit of the
+   * collateral's value (see `isHealthy`). `null` when the pod has no venue debt and
+   * `MathLib.MAX_UINT_256` on zero collateral power.
+   */
+  get liquidationPrice() {
+    if (this.debt === 0n) return null;
+
+    const collateralPower = MathLib.wMulDown(this.collateral, this.lltv);
+    if (collateralPower === 0n) return MathLib.MAX_UINT_256;
+
+    return MathLib.mulDivUp(this.debt, ORACLE_PRICE_SCALE, collateralPower);
+  }
+
+  /**
+   * The price variation required for the pod's position to reach its liquidation price
+   * (see `liquidationPrice`, scaled by WAD). Negative when healthy (the price needs to
+   * drop x%), positive when unhealthy (the price needs to soar x%). `undefined` when the
+   * price is unknown; `null` on a zero price or when the pod has no venue debt.
+   */
+  get priceVariationToLiquidationPrice() {
+    if (this.price == null) return;
+    if (this.price === 0n) return null;
+
+    const liquidationPrice = this.liquidationPrice;
+    if (liquidationPrice == null) return null;
+
+    return MathLib.wDivUp(liquidationPrice, this.price) - MathLib.WAD;
+  }
+
+  /**
+   * The health factor of the pod's position on the venue (scaled by WAD): the venue's
+   * LLTV limit of the collateral's value over the venue debt, the ratio form of
+   * `isHealthy`. `MathLib.MAX_UINT_256` when the pod has no venue debt; `undefined` when
+   * the price is unknown.
+   */
+  get healthFactor() {
+    if (this.debt === 0n) return MathLib.MAX_UINT_256;
+
+    const collateralValue = PositionUtils.getCollateralValue(
+      { collateral: this.collateral },
+      { price: this.price },
+    );
+    if (collateralValue == null) return;
+
+    const maxDebt = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
+
+    return MathLib.wDivDown(maxDebt, this.debt);
   }
 
   /**
