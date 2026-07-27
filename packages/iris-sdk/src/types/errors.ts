@@ -174,6 +174,18 @@ export class LoanResolvedError extends Error {
   }
 }
 
+/**
+ * Thrown when a pod's loan is not resolved — its bond requirement is still non-zero, so the venue
+ * position is backing an open loan and cannot be exited.
+ */
+export class LoanNotResolvedError extends Error {
+  constructor(pod: Address) {
+    super(
+      `The Iris loan of pod "${pod}" is not resolved. Repay or liquidate it before escaping its venue position.`,
+    );
+  }
+}
+
 /** Thrown when an address field the contract requires to be non-zero is the zero address. */
 export class ZeroAddressError extends Error {
   constructor(field: string) {
