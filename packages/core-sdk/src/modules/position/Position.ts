@@ -6,7 +6,6 @@ import type { Venue } from "../venue/Venue.js";
 import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { Loan } from "../loan/Loan.js";
-import { LoanUtils } from "../loan/LoanUtils.js";
 import { PositionUtils } from "./PositionUtils.js";
 
 /** Plain input shape for an Iris pod position. */
@@ -104,7 +103,7 @@ export class Position implements IPosition {
  * Represents a position paired with its loan and its venue, for derived and accrued values.
  */
 export class AccrualPosition extends Position {
-  protected readonly _loan: ILoan;
+  protected readonly _loan: Loan;
   protected readonly _venue: Venue;
 
   /**
@@ -231,7 +230,7 @@ export class AccrualPosition extends Position {
    * answer.
    */
   get isOverdue() {
-    return LoanUtils.isOverdue(this._loan, this.lastUpdate);
+    return this._loan.isOverdue(this.lastUpdate);
   }
 
   /**
@@ -239,14 +238,14 @@ export class AccrualPosition extends Position {
    * answer.
    */
   get isLiquidatable() {
-    return LoanUtils.isLiquidatable(this._loan, this.lastUpdate);
+    return this._loan.isLiquidatable(this.lastUpdate);
   }
 
   /**
    * The earliest timestamp at which the loan is liquidatable.
    */
   get liquidatableAt() {
-    return LoanUtils.liquidatableAt(this._loan);
+    return this._loan.liquidatableAt;
   }
 
   /**
@@ -254,14 +253,14 @@ export class AccrualPosition extends Position {
    * an up-to-date answer.
    */
   get lif() {
-    return LoanUtils.getLif(this._loan, this.lastUpdate);
+    return this._loan.getLif(this.lastUpdate);
   }
 
   /**
    * The bond liquidation incentive factor (scaled by WAD).
    */
   get bondLif() {
-    return LoanUtils.getBondLif(this._loan);
+    return this._loan.bondLif;
   }
 
   /**
@@ -271,7 +270,7 @@ export class AccrualPosition extends Position {
    * @param venueId The venue id to check.
    */
   public isVenueAllowed(venueId: BigIntish) {
-    return LoanUtils.isVenueAllowed(this._loan, venueId);
+    return this._loan.isVenueAllowed(venueId);
   }
 
   /**
@@ -613,7 +612,7 @@ export class AccrualPosition extends Position {
       throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
     }
     if (this.bondRequirement === 0n) throw new IrisCoreErrors.LoanResolved(this.pod);
-    if (!LoanUtils.isVenueAllowed(this._loan, venue.id)) {
+    if (!this._loan.isVenueAllowed(venue.id)) {
       throw new IrisCoreErrors.NotAllowedVenue(this.pod, venue.id);
     }
 

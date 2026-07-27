@@ -119,7 +119,17 @@ export const signSolverPermit2 = async (
     sigDeadline: expiration,
   };
 
-  const typedData = getPermit2PermitTypedData(chainId, { ...permitSingle, spender: iris });
+  const typedData = getPermit2PermitTypedData(
+    {
+      erc20: debtToken,
+      allowance: bond,
+      nonce: Number(nonce),
+      deadline: expiration,
+      spender: iris,
+      expiration: Number(expiration),
+    },
+    chainId,
+  );
   const signature = await signTypedData(client, {
     ...typedData,
     account,

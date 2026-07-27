@@ -59,7 +59,7 @@ export const irisWithdrawBond = ({
 
   const { iris } = getChainAddresses(chainId);
 
-  let tx = {
+  const tx = {
     to: iris,
     data: encodeFunctionData({
       abi: irisAbi,
