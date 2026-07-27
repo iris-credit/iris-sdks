@@ -1,5 +1,13 @@
 import type { Address, Hex } from "viem";
-import type { AccrualPosition, ChainId, FetchParameters, Loan, Quote } from "@iris-credit/core-sdk";
+import type {
+  AccrualPosition,
+  BigIntish,
+  ChainId,
+  FetchParameters,
+  Loan,
+  Quote,
+  Venue,
+} from "@iris-credit/core-sdk";
 import type { IrisClientType } from "../types/client.js";
 import type {
   AuthorizationRequirementSignature,
@@ -7,10 +15,14 @@ import type {
   ERC20ApprovalAction,
   IrisAuthorizationAction,
   IrisClaimAction,
+  IrisEscapeAction,
+  IrisRefinanceAction,
+  IrisRepayAction,
   IrisSupplyBondAction,
   IrisSupplyCollateralAction,
   IrisTakeAction,
   IrisWithdrawBondAction,
+  IrisWithdrawCollateralAction,
   PermitRequirementSignature,
   Requirement,
   RequirementSignature,
@@ -24,6 +36,8 @@ import {
   fetchAccrualPosition,
   fetchClaimable,
   fetchLoan,
+  fetchVenue,
+  IrisCoreErrors,
   MathLib,
   MAX_DURATION,
   MAX_FIXED_RATE,
@@ -34,10 +48,14 @@ import {
 } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
 import { irisClaim } from "../actions/iris/claim.js";
+import { irisEscape } from "../actions/iris/escape.js";
+import { irisRefinance } from "../actions/iris/refinance.js";
+import { irisRepay } from "../actions/iris/repay.js";
 import { irisSupplyBond } from "../actions/iris/supplyBond.js";
 import { irisSupplyCollateral } from "../actions/iris/supplyCollateral.js";
 import { irisTake } from "../actions/iris/take.js";
 import { irisWithdrawBond } from "../actions/iris/withdrawBond.js";
+import { irisWithdrawCollateral } from "../actions/iris/withdrawCollateral.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
 import {
@@ -49,6 +67,8 @@ import {
 import {
   ClaimExceedsClaimableError,
   LoanNotCreatedError,
+  LoanNotResolvedError,
+  LoanResolvedError,
   NativeAmountExceedsCollateralError,
   NegativeInputError,
   NonPositiveInputError,
@@ -61,6 +81,7 @@ import {
   SolverPermit2ExpiredError,
   VenueNotSupportedError,
   WithdrawExceedsWithdrawableBondError,
+  WithdrawExceedsWithdrawableCollateralError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -86,6 +107,21 @@ export interface IrisActions {
    * @returns The hydrated `AccrualPosition`.
    */
   getPositionData: (pod: Address, parameters?: FetchParameters) => Promise<AccrualPosition>;
+
+  /**
+   * Fetches a venue's live view of the pod — its assets, indices, LLTV and price.
+   *
+   * Reads the venue as it stands for the pod, so a venue the pod has not entered comes back
+   * holding nothing: the shape `refinance` expects of its target venue.
+   *
+   * @param params - Venue identification parameters.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The hydrated `Venue`, the `newVenue` the refinance flow takes.
+   */
+  getVenueData: (
+    params: { loanData: Loan; venueId: BigIntish; data: Hex },
+    parameters?: FetchParameters,
+  ) => Promise<Venue>;
 
   /**
    * Fetches the balance an account can claim from Iris for one token.
@@ -148,6 +184,36 @@ export interface IrisActions {
   };
 
   /**
+   * Prepares a repay transaction closing an existing Iris loan.
+   *
+   * Takes the pre-fetched `positionData` for the pod — the amount owed is derived from the
+   * accrued legs and the venue, which the loan alone does not carry — and sizes the funding from
+   * it. Iris repays in full at a price that accrues per second, so the bundle funds an upper
+   * bound and sweeps back what the repayment left over.
+   *
+   * Because the repayment is permissionless, `getRequirements` resolves only the debt-token
+   * approval `Transaction` / permit / Permit2 signature `Requirement` for `GeneralAdapter1`,
+   * funded by `userAddress` — no Iris authorization.
+   *
+   * @param params - Repay parameters.
+   * @returns Object with `buildTx` and `getRequirements`.
+   */
+  repay: (params: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    nativeAmount?: bigint;
+  }) => {
+    buildTx: (
+      signatures?: readonly RequirementSignature[],
+    ) => Readonly<Transaction<IrisRepayAction>>;
+    getRequirements: (params?: {
+      useSimplePermit?: boolean;
+    }) => Promise<
+      (Readonly<Transaction<ERC20ApprovalAction>> | Requirement<PermitRequirementSignature>)[]
+    >;
+  };
+
+  /**
    * Prepares a supply-collateral transaction topping up an existing Iris loan's collateral.
    *
    * Takes the pre-fetched `loanData` for the pod and supplies its collateral token.
@@ -167,6 +233,36 @@ export interface IrisActions {
     }) => Promise<
       (Readonly<Transaction<ERC20ApprovalAction>> | Requirement<PermitRequirementSignature>)[]
     >;
+  };
+
+  /**
+   * Prepares a withdraw-collateral transaction withdrawing from an existing Iris loan's collateral.
+   *
+   * Takes the pre-fetched `positionData` for the pod — the health Iris re-checks is derived from
+   * the accrued legs and the venue's price and LLTV, so the loan alone does not carry it — and
+   * validates that the remaining collateral clears both Iris's check and the venue's own, which
+   * Iris's does not imply.
+   *
+   * The ceilings are measured on `positionData` as given, so accrue and rebase it (see
+   * `AccrualPosition.accrueLegs` / `rebase`) to the timestamp the withdrawal targets.
+   *
+   * Direct call to `Iris.withdrawCollateral`, withdrawing to `userAddress`. The caller
+   * (`msg.sender`) must be the loan's borrower or be authorized by them on Iris. Reach for the
+   * `irisWithdrawCollateral` action directly to send the collateral somewhere other than
+   * `userAddress`.
+   *
+   * No `getRequirements` — no token approval or Iris authorization is needed (the collateral
+   * flows out of the venue, not in).
+   *
+   * @param params - Withdraw-collateral parameters.
+   * @returns Object with `buildTx`.
+   */
+  withdrawCollateral: (params: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    amount: bigint;
+  }) => {
+    buildTx: () => Readonly<Transaction<IrisWithdrawCollateralAction>>;
   };
 
   /**
@@ -243,6 +339,88 @@ export interface IrisActions {
   }) => {
     buildTx: () => Readonly<Transaction<IrisClaimAction>>;
   };
+
+  /**
+   * Prepares an escape transaction exiting the venue position of a resolved Iris loan.
+   *
+   * Takes the pre-fetched `positionData` for the pod — escape covers the pod's live venue debt,
+   * which the loan alone does not carry — and withdraws the venue collateral, yield included, to
+   * `userAddress`. Reach for the `irisEscape` action directly to send it somewhere else.
+   *
+   * `getRequirements` resolves what must be in place before the bundle executes:
+   *
+   * - The debt-token approval `Transaction` or permit / Permit2 signature `Requirement` for
+   *   `GeneralAdapter1`, covering the venue debt the escape settles. Empty when the venue carries
+   *   none — the usual state, since repay and liquidation repay the venue in full.
+   * - The Iris authorization for `GeneralAdapter1` on behalf of the borrower — `Iris.escape`
+   *   requires its bundled caller (the adapter) to be authorized by the borrower. Omitted when the
+   *   borrower already authorized the adapter, which a bundled `take` does.
+   *
+   * @param params - Escape parameters.
+   * @returns Object with `buildTx` and `getRequirements`.
+   */
+  escape: (params: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    nativeAmount?: bigint;
+  }) => {
+    buildTx: (
+      signatures?: readonly RequirementSignature[],
+    ) => Readonly<Transaction<IrisEscapeAction>>;
+    getRequirements: (params?: {
+      useSimplePermit?: boolean;
+    }) => Promise<
+      (
+        | Readonly<Transaction<ERC20ApprovalAction>>
+        | Requirement<PermitRequirementSignature>
+        | Readonly<Transaction<IrisAuthorizationAction>>
+        | Requirement<AuthorizationRequirementSignature>
+      )[]
+    >;
+  };
+
+  /**
+   * Prepares a refinance transaction moving an existing Iris loan's position to another venue.
+   *
+   * Takes the pre-fetched `positionData` for the pod and the `newVenue` to move it to, and funds
+   * the debt the pod owes its current venue — Iris clears it out of `GeneralAdapter1`'s balance
+   * before the new venue is entered, so the funding cannot come from the refinance itself. The
+   * new venue's borrow proceeds and the skimmed residual both return to `userAddress`, leaving it
+   * whole; reach for the `irisRefinance` action directly to send the proceeds elsewhere.
+   *
+   * `getRequirements` resolves what must be in place before the bundle executes:
+   *
+   * - The debt-token approval `Transaction` or permit / Permit2 signature `Requirement` for
+   *   `GeneralAdapter1`, funded by `userAddress`; pass `useSimplePermit: true` to prefer an
+   *   EIP-2612 permit when the token supports it.
+   * - The Iris authorization for `GeneralAdapter1` on behalf of the loan's solver — both
+   *   `Iris.refinance` and the adapter require it. Returned as a `setAuthorization` transaction,
+   *   or as a signable `Requirement` when the client opts into `supportSignature`; omitted when
+   *   the solver already authorized the adapter. `userAddress` must be the loan's solver.
+   *
+   * @param params - Refinance parameters.
+   * @returns Object with `buildTx` and `getRequirements`.
+   */
+  refinance: (params: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    newVenue: Venue;
+    nativeAmount?: bigint;
+  }) => {
+    buildTx: (
+      signatures?: readonly RequirementSignature[],
+    ) => Readonly<Transaction<IrisRefinanceAction>>;
+    getRequirements: (params?: {
+      useSimplePermit?: boolean;
+    }) => Promise<
+      (
+        | Readonly<Transaction<ERC20ApprovalAction>>
+        | Requirement<PermitRequirementSignature>
+        | Readonly<Transaction<IrisAuthorizationAction>>
+        | Requirement<AuthorizationRequirementSignature>
+      )[]
+    >;
+  };
 }
 
 /** Chain-scoped Iris entity: validates flows and returns lazy transaction handles. */
@@ -283,6 +461,37 @@ export class Iris implements IrisActions {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
     return fetchAccrualPosition(pod, this.client.viemClient, {
+      ...parameters,
+      chainId: this.chainId,
+    });
+  }
+
+  /**
+   * Fetches a venue's live view of the pod — its assets, indices, LLTV and price.
+   *
+   * Reads the venue as it stands for the pod, so a venue the pod has not entered comes back
+   * holding nothing: the shape {@link Iris.refinance} expects of its target venue.
+   *
+   * @param params.loanData - Pre-fetched loan for the pod, from {@link Iris.getLoanData} or an
+   *   `AccrualPosition.loan`; supplies the pod and the loan's tokens.
+   * @param params.venueId - The id of the venue to read.
+   * @param params.data - The venue's market data.
+   * @param parameters - Optional fetch parameters (block number, state overrides).
+   * @returns The hydrated `Venue`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {IrisCoreErrors.UnsupportedVenueAdapterError} from `fetchVenue` when no adapter is
+   *   registered for `venueId` — which `Iris.refinance` rejects too — or the adapter has no
+   *   offline rate model.
+   */
+  async getVenueData(
+    { loanData, venueId, data }: { loanData: Loan; venueId: BigIntish; data: Hex },
+    parameters?: FetchParameters,
+  ) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    const { pod, collateralToken, debtToken } = loanData;
+
+    return fetchVenue({ pod, venueId, data, collateralToken, debtToken }, this.client.viemClient, {
       ...parameters,
       chainId: this.chainId,
     });
@@ -474,6 +683,92 @@ export class Iris implements IrisActions {
   }
 
   /**
+   * Prepares a repay transaction closing an existing Iris loan.
+   *
+   * Sizes the funding from the pre-fetched `positionData`, projected two hours forward: Iris
+   * accrues `lastUpdate → execution` inside `repay` and pulls whatever the loan owes then, so
+   * funding the amount owed at the fetched state would under-fund the pull and revert. The
+   * bundle sweeps the leftover back to `userAddress`, and the projection doubles as the
+   * transaction's validity window — rebuild it after two hours rather than sending a stale one.
+   *
+   * The repayment is permissionless, so `userAddress` is just the payer closing the loan — it
+   * need not be the loan's borrower. It resolves the loan but leaves the collateral with the
+   * position; withdraw it separately.
+   *
+   * @param params.userAddress - Account funding the repayment (the bundle initiator), which the
+   *   leftover funding is swept back to.
+   * @param params.positionData - Pre-fetched position for the pod, from
+   *   {@link Iris.getPositionData}; supplies the pod, the debt token and the amount owed.
+   * @param params.nativeAmount - Optional funding paid in the native token and wrapped in-bundle;
+   *   the loan's debt token must be the chain's wNative. It funds the pull first and the ERC-20
+   *   pull covers the remainder, so a native amount that covers the whole repayment pulls no
+   *   ERC-20 and emits no approval requirement. Defaults to `0n`.
+   * @returns Object with `buildTx` and `getRequirements`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {NegativeInputError} when `nativeAmount` is negative.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {LoanResolvedError} when the loan is already resolved, leaving nothing to repay.
+   * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt
+   *   token is not the chain's wNative.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} from `AccrualPosition.repay` when the venue price
+   */
+  repay({
+    userAddress,
+    positionData,
+    nativeAmount = 0n,
+  }: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    nativeAmount?: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
+
+    const { pod, debt, fixedLeg, bondRequirement, lastUpdate, venue } = positionData;
+    const { debtToken } = positionData.loan;
+
+    if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
+    if (debt + fixedLeg === 0n && bondRequirement === 0n) throw new LoanResolvedError(pod);
+    if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
+
+    // Forward-accrue (2h) before sizing the funding: Iris accrues `lastUpdate → execution` inside
+    // `repay`, so funding the amount owed now under-funds the pull.
+    const accrualTimestamp =
+      MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate) + Time.s.from.h(2n);
+    const { repaid } = positionData.repay(accrualTimestamp);
+    // Native funds the pull first; the ERC-20 pulled is the remainder.
+    const erc20Amount = MathLib.zeroFloorSub(repaid, nativeAmount);
+
+    return {
+      getRequirements: (params?: { useSimplePermit?: boolean }) =>
+        getGeneralAdapterRequirements(this.client.viemClient, {
+          address: debtToken,
+          chainId: this.chainId,
+          supportSignature: this.client.options.supportSignature,
+          useSimplePermit: params?.useSimplePermit,
+          args: { amount: erc20Amount, from: userAddress },
+        }),
+
+      buildTx: (signatures?: readonly RequirementSignature[]) => {
+        const { permit } = selectRequirementSignatures(signatures, { permit: true });
+
+        return irisRepay({
+          chainId: this.chainId,
+          args: {
+            pod,
+            token: debtToken,
+            amount: erc20Amount,
+            nativeAmount,
+            receiver: userAddress,
+            requirementSignature: permit,
+          },
+        });
+      },
+    };
+  }
+
+  /**
    * Prepares a supply-collateral transaction topping up an existing Iris loan's collateral.
    *
    * The supply is permissionless, so `userAddress` is just the payer funding the top-up — it need
@@ -543,6 +838,76 @@ export class Iris implements IrisActions {
           },
         });
       },
+    };
+  }
+
+  /**
+   * Prepares a withdraw-collateral transaction withdrawing from an existing Iris loan's collateral.
+   *
+   * Validates the withdrawal against the pre-fetched `positionData`: it may not exceed the
+   * collateral withdrawable under both Iris's check and the venue's own (see
+   * `PositionUtils.getWithdrawableCollateral`), measured against the venue's LLTV minus
+   * `DEFAULT_LLTV_BUFFER` so a withdrawal sized to the fetched state still clears them once it
+   * lands — and, for the venue's, so it does not land one accrual away from being liquidated
+   * there.
+   *
+   * @param params.userAddress - The account sending the transaction and receiving the collateral;
+   *   must be the loan's borrower or be authorized by them on Iris.
+   * @param params.positionData - Pre-fetched position for the pod, from
+   *   {@link Iris.getPositionData}, accrued and rebased by the caller to the timestamp the
+   *   withdrawal targets; both ceilings are measured on it as given.
+   * @param params.amount - The collateral to withdraw.
+   * @returns Object with `buildTx`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
+   * @throws {NonPositiveInputError} when `amount` is not positive.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} when the venue price is unknown, which leaves both
+   *   ceilings underivable.
+   * @throws {WithdrawExceedsWithdrawableCollateralError} when `amount` would leave the position
+   *   unhealthy.
+   */
+  withdrawCollateral({
+    userAddress,
+    positionData,
+    amount,
+  }: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    amount: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+    validateUserAddress(userAddress, positionData.loan.borrower);
+
+    if (amount <= 0n) throw new NonPositiveInputError("amount", amount);
+
+    const { pod, lastUpdate, venue } = positionData;
+
+    if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
+
+    const withdrawable = PositionUtils.getWithdrawableCollateral(
+      positionData,
+      positionData.loan,
+      { ...venue, lltv: MathLib.zeroFloorSub(venue.lltv, DEFAULT_LLTV_BUFFER) },
+      lastUpdate,
+    );
+
+    if (withdrawable == null) throw new IrisCoreErrors.UnknownVenuePrice(pod, venue.id);
+
+    if (amount > withdrawable) {
+      throw new WithdrawExceedsWithdrawableCollateralError({
+        pod,
+        withdrawAmount: amount,
+        withdrawable,
+      });
+    }
+
+    return {
+      buildTx: () =>
+        irisWithdrawCollateral({
+          chainId: this.chainId,
+          args: { pod, amount, receiver: userAddress },
+        }),
     };
   }
 
@@ -716,6 +1081,216 @@ export class Iris implements IrisActions {
           chainId: this.chainId,
           args: { token, amount, onBehalf: userAddress, receiver: userAddress },
         }),
+    };
+  }
+
+  /**
+   * Prepares an escape transaction exiting the venue position of a resolved Iris loan.
+   *
+   * Escape settles the pod's venue debt and withdraws the venue collateral, yield included, to
+   * `userAddress`. The bundle funds `GeneralAdapter1` with the venue debt projected two hours past
+   * now — `Iris.escape` pulls it as it stands at execution, so funding the fetched amount
+   * underfunds the bundle on a venue that keeps accruing — and skims the residual back.
+   *
+   * @param params.userAddress - The account sending the transaction, funding the venue debt and
+   *   receiving the collateral; must be the loan's borrower, whose Iris authorization of
+   *   `GeneralAdapter1` the bundled escape runs on.
+   * @param params.positionData - Pre-fetched position for the pod, from
+   *   {@link Iris.getPositionData}; supplies the pod, its resolution state and its venue debt.
+   * @param params.nativeAmount - Optional venue debt paid in the native token and wrapped
+   *   in-bundle; the loan's debt token must be the chain's wNative.
+   * @returns Object with `buildTx` and `getRequirements`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {LoanNotResolvedError} when the loan is still open (non-zero bond requirement).
+   * @throws {NegativeInputError} when `nativeAmount` is negative.
+   * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt token
+   *   is not the chain's wNative.
+   */
+  escape({
+    userAddress,
+    positionData,
+    nativeAmount = 0n,
+  }: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    nativeAmount?: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    const { pod, lastUpdate, bondRequirement, loan, venue } = positionData;
+
+    // `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator.
+    validateUserAddress(userAddress, loan.borrower);
+
+    if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
+    if (bondRequirement !== 0n) throw new LoanNotResolvedError(pod);
+
+    if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
+    if (nativeAmount > 0n) validateNativeAsset(this.chainId, loan.debtToken);
+
+    // Forward-accrue the venue debt: Iris pulls it as it stands at execution, so the fetched
+    // amount underfunds the bundle. The residual is skimmed back by the escape action.
+    const accrualTimestamp = MathLib.max(Time.timestamp(), venue.lastUpdate) + Time.s.from.h(2n);
+    const venueDebt = venue.getAccrualDebt(accrualTimestamp);
+    // Native funds the debt first; the ERC-20 pulled is the remainder.
+    const amount = MathLib.zeroFloorSub(venueDebt, nativeAmount);
+
+    return {
+      getRequirements: async (params?: { useSimplePermit?: boolean }) => {
+        const [erc20Requirements, authorizationRequirement] = await Promise.all([
+          getGeneralAdapterRequirements(this.client.viemClient, {
+            address: loan.debtToken,
+            chainId: this.chainId,
+            supportSignature: this.client.options.supportSignature,
+            useSimplePermit: params?.useSimplePermit,
+            args: { amount, from: userAddress },
+          }),
+          getIrisAuthorizationRequirement({
+            viemClient: this.client.viemClient,
+            chainId: this.chainId,
+            userAddress: loan.borrower,
+            supportSignature: this.client.options.supportSignature,
+          }),
+        ]);
+
+        return [
+          ...erc20Requirements,
+          ...(authorizationRequirement ? [authorizationRequirement] : []),
+        ];
+      },
+
+      buildTx: (signatures?: readonly RequirementSignature[]) => {
+        const { permit, authorization } = selectRequirementSignatures(signatures, {
+          permit: true,
+          authorization: true,
+        });
+
+        return irisEscape({
+          chainId: this.chainId,
+          args: {
+            pod,
+            token: loan.debtToken,
+            receiver: userAddress,
+            amount,
+            nativeAmount,
+            requirementSignature: permit,
+            authorizationSignature: authorization,
+          },
+        });
+      },
+    };
+  }
+
+  /**
+   * Prepares a refinance transaction moving an existing Iris loan's position to another venue.
+   *
+   * Replays the migration against the pre-fetched `positionData` and `newVenue` (see
+   * `AccrualPosition.refinance`) to reject what the contract rejects, then funds the debt the pod
+   * owes its current venue, forward-accrued two hours past now — `Iris.refinance` pulls it as it
+   * stands at execution, so funding the fetched amount underfunds the bundle on a venue that keeps
+   * accruing — and skims the residual back.
+   *
+   * Whether the new venue's `data` is enabled on Iris is not read here; the contract rejects a
+   * disabled payload at execution (see `fetchIsDataEnabled` to check it upfront).
+   *
+   * @param params.userAddress - Account funding the venue debt and receiving the new venue's
+   *   borrow proceeds (the bundle initiator); must be the loan's solver.
+   * @param params.positionData - Pre-fetched position for the pod, from
+   *   {@link Iris.getPositionData}; supplies the pod, the loan and the venue debt to clear.
+   * @param params.newVenue - Pre-fetched target venue for the pod, from
+   *   {@link Iris.getVenueData}; supplies the venue id and market data.
+   * @param params.nativeAmount - Optional venue debt paid in the native token and wrapped
+   *   in-bundle; the loan's debt token must be the chain's wNative.
+   * @returns Object with `buildTx` and `getRequirements`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {AddressMismatchError} when `userAddress` is not the loan's solver.
+   * @throws {NegativeInputError} when `nativeAmount` is negative.
+   * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt token
+   *   is not the chain's wNative.
+   * @throws {IrisCoreErrors.UnexpectedPod} when `newVenue` is not a view of the position's pod.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} when either venue's price is unknown.
+   * @throws {IrisCoreErrors.LoanResolved} when the loan is already resolved.
+   * @throws {IrisCoreErrors.NotAllowedVenue} when the loan's venue bitmap disallows `newVenue`.
+   * @throws {IrisCoreErrors.InsufficientVenueCollateral} when `newVenue` cannot carry the
+   *   migrated position.
+   */
+  refinance({
+    userAddress,
+    positionData,
+    newVenue,
+    nativeAmount = 0n,
+  }: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    newVenue: Venue;
+    nativeAmount?: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+
+    const { pod, lastUpdate, venue } = positionData;
+    const { debtToken, solver } = positionData.loan;
+
+    validateUserAddress(userAddress, solver);
+
+    if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
+    if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
+
+    // Forward-accrue (2h) before sizing the funding: Iris pulls the venue debt as it stands at
+    // execution, so funding the amount owed now under-funds the pull.
+    const accrualTimestamp =
+      MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate) + Time.s.from.h(2n);
+    positionData.refinance(newVenue, accrualTimestamp);
+    const venueDebt = venue.getAccrualDebt(accrualTimestamp);
+    // Native funds the pull first; the ERC-20 pulled is the remainder.
+    const amount = MathLib.zeroFloorSub(venueDebt, nativeAmount);
+
+    return {
+      getRequirements: async (params?: { useSimplePermit?: boolean }) => {
+        const [erc20Requirements, authorizationRequirement] = await Promise.all([
+          getGeneralAdapterRequirements(this.client.viemClient, {
+            address: debtToken,
+            chainId: this.chainId,
+            supportSignature: this.client.options.supportSignature,
+            args: { amount, from: userAddress },
+            useSimplePermit: params?.useSimplePermit,
+          }),
+          getIrisAuthorizationRequirement({
+            viemClient: this.client.viemClient,
+            chainId: this.chainId,
+            userAddress: solver,
+            supportSignature: this.client.options.supportSignature,
+          }),
+        ]);
+
+        return [
+          ...erc20Requirements,
+          ...(authorizationRequirement ? [authorizationRequirement] : []),
+        ];
+      },
+
+      buildTx: (signatures?: readonly RequirementSignature[]) => {
+        const { permit, authorization } = selectRequirementSignatures(signatures, {
+          permit: true,
+          authorization: true,
+        });
+
+        return irisRefinance({
+          chainId: this.chainId,
+          args: {
+            pod,
+            token: debtToken,
+            receiver: userAddress,
+            amount,
+            nativeAmount,
+            newVenueId: newVenue.id,
+            data: newVenue.data,
+            requirementSignature: permit,
+            authorizationSignature: authorization,
+          },
+        });
+      },
     };
   }
 }

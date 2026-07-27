@@ -162,6 +162,30 @@ export class LoanNotCreatedError extends Error {
   }
 }
 
+/**
+ * Thrown when an operation needs an open loan but the pod's loan is already resolved — its debt,
+ * legs and bond requirement are cleared, which every closing operation rejects.
+ */
+export class LoanResolvedError extends Error {
+  constructor(pod: Address) {
+    super(
+      `The Iris loan of pod "${pod}" is already resolved and owes nothing. Withdraw its collateral instead.`,
+    );
+  }
+}
+
+/**
+ * Thrown when a pod's loan is not resolved — its bond requirement is still non-zero, so the venue
+ * position is backing an open loan and cannot be exited.
+ */
+export class LoanNotResolvedError extends Error {
+  constructor(pod: Address) {
+    super(
+      `The Iris loan of pod "${pod}" is not resolved. Repay or liquidate it before escaping its venue position.`,
+    );
+  }
+}
+
 /** Thrown when an address field the contract requires to be non-zero is the zero address. */
 export class ZeroAddressError extends Error {
   constructor(field: string) {
@@ -204,6 +228,22 @@ export class NativeAmountExceedsCollateralError extends Error {
   constructor(collateral: bigint, nativeAmount: bigint) {
     super(
       `Native amount ${nativeAmount} exceeds the quote's collateral ${collateral}. Pay at most the collateral in native token.`,
+    );
+  }
+}
+
+/**
+ * Thrown when a collateral withdrawal exceeds the position's withdrawable collateral — the lower
+ * of the ceilings Iris and its venue enforce, measured against the buffered venue LLTV.
+ */
+export class WithdrawExceedsWithdrawableCollateralError extends Error {
+  constructor(params: {
+    readonly pod: Address;
+    readonly withdrawAmount: bigint;
+    readonly withdrawable: bigint;
+  }) {
+    super(
+      `Withdraw amount ${params.withdrawAmount} exceeds the withdrawable collateral ${params.withdrawable} of pod "${params.pod}". Withdraw at most the withdrawable collateral, or repay the loan first.`,
     );
   }
 }

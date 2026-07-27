@@ -618,39 +618,45 @@ describe("PositionUtils", () => {
       fixedRate: 100_000_000_000_000_000n,
       overdueRate: 200_000_000_000_000_000n,
     };
-    const venue = { price: ORACLE_PRICE_SCALE, lltv: MathLib.WAD };
+    const pair = { price: ORACLE_PRICE_SCALE, lltv: MathLib.WAD };
+    /** The venue as it stands under the position: no surplus, no floating leg. */
+    const venueUnder = (position: { collateral: bigint; debt: bigint }) => ({
+      ...pair,
+      collateral: position.collateral,
+      debt: position.debt,
+    });
 
     test("should reserve the worst-case interest until the liquidation deadline", () => {
       // One year to maturity: residual = 365 * (0.1 * (1y + 1d) + 0.2 * 1d) / 1y = 36.8.
+      const position = { collateral: 500n * MathLib.WAD, debt: 365n * MathLib.WAD, fixedLeg: 0n };
+
       expect(
-        PositionUtils.getWithdrawableCollateral(
-          { collateral: 500n * MathLib.WAD, debt: 365n * MathLib.WAD, fixedLeg: 0n },
-          loan,
-          venue,
-          1_000_000n,
-        ),
+        PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 1_000_000n),
       ).toBe(98_200_000_000_000_000_000n);
     });
 
     test("should not reserve any interest at or past the liquidation deadline", () => {
       // Past the deadline the payoff is just debt + fixedLeg.
+      const position = {
+        collateral: 5n * MathLib.WAD,
+        debt: 2n * MathLib.WAD,
+        fixedLeg: MathLib.WAD,
+      };
+
       expect(
-        PositionUtils.getWithdrawableCollateral(
-          { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: MathLib.WAD },
-          loan,
-          venue,
-          32_622_400n,
-        ),
+        PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 32_622_400n),
       ).toBe(2n * MathLib.WAD);
     });
 
     test("should require more collateral the lower the LLTV", () => {
       // A payoff of 2 at a 50% LLTV reserves 4.
+      const position = { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+
       expect(
         PositionUtils.getWithdrawableCollateral(
-          { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n },
+          position,
           loan,
-          { ...venue, lltv: 500_000_000_000_000_000n },
+          { ...venueUnder(position), lltv: 500_000_000_000_000_000n },
           32_622_400n,
         ),
       ).toBe(MathLib.WAD);
@@ -658,22 +664,52 @@ describe("PositionUtils", () => {
 
     test("should round the required collateral up", () => {
       // ceil(ceil(3 / 0.4) * OPS / (3 * OPS)) = ceil(8 / 3) = 3: 5 - 3 = 2.
+      const position = { collateral: 5n, debt: 3n, fixedLeg: 0n };
+
       expect(
         PositionUtils.getWithdrawableCollateral(
-          { collateral: 5n, debt: 3n, fixedLeg: 0n },
+          position,
           loan,
-          { price: 3n * ORACLE_PRICE_SCALE, lltv: 400_000_000_000_000_000n },
+          {
+            ...venueUnder(position),
+            price: 3n * ORACLE_PRICE_SCALE,
+            lltv: 400_000_000_000_000_000n,
+          },
           32_622_400n,
         ),
       ).toBe(2n);
     });
 
-    test("should return zero when the collateral cannot cover the worst-case payoff", () => {
+    test("should bound by the venue's own limit when the floating leg outgrows the payoff", () => {
+      // Past the deadline Iris reserves the 2 debt, freeing 3 of the 5; the venue owes 4, freeing 1.
+      const position = { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+
       expect(
         PositionUtils.getWithdrawableCollateral(
-          { collateral: MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n },
+          position,
           loan,
-          venue,
+          { ...venueUnder(position), debt: 4n * MathLib.WAD },
+          32_622_400n,
+        ),
+      ).toBe(MathLib.WAD);
+    });
+
+    test("should return zero when the collateral cannot cover the worst-case payoff", () => {
+      const position = { collateral: MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+
+      expect(
+        PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 32_622_400n),
+      ).toBe(0n);
+    });
+
+    test("should return zero when the venue position is already unhealthy", () => {
+      const position = { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+
+      expect(
+        PositionUtils.getWithdrawableCollateral(
+          position,
+          loan,
+          { ...venueUnder(position), debt: 6n * MathLib.WAD },
           32_622_400n,
         ),
       ).toBe(0n);
@@ -681,13 +717,10 @@ describe("PositionUtils", () => {
 
     test("should return the full collateral on a zero payoff", () => {
       // Nothing owed: the check passes for any amount.
+      const position = { collateral: 7n, debt: 0n, fixedLeg: 0n };
+
       expect(
-        PositionUtils.getWithdrawableCollateral(
-          { collateral: 7n, debt: 0n, fixedLeg: 0n },
-          loan,
-          venue,
-          1_000_000n,
-        ),
+        PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 1_000_000n),
       ).toBe(7n);
     });
 
@@ -698,21 +731,28 @@ describe("PositionUtils", () => {
         PositionUtils.getWithdrawableCollateral(
           position,
           loan,
-          { ...venue, price: 0n },
+          { ...venueUnder(position), price: 0n },
           1_000_000n,
         ),
       ).toBe(0n);
       expect(
-        PositionUtils.getWithdrawableCollateral(position, loan, { ...venue, lltv: 0n }, 1_000_000n),
+        PositionUtils.getWithdrawableCollateral(
+          position,
+          loan,
+          { ...venueUnder(position), lltv: 0n },
+          1_000_000n,
+        ),
       ).toBe(0n);
     });
 
     test("should return undefined when the price is unknown", () => {
+      const position = { collateral: MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n };
+
       expect(
         PositionUtils.getWithdrawableCollateral(
-          { collateral: MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n },
+          position,
           loan,
-          { lltv: MathLib.WAD },
+          { ...venueUnder(position), price: undefined },
           1_000_000n,
         ),
       ).toBeUndefined();
