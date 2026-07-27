@@ -208,6 +208,22 @@ export class NativeAmountExceedsCollateralError extends Error {
   }
 }
 
+/**
+ * Thrown when a bond withdrawal exceeds the position's withdrawable bond — the ceiling Iris's
+ * post-withdrawal bond health check enforces, measured against the buffered bond LLTV.
+ */
+export class WithdrawExceedsWithdrawableBondError extends Error {
+  constructor(params: {
+    readonly pod: Address;
+    readonly withdrawAmount: bigint;
+    readonly withdrawable: bigint;
+  }) {
+    super(
+      `Withdraw amount ${params.withdrawAmount} exceeds the withdrawable bond ${params.withdrawable} of pod "${params.pod}". Withdraw at most the withdrawable bond, or supply bond first.`,
+    );
+  }
+}
+
 /** Thrown when the solver's Permit2 payload was signed for a token other than the quote's debt token. */
 export class SolverPermit2AssetMismatchError extends Error {
   constructor(debtToken: Address, signedToken: Address) {

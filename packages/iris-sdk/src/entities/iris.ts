@@ -9,6 +9,7 @@ import type {
   IrisSupplyBondAction,
   IrisSupplyCollateralAction,
   IrisTakeAction,
+  IrisWithdrawBondAction,
   PermitRequirementSignature,
   Requirement,
   RequirementSignature,
@@ -21,19 +22,27 @@ import {
   BP,
   fetchAccrualPosition,
   fetchLoan,
+  MathLib,
   MAX_DURATION,
   MAX_FIXED_RATE,
   MAX_OVERDUE_PERIOD,
   MAX_OVERDUE_RATE,
   MIN_DURATION,
+  PositionUtils,
 } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
 import { irisSupplyBond } from "../actions/iris/supplyBond.js";
 import { irisSupplyCollateral } from "../actions/iris/supplyCollateral.js";
 import { irisTake } from "../actions/iris/take.js";
+import { irisWithdrawBond } from "../actions/iris/withdrawBond.js";
 import { getGeneralAdapterRequirements } from "../actions/requirements/generalAdapter/getGeneralAdapterRequirements.js";
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
-import { validateChainId, validateNativeAsset, validateUserAddress } from "../helpers/index.js";
+import {
+  DEFAULT_LLTV_BUFFER,
+  validateChainId,
+  validateNativeAsset,
+  validateUserAddress,
+} from "../helpers/index.js";
 import {
   LoanNotCreatedError,
   NativeAmountExceedsCollateralError,
@@ -47,6 +56,7 @@ import {
   SolverPermit2AssetMismatchError,
   SolverPermit2ExpiredError,
   VenueNotSupportedError,
+  WithdrawExceedsWithdrawableBondError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -161,6 +171,31 @@ export interface IrisActions {
     }) => Promise<
       (Readonly<Transaction<ERC20ApprovalAction>> | Requirement<PermitRequirementSignature>)[]
     >;
+  };
+
+  /**
+   * Prepares a withdraw-bond transaction withdrawing from an existing Iris loan's solver bond.
+   *
+   * Takes the pre-fetched `positionData` for the pod — the bond health Iris re-checks is derived
+   * from the accrued legs, so the loan alone does not carry it — and validates that the remaining
+   * bond stays healthy, using a buffer below the loan's bond LLTV.
+   *
+   * Direct call to `Iris.withdrawBond`, withdrawing to `userAddress`. The caller (`msg.sender`)
+   * must be the loan's solver or be authorized by them on Iris. Reach for the `irisWithdrawBond`
+   * action directly to send the bond somewhere other than `userAddress`.
+   *
+   * No `getRequirements` — no token approval or Iris authorization is needed (the bond flows out
+   * of Iris, not in).
+   *
+   * @param params - Withdraw-bond parameters.
+   * @returns Object with `buildTx`.
+   */
+  withdrawBond: (params: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    amount: bigint;
+  }) => {
+    buildTx: () => Readonly<Transaction<IrisWithdrawBondAction>>;
   };
 }
 
@@ -506,6 +541,61 @@ export class Iris implements IrisActions {
           args: { pod, token: debtToken, amount, nativeAmount, requirementSignature: permit },
         });
       },
+    };
+  }
+
+  /**
+   * Prepares a withdraw-bond transaction withdrawing from an existing Iris loan's solver bond.
+   *
+   * Validates the post-withdrawal bond health against the pre-fetched `positionData`: the
+   * remaining bond must cover the bond requirement and the solver's negative net, the latter
+   * measured against `bondLltv` minus `DEFAULT_LLTV_BUFFER` so a withdrawal sized to the
+   * fetched state still clears the check Iris runs on the accrued legs.
+   *
+   * @param params.userAddress - The account sending the transaction and receiving the bond; must
+   *   be the loan's solver or be authorized by them on Iris.
+   * @param params.positionData - Pre-fetched position for the pod, from
+   *   {@link Iris.getPositionData}; supplies the pod and the accrued legs.
+   * @param params.amount - The bond to withdraw.
+   * @returns Object with `buildTx`.
+   * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
+   * @throws {AddressMismatchError} when `userAddress` is not the loan's solver.
+   * @throws {NonPositiveInputError} when `amount` is not positive.
+   * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {WithdrawExceedsWithdrawableBondError} when `amount` would leave the bond unhealthy.
+   */
+  withdrawBond({
+    userAddress,
+    positionData,
+    amount,
+  }: {
+    userAddress: Address;
+    positionData: AccrualPosition;
+    amount: bigint;
+  }) {
+    validateChainId(this.client.viemClient.chain?.id, this.chainId);
+    validateUserAddress(userAddress, positionData.loan.solver);
+
+    if (amount <= 0n) throw new NonPositiveInputError("amount", amount);
+
+    const { pod } = positionData;
+
+    if (positionData.lastUpdate === 0n) throw new LoanNotCreatedError(pod);
+
+    const withdrawable = PositionUtils.getWithdrawableBond(positionData, {
+      bondLltv: MathLib.zeroFloorSub(positionData.loan.bondLltv, DEFAULT_LLTV_BUFFER),
+    });
+
+    if (amount > withdrawable) {
+      throw new WithdrawExceedsWithdrawableBondError({ pod, withdrawAmount: amount, withdrawable });
+    }
+
+    return {
+      buildTx: () =>
+        irisWithdrawBond({
+          chainId: this.chainId,
+          args: { pod, amount, receiver: userAddress },
+        }),
     };
   }
 }

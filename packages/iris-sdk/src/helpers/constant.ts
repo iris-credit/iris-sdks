@@ -1,7 +1,10 @@
 import type { Address } from "viem";
 
 import { maxUint96 } from "viem";
-import { ChainId } from "@iris-credit/core-sdk";
+import { ChainId, MathLib } from "@iris-credit/core-sdk";
+
+/** Default LLTV buffer: 0.5% below LLTV. Prevents instant liquidation after withdrawal. */
+export const DEFAULT_LLTV_BUFFER = MathLib.WAD / 200n;
 
 /**
  * Tokens that require setting allowance from zero before changing approval.
