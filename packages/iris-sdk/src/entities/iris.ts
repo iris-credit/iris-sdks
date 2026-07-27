@@ -80,8 +80,8 @@ import {
   SolverPermit2AmountBelowBondError,
   SolverPermit2AssetMismatchError,
   SolverPermit2ExpiredError,
-  UnhealthyBond,
-  UnhealthyCollateral,
+  UnhealthyBondError,
+  UnhealthyCollateralError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -864,7 +864,7 @@ export class Iris implements IrisActions {
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
    * @throws {IrisCoreErrors.UnknownVenuePrice} when the venue price is unknown, which leaves both
    *   ceilings underivable.
-   * @throws {UnhealthyCollateral} when `amount` would leave the position
+   * @throws {UnhealthyCollateralError} when `amount` would leave the position
    *   unhealthy.
    */
   withdrawCollateral({
@@ -895,7 +895,7 @@ export class Iris implements IrisActions {
     if (withdrawable == null) throw new IrisCoreErrors.UnknownVenuePrice(pod, venue.id);
 
     if (amount > withdrawable) {
-      throw new UnhealthyCollateral({
+      throw new UnhealthyCollateralError({
         pod,
         withdrawAmount: amount,
         withdrawable,
@@ -994,7 +994,7 @@ export class Iris implements IrisActions {
    * @throws {AddressMismatchError} when `userAddress` is not the loan's solver.
    * @throws {NonPositiveInputError} when `amount` is not positive.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
-   * @throws {UnhealthyBond} when `amount` would leave the bond unhealthy.
+   * @throws {UnhealthyBondError} when `amount` would leave the bond unhealthy.
    */
   withdrawBond({
     userAddress,
@@ -1019,7 +1019,7 @@ export class Iris implements IrisActions {
     });
 
     if (amount > withdrawable) {
-      throw new UnhealthyBond({ pod, withdrawAmount: amount, withdrawable });
+      throw new UnhealthyBondError({ pod, withdrawAmount: amount, withdrawable });
     }
 
     return {
