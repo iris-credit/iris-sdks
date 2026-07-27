@@ -534,8 +534,7 @@ export class Iris implements IrisActions {
    * @throws {LoanResolvedError} when the loan is already resolved, leaving nothing to repay.
    * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt
    *   token is not the chain's wNative.
-   * @throws {IrisCoreErrors.UnknownVenuePrice} from `AccrualPosition.rebase` when the venue price
-   *   is unknown, leaving the amount owed underivable.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} from `AccrualPosition.repay` when the venue price
    */
   repay({
     userAddress,
@@ -561,7 +560,7 @@ export class Iris implements IrisActions {
     // `repay`, so funding the amount owed now under-funds the pull.
     const accrualTimestamp =
       MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate) + Time.s.from.h(2n);
-    const repaid = positionData.accrueLegs(accrualTimestamp).rebase().repayAmount;
+    const { repaid } = positionData.repay(accrualTimestamp);
     // Native funds the pull first; the ERC-20 pulled is the remainder.
     const erc20Amount = MathLib.zeroFloorSub(repaid, nativeAmount);
 
