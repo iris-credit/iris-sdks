@@ -236,7 +236,7 @@ export class NativeAmountExceedsCollateralError extends Error {
  * Thrown when a collateral withdrawal exceeds the position's withdrawable collateral — the lower
  * of the ceilings Iris and its venue enforce, measured against the buffered venue LLTV.
  */
-export class WithdrawExceedsWithdrawableCollateralError extends Error {
+export class UnhealthyCollateral extends Error {
   constructor(params: {
     readonly pod: Address;
     readonly withdrawAmount: bigint;
@@ -252,7 +252,7 @@ export class WithdrawExceedsWithdrawableCollateralError extends Error {
  * Thrown when a bond withdrawal exceeds the position's withdrawable bond — the ceiling Iris's
  * post-withdrawal bond health check enforces, measured against the buffered bond LLTV.
  */
-export class WithdrawExceedsWithdrawableBondError extends Error {
+export class UnhealthyBond extends Error {
   constructor(params: {
     readonly pod: Address;
     readonly withdrawAmount: bigint;
@@ -323,7 +323,7 @@ export class QuoteOutOfBoundsError extends Error {
 }
 
 /** Thrown when a quote's venue id is not enabled in its venue bitmap. */
-export class VenueNotSupportedError extends Error {
+export class NotAllowedVenueError extends Error {
   constructor(venueId: bigint, venueBitmap: bigint) {
     super(
       `Venue ${venueId} is not set in the quote's venue bitmap ${venueBitmap}. Take a venue the solver enabled.`,
