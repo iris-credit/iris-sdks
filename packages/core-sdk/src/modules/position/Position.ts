@@ -175,9 +175,9 @@ export class AccrualPosition extends Position {
 
   /**
    * The maximum collateral withdrawable while keeping the loan collateralized through the
-   * liquidation deadline (see `PositionUtils.getWithdrawableCollateral`), or `undefined`
-   * when the venue price is unknown. Evaluated at `lastUpdate` — accrue first for an
-   * up-to-date answer.
+   * liquidation deadline and the pod's venue position healthy (see
+   * `PositionUtils.getWithdrawableCollateral`), or `undefined` when the venue price is
+   * unknown. Evaluated at `lastUpdate` — accrue first for an up-to-date answer.
    */
   get withdrawableCollateral() {
     return PositionUtils.getWithdrawableCollateral(this, this._loan, this._venue, this.lastUpdate);
