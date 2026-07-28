@@ -103,4 +103,67 @@ describe("Venue", () => {
     expect(new TestVenue({ ...venue, debt: 5n * MathLib.WAD + 1n }).isHealthy).toBe(false);
     expect(new TestVenue({ ...venue, price: undefined }).isHealthy).toBeUndefined();
   });
+
+  test("should return the price at which the debt meets the lltv limit", () => {
+    const venue = new TestVenue({
+      id: 1n,
+      data: "0x",
+      pod: "0x0000000000000000000000000000000000000001",
+      collateral: 10n * MathLib.WAD,
+      debt: 4n * MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: 500_000_000_000_000_000n,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: 1_000n,
+    });
+
+    // Collateral power = 10 * 0.5 = 5: liquidation at 4 / 5 of the price scale.
+    expect(venue.liquidationPrice).toBe((ORACLE_PRICE_SCALE / 5n) * 4n);
+    expect(new TestVenue({ ...venue, debt: 0n }).liquidationPrice).toBeNull();
+    expect(new TestVenue({ ...venue, collateral: 0n }).liquidationPrice).toBe(MathLib.MAX_UINT_256);
+  });
+
+  test("should return the variation to the liquidation price", () => {
+    const venue = new TestVenue({
+      id: 1n,
+      data: "0x",
+      pod: "0x0000000000000000000000000000000000000001",
+      collateral: 10n * MathLib.WAD,
+      debt: 4n * MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: 500_000_000_000_000_000n,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: 1_000n,
+    });
+
+    // Liquidation price 0.8 under a current price of 1: a 20% drop.
+    expect(venue.priceVariationToLiquidationPrice).toBe(-200_000_000_000_000_000n);
+    expect(
+      new TestVenue({ ...venue, price: undefined }).priceVariationToLiquidationPrice,
+    ).toBeUndefined();
+    expect(new TestVenue({ ...venue, price: 0n }).priceVariationToLiquidationPrice).toBeNull();
+    expect(new TestVenue({ ...venue, debt: 0n }).priceVariationToLiquidationPrice).toBeNull();
+  });
+
+  test("should return the lltv limit of the collateral value over the debt", () => {
+    const venue = new TestVenue({
+      id: 1n,
+      data: "0x",
+      pod: "0x0000000000000000000000000000000000000001",
+      collateral: 10n * MathLib.WAD,
+      debt: 4n * MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: 500_000_000_000_000_000n,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: 1_000n,
+    });
+
+    // maxDebt = 10 * 0.5 = 5 over a debt of 4.
+    expect(venue.healthFactor).toBe(1_250_000_000_000_000_000n);
+    expect(new TestVenue({ ...venue, debt: 0n }).healthFactor).toBe(MathLib.MAX_UINT_256);
+    expect(new TestVenue({ ...venue, price: undefined }).healthFactor).toBeUndefined();
+  });
 });

@@ -145,6 +145,24 @@ describe("AccrualPosition", () => {
     });
   });
 
+  describe("isHealthyVenue", () => {
+    test("should check the pod's venue position against the venue lltv limit", () => {
+      // Venue debt 1 within the 2 * 0.8 limit; 2 exceeds it.
+      expect(accrualPosition.isHealthyVenue).toBe(true);
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, debt: 2n * MathLib.WAD }))
+          .isHealthyVenue,
+      ).toBe(false);
+    });
+
+    test("should be undefined when the price is unknown", () => {
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, price: undefined }))
+          .isHealthyVenue,
+      ).toBeUndefined();
+    });
+  });
+
   describe("isHealthyBond", () => {
     test("should be unhealthy when the bond does not cover the requirement", () => {
       const value = new AccrualPosition(
@@ -272,6 +290,50 @@ describe("AccrualPosition", () => {
     expect(overdue.isOverdue).toBe(true);
     expect(overdue.isLiquidatable).toBe(true);
     expect(overdue.lif).toBe(150_000_000_000_000_000n);
+  });
+
+  describe("liquidationPrice", () => {
+    test("should return the price at which the venue debt meets the venue lltv limit", () => {
+      // Collateral power = 2 * 0.8 = 1.6: liquidation at 1 / 1.6 of the price scale.
+      expect(accrualPosition.liquidationPrice).toBe((ORACLE_PRICE_SCALE / 8n) * 5n);
+    });
+
+    test("should be null when the pod has no venue debt", () => {
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, debt: 0n })).liquidationPrice,
+      ).toBeNull();
+    });
+  });
+
+  describe("priceVariationToLiquidationPrice", () => {
+    test("should return the variation to the liquidation price", () => {
+      // Liquidation price 0.625 under a current price of 1: a 37.5% drop.
+      expect(accrualPosition.priceVariationToLiquidationPrice).toBe(-375_000_000_000_000_000n);
+    });
+
+    test("should be undefined when the price is unknown", () => {
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, price: undefined }))
+          .priceVariationToLiquidationPrice,
+      ).toBeUndefined();
+    });
+  });
+
+  describe("healthFactor", () => {
+    test("should return the venue lltv limit of the collateral value over the venue debt", () => {
+      // maxDebt = 2 * 0.8 = 1.6 over a venue debt of 1.
+      expect(accrualPosition.healthFactor).toBe(1_600_000_000_000_000_000n);
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, debt: 2n * MathLib.WAD }))
+          .healthFactor,
+      ).toBeLessThan(MathLib.WAD);
+    });
+
+    test("should be the max uint256 when the pod has no venue debt", () => {
+      expect(
+        new AccrualPosition(position, loan, new TestVenue({ ...venue, debt: 0n })).healthFactor,
+      ).toBe(MathLib.MAX_UINT_256);
+    });
   });
 
   describe("accrueLegs", () => {

@@ -142,6 +142,7 @@ const venue = new MorphoBlueVenue(
 
 venue.utilization; // 80_0000000000000000n (80%).
 venue.isHealthy; // true.
+venue.healthFactor; // 1_720000000000000000n (1.72, scaled by WAD).
 
 const accruedVenue = venue.accrueInterest(Time.timestamp()); // Project the indices with the venue's own rate model.
 
@@ -180,6 +181,7 @@ const position = new AccrualPosition(
 );
 
 position.isHealthy; // true.
+position.isHealthyVenue; // true.
 position.isHealthyBond; // true.
 position.repayAmount; // 50_396_372399n (in debt assets: the fixed term settles in full).
 position.withdrawableCollateral; // 41232316n (in collateral assets, i.e. 0.41 cbBTC).
