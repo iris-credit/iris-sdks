@@ -44,6 +44,7 @@
   "devDependencies": {
     "@iris-credit/test": "workspace:^",
     "@types/node": "^22.0.0",
+    "dotenv": "^17.4.2",
     "fast-check": "^4.0.0",
     "viem": "^2.55.8"
   },
