@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { DEBT_TOKEN, USER } from "../../__test__/fixtures.js";
+import { DEBT_TOKEN, USER } from "../../../test/fixtures/iris.js";
 import { Holding } from "./Holding.js";
 
 describe("Holding", () => {

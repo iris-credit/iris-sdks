@@ -1,7 +1,7 @@
 import { mainnet } from "viem/chains";
 import { describe, expect, test } from "vitest";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
-import { USER } from "../../__test__/fixtures.js";
+import { USER } from "../../../test/fixtures/iris.js";
 import { irisAbi } from "../../abis/iris.js";
 import { getChainAddresses } from "../../addresses.js";
 import { ChainId } from "../../chain.js";

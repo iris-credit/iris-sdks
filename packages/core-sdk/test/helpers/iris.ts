@@ -1,34 +1,21 @@
-import type { Address, Hex } from "viem";
-import type { ILoan } from "../modules/loan/Loan.js";
-import type { IPosition } from "../modules/position/Position.js";
-import type { Quote } from "../signatures/quote.js";
+import type { ILoan } from "../../src/modules/loan/Loan.js";
+import type { IPosition } from "../../src/modules/position/Position.js";
+import type { Quote } from "../../src/signatures/quote.js";
 
-import { MathLib } from "../math/index.js";
-import { Loan } from "../modules/loan/Loan.js";
-
-/** @internal */
-export const USER = "0x0000000000000000000000000000000000000001" as Address;
-/** @internal */
-export const SOLVER = "0x0000000000000000000000000000000000000002" as Address;
-/** @internal */
-export const COLLATERAL_TOKEN = "0x0000000000000000000000000000000000000003" as Address;
-/** @internal */
-export const DEBT_TOKEN = "0x0000000000000000000000000000000000000004" as Address;
-/** @internal */
-export const POD = "0x0000000000000000000000000000000000000005" as Address;
-/** @internal */
-export const BLM = "0x0000000000000000000000000000000000000006" as Address;
-/** @internal */
-export const RECIPIENT = "0x0000000000000000000000000000000000000007" as Address;
-/** @internal */
-export const SPENDER = "0x0000000000000000000000000000000000000008" as Address;
-/** @internal */
-export const EMPTY_HEX = "0x" as Hex;
-
-/** @internal */
-export const MATURITY = 2_000_000n;
-/** @internal */
-export const OVERDUE_PERIOD = 3_600n;
+import { MathLib } from "../../src/math/index.js";
+import { Loan } from "../../src/modules/loan/Loan.js";
+import {
+  BLM,
+  COLLATERAL_TOKEN,
+  DEBT_TOKEN,
+  EMPTY_HEX,
+  MATURITY,
+  OVERDUE_PERIOD,
+  POD,
+  RECIPIENT,
+  SOLVER,
+  USER,
+} from "../fixtures/iris.js";
 
 /** @internal */
 export function loanInput(overrides: Partial<ILoan> = {}): ILoan {

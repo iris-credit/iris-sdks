@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { EMPTY_HEX, POD, USER } from "./__test__/fixtures.js";
+import { EMPTY_HEX, POD, USER } from "../test/fixtures/iris.js";
 import { ChainId } from "./chain.js";
 import { IrisCoreErrors, UnsupportedChainIdError, UnsupportedVenueAdapterError } from "./errors.js";
 

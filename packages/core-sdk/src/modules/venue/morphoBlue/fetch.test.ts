@@ -4,7 +4,7 @@ import { encodeAbiParameters, keccak256 } from "viem";
 import { mainnet } from "viem/chains";
 import { describe, expect, test } from "vitest";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
-import { EMPTY_HEX, POD } from "../../../__test__/fixtures.js";
+import { EMPTY_HEX, POD } from "../../../../test/fixtures/iris.js";
 import {
   adaptiveCurveIrmAbi,
   morphoBlueAbi,

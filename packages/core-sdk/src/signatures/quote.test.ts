@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { quoteInput } from "../__test__/fixtures.js";
+import { quoteInput } from "../../test/helpers/iris.js";
 import { CHAIN_ADDRESSES } from "../addresses.js";
 import { ChainId } from "../chain.js";
 import { getQuoteTypedData } from "./quote.js";

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { loan, loanInput, MATURITY, OVERDUE_PERIOD } from "../../__test__/fixtures.js";
+import { MATURITY, OVERDUE_PERIOD } from "../../../test/fixtures/iris.js";
+import { loan, loanInput } from "../../../test/helpers/iris.js";
 import { Loan } from "./Loan.js";
 import { LoanUtils } from "./LoanUtils.js";
 

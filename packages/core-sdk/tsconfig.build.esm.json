@@ -8,5 +8,5 @@
     "tsBuildInfoFile": "tsconfig.esm.tsbuildinfo"
   },
   "include": ["src"],
-  "exclude": ["src/**/*.test.ts", "src/**/__test__/**"]
+  "exclude": ["src/**/*.test.ts"]
 }

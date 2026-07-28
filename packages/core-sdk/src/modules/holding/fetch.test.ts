@@ -4,7 +4,7 @@ import { erc20Abi, maxUint256, numberToHex } from "viem";
 import { mainnet } from "viem/chains";
 import { describe, expect, test } from "vitest";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
-import { USER } from "../../__test__/fixtures.js";
+import { USER } from "../../../test/fixtures/iris.js";
 import { permit2Abi } from "../../abis/permit2.js";
 import { getChainAddresses, NATIVE_ADDRESS } from "../../addresses.js";
 import { ChainId } from "../../chain.js";

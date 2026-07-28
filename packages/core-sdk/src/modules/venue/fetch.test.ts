@@ -5,7 +5,7 @@ import { encodeAbiParameters, keccak256, numberToHex, zeroAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { describe, expect, test } from "vitest";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
-import { POD } from "../../__test__/fixtures.js";
+import { POD } from "../../../test/fixtures/iris.js";
 import { aaveV3PoolAbi } from "../../abis/aaveV3.js";
 import { irisAbi } from "../../abis/iris.js";
 import {

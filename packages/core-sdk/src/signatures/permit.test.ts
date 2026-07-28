@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { SPENDER, USER } from "../__test__/fixtures.js";
+import { SPENDER, USER } from "../../test/fixtures/iris.js";
 import { CHAIN_ADDRESSES } from "../addresses.js";
 import { ChainId } from "../chain.js";
 import { Token } from "../modules/token/Token.js";
