@@ -111,7 +111,7 @@ export abstract class Venue implements IVenue {
   get liquidationPrice() {
     if (this.debt === 0n) return null;
 
-    const collateralPower = MathLib.wMulDown(this.collateral, this.lltv);
+    const collateralPower = MathLib.mulDivDown(this.collateral, this.lltv, MathLib.WAD);
     if (collateralPower === 0n) return MathLib.MAX_UINT_256;
 
     return MathLib.mulDivUp(this.debt, ORACLE_PRICE_SCALE, collateralPower);
@@ -130,7 +130,7 @@ export abstract class Venue implements IVenue {
     const liquidationPrice = this.liquidationPrice;
     if (liquidationPrice == null) return null;
 
-    return MathLib.wDivUp(liquidationPrice, this.price) - MathLib.WAD;
+    return MathLib.mulDivUp(liquidationPrice, MathLib.WAD, this.price) - MathLib.WAD;
   }
 
   /**
@@ -150,7 +150,7 @@ export abstract class Venue implements IVenue {
 
     const maxDebt = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
 
-    return MathLib.wDivDown(maxDebt, this.debt);
+    return MathLib.mulDivDown(maxDebt, MathLib.WAD, this.debt);
   }
 
   /**
