@@ -27,6 +27,11 @@
       "types": "./lib/esm/fixtures.d.ts",
       "import": "./lib/esm/fixtures.js",
       "require": "./lib/cjs/fixtures.js"
+    },
+    "./mock": {
+      "types": "./lib/esm/mock.d.ts",
+      "import": "./lib/esm/mock.js",
+      "require": "./lib/cjs/mock.js"
     }
   },
   "publishConfig": {
@@ -47,6 +52,11 @@
         "types": "./lib/esm/fixtures.d.ts",
         "import": "./lib/esm/fixtures.js",
         "require": "./lib/cjs/fixtures.js"
+      },
+      "./mock": {
+        "types": "./lib/esm/mock.d.ts",
+        "import": "./lib/esm/mock.js",
+        "require": "./lib/cjs/mock.js"
       }
     }
   },
