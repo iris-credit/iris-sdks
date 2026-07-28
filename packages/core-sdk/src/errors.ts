@@ -8,27 +8,17 @@ export class UnsupportedChainIdError extends Error {
   }
 }
 
-/** Error thrown when a token address has no curated metadata entry. */
-export class TokenMetadataNotFoundError extends Error {
+/** Error thrown when a venue adapter has no offline rate model registered in the SDK. */
+export class UnsupportedVenueAdapterError extends Error {
   constructor(
+    public readonly adapter: Address,
     public readonly chainId: ChainId,
-    public readonly address: Address,
   ) {
-    super(`token metadata not found for address ${address} on chain ${chainId}`);
+    super(`unsupported venue adapter ${adapter} on chain ${chainId}`);
   }
 }
 
 export namespace IrisCoreErrors {
-  /** Error thrown when a venue adapter has no offline rate model registered in the SDK. */
-  export class UnsupportedVenueAdapterError extends Error {
-    constructor(
-      public readonly adapter: Address,
-      public readonly chainId: ChainId,
-    ) {
-      super(`unsupported venue adapter ${adapter} on chain ${chainId}`);
-    }
-  }
-
   /** Error thrown when position accrual is requested before `lastUpdate`. */
   export class InvalidInterestAccrual extends Error {
     constructor(

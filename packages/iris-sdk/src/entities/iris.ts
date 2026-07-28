@@ -72,6 +72,7 @@ import {
   NativeAmountExceedsCollateralError,
   NegativeInputError,
   NonPositiveInputError,
+  NotAllowedVenueError,
   NotMultipleOfBpError,
   QuoteExpiredError,
   QuoteOutOfBoundsError,
@@ -79,9 +80,8 @@ import {
   SolverPermit2AmountBelowBondError,
   SolverPermit2AssetMismatchError,
   SolverPermit2ExpiredError,
-  VenueNotSupportedError,
-  WithdrawExceedsWithdrawableBondError,
-  WithdrawExceedsWithdrawableCollateralError,
+  UnhealthyBondError,
+  UnhealthyCollateralError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -479,7 +479,7 @@ export class Iris implements IrisActions {
    * @param parameters - Optional fetch parameters (block number, state overrides).
    * @returns The hydrated `Venue`.
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
-   * @throws {IrisCoreErrors.UnsupportedVenueAdapterError} from `fetchVenue` when no adapter is
+   * @throws {UnsupportedVenueAdapterError} from `fetchVenue` when no adapter is
    *   registered for `venueId` — which `Iris.refinance` rejects too — or the adapter has no
    *   offline rate model.
    */
@@ -548,7 +548,7 @@ export class Iris implements IrisActions {
    *   token is not the chain's wNative.
    * @throws {QuoteOutOfBoundsError} when a rate / duration / overdue field is out of bounds.
    * @throws {NotMultipleOfBpError} when `fixedRate` or `overdueRate` is not a multiple of BP.
-   * @throws {VenueNotSupportedError} when `quote.venueId` is not set in `quote.venueBitmap`.
+   * @throws {NotAllowedVenueError} when `quote.venueId` is not set in `quote.venueBitmap`.
    * @throws {SolverPermit2AssetMismatchError} when `solverPermit2` is signed for a token other
    *   than `quote.debtToken`.
    * @throws {SolverPermit2AmountBelowBondError} when `solverPermit2` is signed for less than
@@ -617,7 +617,7 @@ export class Iris implements IrisActions {
     if (quote.bond <= 0n) throw new NonPositiveInputError("bond", quote.bond);
 
     if (quote.venueId >= 256n || (quote.venueBitmap & (1n << quote.venueId)) === 0n) {
-      throw new VenueNotSupportedError(quote.venueId, quote.venueBitmap);
+      throw new NotAllowedVenueError(quote.venueId, quote.venueBitmap);
     }
 
     if (solverPermit2) {
@@ -864,7 +864,7 @@ export class Iris implements IrisActions {
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
    * @throws {IrisCoreErrors.UnknownVenuePrice} when the venue price is unknown, which leaves both
    *   ceilings underivable.
-   * @throws {WithdrawExceedsWithdrawableCollateralError} when `amount` would leave the position
+   * @throws {UnhealthyCollateralError} when `amount` would leave the position
    *   unhealthy.
    */
   withdrawCollateral({
@@ -895,7 +895,7 @@ export class Iris implements IrisActions {
     if (withdrawable == null) throw new IrisCoreErrors.UnknownVenuePrice(pod, venue.id);
 
     if (amount > withdrawable) {
-      throw new WithdrawExceedsWithdrawableCollateralError({
+      throw new UnhealthyCollateralError({
         pod,
         withdrawAmount: amount,
         withdrawable,
@@ -994,7 +994,7 @@ export class Iris implements IrisActions {
    * @throws {AddressMismatchError} when `userAddress` is not the loan's solver.
    * @throws {NonPositiveInputError} when `amount` is not positive.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
-   * @throws {WithdrawExceedsWithdrawableBondError} when `amount` would leave the bond unhealthy.
+   * @throws {UnhealthyBondError} when `amount` would leave the bond unhealthy.
    */
   withdrawBond({
     userAddress,
@@ -1019,7 +1019,7 @@ export class Iris implements IrisActions {
     });
 
     if (amount > withdrawable) {
-      throw new WithdrawExceedsWithdrawableBondError({ pod, withdrawAmount: amount, withdrawable });
+      throw new UnhealthyBondError({ pod, withdrawAmount: amount, withdrawable });
     }
 
     return {

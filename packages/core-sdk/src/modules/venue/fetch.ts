@@ -8,7 +8,7 @@ import { irisAbi } from "../../abis/iris.js";
 import { venueAdapterAbi } from "../../abis/venueAdapter.js";
 import { getChainAddresses } from "../../addresses.js";
 import { ChainUtils } from "../../chain.js";
-import { UnsupportedChainIdError, IrisCoreErrors } from "../../errors.js";
+import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
 import { fetchAaveV3Venue } from "./aaveV3/fetch.js";
 import { fetchMorphoBlueVenue } from "./morphoBlue/fetch.js";
 
@@ -68,7 +68,7 @@ export async function fetchVenue(
   });
   // An unregistered venue id resolves to the zero address.
   if (adapter === zeroAddress) {
-    throw new IrisCoreErrors.UnsupportedVenueAdapterError(adapter, chainId);
+    throw new UnsupportedVenueAdapterError(adapter, chainId);
   }
 
   const [[collateral, debt], [collateralIndex, debtIndex], lltv, price, block] = await Promise.all([
@@ -130,6 +130,6 @@ export async function fetchVenue(
         chainId,
       });
     default:
-      throw new IrisCoreErrors.UnsupportedVenueAdapterError(adapter, chainId);
+      throw new UnsupportedVenueAdapterError(adapter, chainId);
   }
 }
