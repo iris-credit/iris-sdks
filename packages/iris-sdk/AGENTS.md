@@ -1,5 +1,7 @@
 # iris-sdk Conventions
 
+> Design decisions, protocol context, and the requirements system: see [`ARCHITECTURE.md`](./ARCHITECTURE.md). The bullets below are how changes land.
+
 - Layer one way, Client → Entity → Action: `irisViemExtension` builds a stateless namespace (no cache, no `init()`, options deep-frozen); the `Iris` entity reads state and validates; actions only encode calldata.
 - Entity flows return lazy `{ buildTx, getRequirements }`: `buildTx` stays synchronous and pure, and every read that can wait lives in `getRequirements`.
 - Keep flows fetch-first: they take pre-fetched `loanData` / `positionData` / `newVenue` / `claimableData` from the entity's `get*Data` getters and never fetch inside the flow.
@@ -19,6 +21,7 @@
 
 ## Continuous Improvement
 
+- A change that alters a decision recorded in `ARCHITECTURE.md` — layering, routing, the funding pattern, the requirements flow — updates it in the same PR.
 - Keep the lazy-handle contract stable: reads stay in `getRequirements`, encoding stays in `buildTx`.
 - Existing code may predate current conventions; do not widen divergence when touching it.
 - Prefer typed errors and protocol-faithful validation over generic failures or broad abstractions.

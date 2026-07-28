@@ -217,7 +217,7 @@ const positionData = await iris.getPositionData(pod);
 
 const { buildTx } = iris.withdrawCollateral({
   userAddress: borrower, // must be the loan's borrower (or authorized by them on Iris).
-  positionData: positionData.accrueLegs(Time.timestamp()), // ceilings are measured on it as given.
+  positionData: positionData.accrueLegs(Time.timestamp()).rebase(), // ceilings are measured on it as given.
   amount: 50000000n, // 0.5 cbBTC.
 });
 
@@ -352,6 +352,8 @@ const { quoteSignature, solverPermit2 } = await signResponse(client, {
 > Permit2 nonces for `(solver, debtToken, Iris)` are sequential, so concurrent outstanding quotes race — only the first take can consume its permit. Solvers quoting at volume should prefer the standing-allowance mode and skip the payload entirely.
 
 ### Architecture
+
+Design decisions, protocol context, and the requirements system internals are documented in [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ```mermaid
 graph LR
