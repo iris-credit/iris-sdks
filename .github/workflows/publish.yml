@@ -1,8 +1,8 @@
 name: Publish
 
-# Auto-publishes @iris-credit/core-sdk, @iris-credit/iris-ts and @iris-credit/test to
-# public npm via OIDC Trusted Publishing (no token), on every merge to main that
-# changes packages/.
+# Auto-publishes @iris-credit/core-sdk, @iris-credit/evm-simulation, @iris-credit/iris-sdk,
+# @iris-credit/iris-ts and @iris-credit/test to public npm via OIDC
+# Trusted Publishing (no token), on every merge to main that changes packages/.
 # Versioning is intentionally throwaway (0.0.<run_number>) — consumers track the
 # `latest` tag. Adopt changesets/semver when the API stabilizes.
 on:
