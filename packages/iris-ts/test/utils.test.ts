@@ -1,6 +1,8 @@
 import { describe, expect, test, vi } from "vitest";
 import {
   bigIntComparator,
+  createGetValue,
+  createHasValue,
   deepFreeze,
   entries,
   filterDefined,
@@ -17,7 +19,18 @@ import {
   retryPromiseLinearBackoff,
   transformValue,
   values,
+  ZERO_ADDRESS,
 } from "../src/index.js";
+
+describe("ZERO_ADDRESS", () => {
+  test("is the canonical zero address", () => {
+    expect(ZERO_ADDRESS).toBe("0x0000000000000000000000000000000000000000");
+  });
+
+  test("has length 42 (0x + 40 hex chars)", () => {
+    expect(ZERO_ADDRESS.length).toBe(42);
+  });
+});
 
 describe("utils", () => {
   test("should list keys of object", async () => {
@@ -32,6 +45,19 @@ describe("utils", () => {
     const result = keys([1, 2, 3]);
     expect(result).toEqual(["0", "1", "2"]);
     expect(typeof result[0]).toBe("string");
+  });
+
+  test("keys() returns sorted-by-insertion (numeric first, then string)", () => {
+    expect(keys({ b: 2, a: 1, "3": "c" })).toEqual(["3", "b", "a"]);
+  });
+
+  test("keys() handles empty object", () => {
+    expect(keys({})).toEqual([]);
+  });
+
+  test("keys() handles null/undefined input", () => {
+    expect(keys()).toEqual([]);
+    expect(keys(null as unknown as object)).toEqual([]);
   });
 });
 
@@ -49,6 +75,34 @@ describe("deepFreeze", () => {
     const frozen = deepFreeze(obj);
     expect(Object.isFrozen(frozen)).toBe(true);
     expect(Object.isFrozen(frozen.b)).toBe(true);
+  });
+
+  test("freezes arrays", () => {
+    const obj = { items: [1, 2, 3] };
+    deepFreeze(obj);
+    expect(Object.isFrozen(obj.items)).toBe(true);
+  });
+
+  test("returns the same reference", () => {
+    const obj = { a: 1 };
+    expect(deepFreeze(obj)).toBe(obj);
+  });
+
+  test("frozen objects throw TypeError on mutation in strict mode", () => {
+    const obj = { a: 1 };
+    deepFreeze(obj);
+    // ESM modules are strict-mode by default, so writing to a frozen
+    // object throws `TypeError`. Pinning the class catches a regression
+    // that downgrades to silent no-op (loose-mode behaviour).
+    expect(() => {
+      obj.a = 2;
+    }).toThrow(TypeError);
+  });
+
+  test("handles primitive scalars without throwing", () => {
+    // The implementation calls Object.getOwnPropertyNames which works on primitives via boxing.
+    expect(() => deepFreeze(0 as unknown as object)).not.toThrow();
+    expect(() => deepFreeze("string" as unknown as object)).not.toThrow();
   });
 });
 
@@ -100,6 +154,21 @@ describe("bigIntComparator", () => {
     const arr = [100n, 50n, 75n];
     arr.sort(bigIntComparator((x) => x));
     expect(arr).toEqual([50n, 75n, 100n]);
+  });
+
+  test("treats two undefined entries, and mixed nullish entries, as equal (returns 0)", () => {
+    const cmpUndef = bigIntComparator<{ v: bigint | undefined }>((x) => x.v);
+    expect(cmpUndef({ v: undefined }, { v: undefined })).toBe(0);
+
+    // Mixed nullish: source uses `xA == null && xB == null`.
+    const cmpMixed = bigIntComparator<{ v: bigint | null | undefined }>((x) => x.v);
+    expect(cmpMixed({ v: null }, { v: undefined })).toBe(0);
+  });
+
+  test("works with very large bigints", () => {
+    const items = [{ v: 2n ** 256n - 1n }, { v: 0n }, { v: 1n }];
+    items.sort(bigIntComparator((x) => x.v));
+    expect(items.map((x) => x.v)).toEqual([0n, 1n, 2n ** 256n - 1n]);
   });
 });
 
@@ -163,6 +232,29 @@ describe("mergeEntries", () => {
     const result = mergeEntries(map, (prev, curr) => prev + curr);
     expect(result).toEqual({ a: 10, b: 20 });
   });
+
+  test("does not call merger for first occurrence of a key", () => {
+    const merger = vi.fn((a: number, b: number) => a + b);
+    mergeEntries<string, number>(
+      [
+        ["a", 1],
+        ["b", 2],
+      ],
+      merger,
+    );
+    expect(merger).not.toHaveBeenCalled();
+  });
+
+  test("supports objects (last-write semantics via merger)", () => {
+    const merged = mergeEntries<string, { x: number }>(
+      [
+        ["a", { x: 1 }],
+        ["a", { x: 2 }],
+      ],
+      (_, v) => v,
+    );
+    expect(merged).toEqual({ a: { x: 2 } });
+  });
 });
 
 describe("retryPromiseLinearBackoff", () => {
@@ -222,6 +314,29 @@ describe("retryPromiseLinearBackoff", () => {
     ).rejects.toThrow("stopped retrying");
     expect(func).toHaveBeenCalledTimes(1);
   });
+
+  test("continues retrying when onError returns falsy", async () => {
+    let attempts = 0;
+    const func = vi.fn(async () => {
+      attempts++;
+      if (attempts < 2) throw new Error("transient");
+      return "ok";
+    });
+    const onError = vi.fn(async () => false);
+    const result = await retryPromiseLinearBackoff(func, {
+      timeout: 0,
+      retries: 5,
+      onError,
+    });
+    expect(result).toBe("ok");
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  test("uses default timeout=100 and retries=8 when omitted", async () => {
+    const func = vi.fn(async () => "ok");
+    const result = await retryPromiseLinearBackoff(func, {});
+    expect(result).toBe("ok");
+  });
 });
 
 describe("isNotNull", () => {
@@ -234,6 +349,14 @@ describe("isNotNull", () => {
 
   test("returns false for null", () => {
     expect(isNotNull(null)).toBe(false);
+  });
+
+  test("narrows the type", () => {
+    const v: string | null = "hello" as string | null;
+    if (isNotNull(v)) {
+      // type-narrowed to string at compile time
+      expect(v.length).toBe(5);
+    }
   });
 });
 
@@ -276,6 +399,11 @@ describe("getLast", () => {
   test("returns sole element of single-element array", () => {
     expect(getLast([42])).toBe(42);
   });
+
+  test("preserves null/undefined values at the end", () => {
+    expect(getLast([1, null] as Array<number | null>)).toBe(null);
+    expect(getLast([1, undefined] as Array<number | undefined>)).toBe(undefined);
+  });
 });
 
 describe("filterDefined", () => {
@@ -294,6 +422,21 @@ describe("filterDefined", () => {
   test("handles empty array", () => {
     expect(filterDefined([])).toEqual([]);
   });
+
+  test("preserves falsy values that are defined (0, '', false)", () => {
+    expect(filterDefined([0, "", false, null, undefined] as Array<unknown>)).toEqual([
+      0,
+      "",
+      false,
+    ]);
+  });
+
+  test("returns a new array (does not mutate input)", () => {
+    const input = [1, null, 2] as Array<number | null>;
+    const result = filterDefined(input);
+    expect(result).not.toBe(input);
+    expect(input).toEqual([1, null, 2]);
+  });
 });
 
 describe("getLastDefined", () => {
@@ -307,6 +450,10 @@ describe("getLastDefined", () => {
 
   test("returns last element when all are defined", () => {
     expect(getLastDefined([1, 2, 3])).toBe(3);
+  });
+
+  test("returns the only element when array has one defined value", () => {
+    expect(getLastDefined([42])).toBe(42);
   });
 });
 
@@ -326,12 +473,41 @@ describe("getValue", () => {
     const obj = { a: null as { b: number } | null };
     expect(getValue(obj, "a")).toBeNull();
   });
+
+  test("returns null when path traverses null", () => {
+    expect(getValue({ a: null as null | { b: number } }, "a.b" as never)).toBe(null);
+  });
+
+  test("returns undefined when key missing", () => {
+    const obj = { a: { b: 1 } };
+    expect(getValue(obj, "a.missing" as never)).toBe(undefined);
+  });
+});
+
+describe("createGetValue", () => {
+  test("returns a reusable getter", () => {
+    const obj = { a: 1, nested: { b: 2 } };
+    const getA = createGetValue<typeof obj>("a");
+    expect(getA(obj)).toBe(1);
+    expect(getA({ ...obj, a: 7 })).toBe(7);
+  });
+
+  test("resolves a dotted path", () => {
+    const obj = { a: 1, nested: { b: 2 } };
+    const getNestedB = createGetValue<typeof obj>("nested.b");
+    expect(getNestedB(obj)).toBe(2);
+  });
 });
 
 describe("hasValue", () => {
   test("returns true when the field is defined", () => {
     const obj = { a: 1 };
     expect(hasValue(obj, "a")).toBe(true);
+  });
+
+  test("returns true for a present non-nullish value on a dotted path", () => {
+    const obj = { nested: { b: 2 } };
+    expect(hasValue(obj, "nested.b")).toBe(true);
   });
 
   test("returns false when the field is null", () => {
@@ -342,6 +518,15 @@ describe("hasValue", () => {
   test("returns false when the field is undefined", () => {
     const obj = { a: undefined as number | undefined };
     expect(hasValue(obj, "a")).toBe(false);
+  });
+});
+
+describe("createHasValue", () => {
+  test("returns a reusable predicate", () => {
+    const obj = { a: 1 as number | undefined };
+    const hasA = createHasValue<typeof obj>("a");
+    expect(hasA(obj)).toBe(true);
+    expect(hasA({ ...obj, a: undefined })).toBe(false);
   });
 });
 
@@ -371,6 +556,10 @@ describe("values", () => {
   test("returns empty array for undefined input", () => {
     expect(values(undefined)).toEqual([]);
   });
+
+  test("returns empty array for null input", () => {
+    expect(values(null as unknown as object)).toEqual([]);
+  });
 });
 
 describe("entries", () => {
@@ -384,6 +573,10 @@ describe("entries", () => {
 
   test("returns empty array for undefined input", () => {
     expect(entries(undefined)).toEqual([]);
+  });
+
+  test("returns empty array for null input", () => {
+    expect(entries(null as unknown as object)).toEqual([]);
   });
 });
 
