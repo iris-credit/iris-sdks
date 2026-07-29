@@ -16,7 +16,7 @@
 - Keep solver (maker) helpers in `src/actions/solver/`: sign quotes verbatim, derive the Permit2 payload from the quote itself, and verify signatures (ERC-1271-capable) before returning them.
 - Keep bundler ABI literals in `src/abis/`; protocol ABIs, addresses and constants come from `@iris-credit/core-sdk`.
 - `viem` is the only peer dependency; `core-sdk` and `iris-ts` ship as regular dependencies. Keep the package framework-free.
-- Colocate unit tests as `{module}.test.ts` in `src/`, mocking RPC at the custom-transport boundary; this package carries no fork harness.
+- Colocate unit tests as `{module}.test.ts` in `src/`, mocking RPC at the custom-transport boundary; the fork harness in `test/setup.ts` is for the tests that need a real chain, such as signature verification. End-to-end fork tests that execute transactions against the deployed contracts live under `test/actions/`.
 - Document public APIs with JSDoc: a description, `@param`, `@returns`, `@throws` per typed error, and an `@example`.
 
 ## Continuous Improvement

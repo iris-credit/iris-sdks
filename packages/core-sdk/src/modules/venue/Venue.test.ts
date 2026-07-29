@@ -102,6 +102,9 @@ describe("Venue", () => {
     expect(venue.isHealthy).toBe(true);
     expect(new TestVenue({ ...venue, debt: 5n * MathLib.WAD + 1n }).isHealthy).toBe(false);
     expect(new TestVenue({ ...venue, price: undefined }).isHealthy).toBeUndefined();
+    // A zero price zeroes the collateral's value: any debt at all is then unhealthy.
+    expect(new TestVenue({ ...venue, price: 0n }).isHealthy).toBe(false);
+    expect(new TestVenue({ ...venue, price: 0n, debt: 0n }).isHealthy).toBe(true);
   });
 
   test("should return the price at which the debt meets the lltv limit", () => {

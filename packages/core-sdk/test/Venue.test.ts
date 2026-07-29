@@ -14,6 +14,7 @@ import {
   ChainId,
   MathLib,
   MorphoBlueVenue,
+  UnsupportedVenueAdapterError,
   fetchVenue,
   getChainAddresses,
 } from "../src/index.js";
@@ -158,6 +159,77 @@ describe("venue parity (mainnet fork)", () => {
 
       expect(venue).toBeInstanceOf(MorphoBlueVenue);
       expect((venue as MorphoBlueVenue).rateAtTarget).toBeGreaterThan(0n);
+    },
+  );
+
+  test(
+    "aave: fetchVenue dispatches on the registered adapter",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      // Venue 0 is the Aave V3 adapter onchain; the reserves carry no market data.
+      const venue = await fetchVenue(
+        {
+          // No pod holds a position on the fork: the live view reads as zeroed.
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 0n,
+          data: "0x",
+          collateralToken: tokens.WETH,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      expect(venue).toBeInstanceOf(AaveV3Venue);
+      // The adapter reports the pair's LLTV and price, and each reserve carries the side's
+      // own index — liquidity for the collateral, variable borrow for the debt.
+      expect(venue.lltv).toBeGreaterThan(0n);
+      expect(venue.price).toBeGreaterThan(0n);
+
+      const { collateralReserve, debtReserve } = venue as AaveV3Venue;
+      const [collateralPool, debtPool] = await Promise.all([
+        readContract(client, {
+          address: aaveV3Pool,
+          abi: aaveV3PoolAbi,
+          functionName: "getReserveData",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: aaveV3Pool,
+          abi: aaveV3PoolAbi,
+          functionName: "getReserveData",
+          args: [tokens.USDC],
+        }),
+      ]);
+
+      expect(collateralReserve).toStrictEqual({
+        index: collateralPool.liquidityIndex,
+        rate: collateralPool.currentLiquidityRate,
+        lastUpdateTimestamp: BigInt(collateralPool.lastUpdateTimestamp),
+      });
+      expect(debtReserve).toStrictEqual({
+        index: debtPool.variableBorrowIndex,
+        rate: debtPool.currentVariableBorrowRate,
+        lastUpdateTimestamp: BigInt(debtPool.lastUpdateTimestamp),
+      });
+    },
+  );
+
+  test(
+    "fetchVenue rejects a venue id with no registered adapter",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      await expect(
+        fetchVenue(
+          {
+            pod: "0x000000000000000000000000000000000000dEaD",
+            venueId: 2n,
+            data: "0x",
+            collateralToken: tokens.WETH,
+            debtToken: tokens.USDC,
+          },
+          client,
+        ),
+      ).rejects.toBeInstanceOf(UnsupportedVenueAdapterError);
     },
   );
 
