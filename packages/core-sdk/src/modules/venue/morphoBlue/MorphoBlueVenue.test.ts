@@ -270,6 +270,16 @@ describe("MorphoBlueVenue", () => {
     expect(venue.position.borrowShares).toBe(0n);
   });
 
+  test("should throw when the borrow exceeds the market's supply", () => {
+    // Borrowing the whole idle liquidity is allowed; one wei past it is not.
+    expect(venue.borrow(MathLib.WAD, 1_000n).market.totalBorrowAssets).toBe(
+      market.totalSupplyAssets,
+    );
+    expect(() => venue.borrow(MathLib.WAD + 1n, 1_000n)).toThrow(
+      IrisCoreErrors.InsufficientVenueLiquidity,
+    );
+  });
+
   test("should withdraw collateral keeping the venue position healthy", () => {
     const funded = new MorphoBlueVenue(
       { ...view, collateral: 5n, price: ORACLE_PRICE_SCALE },
