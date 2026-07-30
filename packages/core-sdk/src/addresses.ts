@@ -17,11 +17,6 @@ const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 // (multicall3.com); chains where it differs (e.g. zkSync-style) override per-entry.
 const MULTICALL3_ADDRESS = "0xcA11bde05977b3631167028862bE2a173976CA11";
 
-// Mainnet WETH, shared by the vnet fork. Bound once because it fills two roles that alias
-// here but not on chains whose native wrapper isn't WETH: `wNative` (the chain's native
-// wrapper) and a `tokens` entry (the WETH erc20, by symbol).
-const MAINNET_WETH_ADDRESS = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-
 // Fields guaranteed on every supported chain. Chain-specific addresses
 // (protocol integrations, tokens) vary per chain and are inferred from
 // CHAIN_ADDRESSES rather than declared here, so a chain that lacks an
@@ -56,7 +51,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
-    wNative: MAINNET_WETH_ADDRESS,
+    wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
       bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
       generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
@@ -73,7 +68,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
       USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
       WBTC: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
       cbBTC: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-      WETH: MAINNET_WETH_ADDRESS,
+      WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       stETH: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
       wstETH: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
     },
@@ -86,7 +81,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
-    wNative: MAINNET_WETH_ADDRESS,
+    wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
       bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
       generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
@@ -103,7 +98,7 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
       USDT: "0xdAC17F958D2ee523a2206206994597C13D831ec7",
       WBTC: "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
       cbBTC: "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf",
-      WETH: MAINNET_WETH_ADDRESS,
+      WETH: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
       stETH: "0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84",
       wstETH: "0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0",
     },

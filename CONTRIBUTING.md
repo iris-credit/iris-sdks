@@ -141,7 +141,7 @@ Update `CHAIN_ADDRESSES` in `packages/core-sdk/src/addresses.ts`:
 
 Everything up to and including `wNative` is declared in `ChainAddressesBase` and required on every chain. The protocol integrations and `tokens` entries below it are inferred per chain, so omit an integration the chain does not have rather than adding a null-checked entry. Reuse the shared `PERMIT2_ADDRESS` and `MULTICALL3_ADDRESS` constants unless the chain deploys them off their canonical addresses.
 
-When the chain's native wrapper is also a `tokens` entry, bind both to one constant instead of repeating the literal — `wNative` is a role and the `tokens` key is an identity, and nothing enforces that two copies of the same address stay in sync.
+`wNative` and a `tokens` entry may hold the same address — `wNative` is a role, the `tokens` key is an identity. That is expected, not a mistake to factor out.
 
 ### 4. Add the Onchain Registry
 
