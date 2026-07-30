@@ -169,7 +169,8 @@ export interface AuthorizationSignatureArgs {
  *
  * Generic over the signature it produces so permit encoders narrow to
  * {@link PermitRequirementSignature} and the authorization encoder to
- * {@link AuthorizationRequirementSignature}; the default keeps the broad union for mixed arrays.
+ * {@link AuthorizationRequirementSignature}; the non-generic {@link isRequirementSignature}
+ * overload keeps the broad union for mixed arrays.
  */
 export interface Requirement<TSignature extends RequirementSignature = RequirementSignature> {
   sign: (client: WalletClient, userAddress: Address) => Promise<TSignature>;
@@ -262,7 +263,15 @@ export function isRequirementSignature<T extends RequirementSignature = Requirem
     | Transaction<IrisAuthorizationAction>
     | Requirement<T>
     | undefined,
-): requirement is Requirement<T> {
+): requirement is Requirement<T>;
+export function isRequirementSignature(
+  requirement:
+    | Transaction<ERC20ApprovalAction>
+    | Transaction<IrisAuthorizationAction>
+    | Requirement
+    | undefined,
+): requirement is Requirement;
+export function isRequirementSignature(requirement: unknown): boolean {
   return (
     requirement !== undefined &&
     typeof requirement === "object" &&

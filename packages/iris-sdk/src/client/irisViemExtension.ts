@@ -45,7 +45,7 @@ function createIrisNamespace(
  * ```ts
  * import { createWalletClient, http, publicActions } from "viem";
  * import { mainnet } from "viem/chains";
- * import { irisViemExtension } from "@iris-credit/iris-sdk";
+ * import { irisViemExtension, isRequirementSignature } from "@iris-credit/iris-sdk";
  *
  * const client = createWalletClient({
  *   chain: mainnet,
@@ -63,9 +63,14 @@ function createIrisNamespace(
  * });
  * const requirements = await getRequirements();
  * // Send the approval / authorization transactions, and sign the signable requirements:
- * const signatures = await Promise.all(
- *   requirements.filter(isRequirementSignature).map((r) => r.sign(client, user)),
- * );
+ * const signatures = [];
+ * for (const requirement of requirements) {
+ *   if (isRequirementSignature(requirement)) {
+ *     signatures.push(await requirement.sign(client, user));
+ *   } else {
+ *     await client.sendTransaction(requirement);
+ *   }
+ * }
  * const tx = buildTx(signatures);
  * ```
  */
