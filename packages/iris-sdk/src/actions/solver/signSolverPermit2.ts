@@ -27,12 +27,17 @@ export interface SignSolverPermit2Params {
   bond: bigint;
   /** Target chain id; must match `client.chain.id`. */
   chainId: ChainId;
+  /**
+   * Permit2 signature deadline in seconds — the last moment the signed permit can be
+   * submitted on-chain (`signResponse` passes `quote.deadline`).
+   */
+  deadline: bigint;
   /** Defaults to the solver's current on-chain Permit2 nonce for `(debtToken, Iris core)`. */
   nonce?: bigint;
   /**
-   * Permit2 allowance expiration in seconds. Defaults to `MathLib.MAX_UINT_48` — a
-   * never-expiring allowance once submitted; pass a bound to scope it
-   * (`signResponse` passes `quote.deadline`).
+   * Permit2 allowance expiration in seconds. Defaults to `MathLib.MAX_UINT_48` — once
+   * submitted, the allowance never expires, mimicking a standing approval; pass a bound
+   * to scope it.
    */
   expiration?: bigint;
 }
@@ -73,6 +78,7 @@ export interface SignSolverPermit2Params {
  *   solver,
  *   debtToken,
  *   bond,
+ *   deadline,
  * });
  * // Attach to the RFQ webhook response next to the signed quote.
  * ```
@@ -81,7 +87,7 @@ export const signSolverPermit2 = async (
   client: WalletClient,
   params: SignSolverPermit2Params,
 ): Promise<SolverPermit2> => {
-  const { solver, debtToken, bond, chainId, expiration = MathLib.MAX_UINT_48 } = params;
+  const { solver, debtToken, bond, chainId, deadline, expiration = MathLib.MAX_UINT_48 } = params;
 
   if (client.chain?.id !== chainId) {
     throw new ChainIdMismatchError(client.chain?.id, chainId);
@@ -116,7 +122,7 @@ export const signSolverPermit2 = async (
       expiration: Number(expiration),
       nonce: Number(nonce),
     },
-    sigDeadline: expiration,
+    sigDeadline: deadline,
   };
 
   const typedData = getPermit2PermitTypedData(
@@ -124,7 +130,7 @@ export const signSolverPermit2 = async (
       erc20: debtToken,
       allowance: bond,
       nonce: Number(nonce),
-      deadline: expiration,
+      deadline,
       spender: iris,
       expiration: Number(expiration),
     },

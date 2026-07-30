@@ -25,6 +25,7 @@ describe("signSolverPermit2", () => {
   } = getChainAddresses(CHAIN_ID);
 
   const bond = 1_000_000n;
+  const deadline = 1_900_000_000n;
 
   test("default: signs a bond payload spendable by the Iris core", async ({ client }) => {
     const solver = client.account.address;
@@ -34,6 +35,7 @@ describe("signSolverPermit2", () => {
       debtToken: USDC,
       bond,
       chainId: CHAIN_ID,
+      deadline,
       nonce: 0n,
     });
 
@@ -44,7 +46,7 @@ describe("signSolverPermit2", () => {
         expiration: Number(MathLib.MAX_UINT_48),
         nonce: 0,
       },
-      sigDeadline: MathLib.MAX_UINT_48,
+      sigDeadline: deadline,
     });
     expect(isHex(solverPermit2.signature)).toBe(true);
     expect(solverPermit2.signature.length).toBe(132);
@@ -57,7 +59,7 @@ describe("signSolverPermit2", () => {
             erc20: USDC,
             allowance: bond,
             nonce: 0,
-            deadline: MathLib.MAX_UINT_48,
+            deadline,
             spender: iris,
             expiration: Number(MathLib.MAX_UINT_48),
           },
@@ -70,19 +72,20 @@ describe("signSolverPermit2", () => {
   });
 
   test("behavior: scopes the allowance to an explicit expiration", async ({ client }) => {
-    const expiration = 1_900_000_000n;
+    const expiration = 1_800_000_000n;
 
     const solverPermit2 = await signSolverPermit2(client, {
       solver: client.account.address,
       debtToken: USDC,
       bond,
       chainId: CHAIN_ID,
+      deadline,
       nonce: 0n,
       expiration,
     });
 
     expect(solverPermit2.permitSingle.details.expiration).toBe(Number(expiration));
-    expect(solverPermit2.permitSingle.sigDeadline).toBe(expiration);
+    expect(solverPermit2.permitSingle.sigDeadline).toBe(deadline);
   });
 
   test("behavior: defaults the nonce to the solver's on-chain Permit2 nonce", async ({
@@ -103,6 +106,7 @@ describe("signSolverPermit2", () => {
       debtToken: USDC,
       bond,
       chainId: CHAIN_ID,
+      deadline,
     });
 
     expect(solverPermit2Payload.permitSingle.details.nonce).toBe(3);
@@ -114,6 +118,7 @@ describe("signSolverPermit2", () => {
       debtToken: USDC,
       bond,
       chainId: CHAIN_ID,
+      deadline,
       nonce: 0n,
     });
 
@@ -129,6 +134,7 @@ describe("signSolverPermit2", () => {
         debtToken: USDC,
         bond,
         chainId: UNSUPPORTED_CHAIN_ID,
+        deadline,
         nonce: 0n,
       }),
     ).rejects.toBeInstanceOf(ChainIdMismatchError);
@@ -141,6 +147,7 @@ describe("signSolverPermit2", () => {
         debtToken: USDC,
         bond: 0n,
         chainId: CHAIN_ID,
+        deadline,
         nonce: 0n,
       }),
     ).rejects.toBeInstanceOf(NonPositiveInputError);
@@ -153,6 +160,7 @@ describe("signSolverPermit2", () => {
         debtToken: USDC,
         bond,
         chainId: CHAIN_ID,
+        deadline,
         nonce: 0n,
       }),
     ).rejects.toBeInstanceOf(AddressMismatchError);
@@ -173,6 +181,7 @@ describe("signSolverPermit2", () => {
         debtToken: USDC,
         bond,
         chainId: CHAIN_ID,
+        deadline,
         nonce: 0n,
       }),
     ).rejects.toBeInstanceOf(InvalidSignatureError);
