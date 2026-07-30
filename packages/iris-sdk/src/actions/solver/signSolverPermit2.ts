@@ -17,6 +17,9 @@ import {
   NonPositiveInputError,
 } from "../../types/index.js";
 
+/** Fixed allowance expiration — once submitted, the permit mimics a standing approval. */
+const EXPIRATION = Number(MathLib.MAX_UINT_48);
+
 /** Parameters for {@link signSolverPermit2}. */
 export interface SignSolverPermit2Params {
   /** The solver signing the payload; must be the connected account. */
@@ -34,12 +37,6 @@ export interface SignSolverPermit2Params {
   deadline: bigint;
   /** Defaults to the solver's current on-chain Permit2 nonce for `(debtToken, Iris core)`. */
   nonce?: bigint;
-  /**
-   * Permit2 allowance expiration in seconds. Defaults to `MathLib.MAX_UINT_48` — once
-   * submitted, the allowance never expires, mimicking a standing approval; pass a bound
-   * to scope it.
-   */
-  expiration?: bigint;
 }
 
 /**
@@ -51,6 +48,10 @@ export interface SignSolverPermit2Params {
  * response next to the signed quote. The take bundle then submits it via `approve2Iris`, so
  * `Iris.take`'s `safeTransferFrom2` bond pull succeeds through the Permit2 fallback. The
  * signed spender is pinned to the chain's Iris core — never `GeneralAdapter1`.
+ *
+ * The signed allowance `expiration` is fixed to `MathLib.MAX_UINT_48`: `deadline` bounds how long
+ * the signature stays submittable, and once submitted the allowance never expires, mimicking a
+ * standing approval.
  *
  * Prerequisite: the solver must have a standing ERC-20 approval of `debtToken` to the Permit2
  * contract (one-time `approve(permit2, max)`); the taker-side pre-flight checks it.
@@ -87,7 +88,7 @@ export const signSolverPermit2 = async (
   client: WalletClient,
   params: SignSolverPermit2Params,
 ): Promise<SolverPermit2> => {
-  const { solver, debtToken, bond, chainId, deadline, expiration = MathLib.MAX_UINT_48 } = params;
+  const { solver, debtToken, bond, chainId, deadline } = params;
 
   if (client.chain?.id !== chainId) {
     throw new ChainIdMismatchError(client.chain?.id, chainId);
@@ -119,7 +120,7 @@ export const signSolverPermit2 = async (
     details: {
       token: debtToken,
       amount: bond,
-      expiration: Number(expiration),
+      expiration: EXPIRATION,
       nonce: Number(nonce),
     },
     sigDeadline: deadline,
@@ -132,7 +133,7 @@ export const signSolverPermit2 = async (
       nonce: Number(nonce),
       deadline,
       spender: iris,
-      expiration: Number(expiration),
+      expiration: EXPIRATION,
     },
     chainId,
   );

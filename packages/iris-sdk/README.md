@@ -346,7 +346,7 @@ const { quoteSignature, solverPermit2 } = await signResponse(client, {
 // Respond to the RFQ webhook with { ...quote fields, signature: quoteSignature, solverPermit2 }.
 ```
 
-`signResponse` derives the Permit2 payload from the quote itself (`solver`, `debtToken`, `bond`), so it can never mismatch the quote it accompanies, and scopes its signature deadline to `quote.deadline` — an unfilled quote's permit becomes unsubmittable once the quote dies, while a submitted allowance never expires, mimicking a standing approval. Requirements cover allowances only: gate quoting on the solver's debt-token balance separately, and re-check as takes consume it.
+`signResponse` derives the Permit2 payload from the quote itself (`solver`, `debtToken`, `bond`), so it can never mismatch the quote it accompanies, and scopes its signature deadline to `quote.deadline` — an unfilled quote's permit becomes unsubmittable once the quote dies, while a submitted allowance is always signed with the maximum `expiration`, mimicking a standing approval. Requirements cover allowances only: gate quoting on the solver's debt-token balance separately, and re-check as takes consume it.
 
 > [!NOTE]
 > Permit2 nonces for `(solver, debtToken, Iris)` are sequential, so concurrent outstanding quotes race — only the first take can consume its permit. Solvers quoting at volume should prefer the standing-allowance mode and skip the payload entirely.

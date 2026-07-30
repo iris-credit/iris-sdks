@@ -71,23 +71,6 @@ describe("signSolverPermit2", () => {
     ).resolves.toBe(true);
   });
 
-  test("behavior: scopes the allowance to an explicit expiration", async ({ client }) => {
-    const expiration = 1_800_000_000n;
-
-    const solverPermit2 = await signSolverPermit2(client, {
-      solver: client.account.address,
-      debtToken: USDC,
-      bond,
-      chainId: CHAIN_ID,
-      deadline,
-      nonce: 0n,
-      expiration,
-    });
-
-    expect(solverPermit2.permitSingle.details.expiration).toBe(Number(expiration));
-    expect(solverPermit2.permitSingle.sigDeadline).toBe(deadline);
-  });
-
   test("behavior: defaults the nonce to the solver's on-chain Permit2 nonce", async ({
     client,
   }) => {
