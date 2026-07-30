@@ -75,21 +75,21 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
   },
   [ChainId.VNet]: {
     // Iris protocol contracts.
-    iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
-    blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
-    podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
-    whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
+    iris: "0x47e50Fa62E3562EF90Aa578Fb7328C4c85E2D522",
+    blm: "0x8657794828D7660A335ABDF2b21DAea4fE369e97",
+    podImpl: "0xf8B1Fd75826549DFe0db83deF6d0663C574fa349",
+    whitelistBlm: "0x03fB4ACaa91261b4af463cEB21027A203aCEeb42",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
-      bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
-      generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
+      bundler3: "0x3F9bE653328b2610a4028aFC537F191D4d9c9c24",
+      generalAdapter1: "0x2bF8D2f82fb24839fd35CF952A7Eafe96A1Ac394",
     },
     // Protocol integrations.
-    aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
+    aaveV3Adapter: "0x7f1bFABb584935e97143631A3b19816853F40bD7",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
-    morphoBlueAdapter: "0x5fE09E7eA6F46296B42146D77f1Eb88F088Bdf8E",
+    morphoBlueAdapter: "0x26927E53bbfeE9C3401FFBE838B739dDe08d5Cba",
     morphoBlue: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
     adaptiveCurveIrm: "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
     tokens: {
