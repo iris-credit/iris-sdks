@@ -74,7 +74,9 @@ Publishing is automated by [`publish.yml`](./.github/workflows/publish.yml) and 
 
 Versioning is intentionally throwaway while the API is unstable: every publishable package is stamped the same `0.0.<run_number>` (lockstep, so `workspace:^` peers such as `core-sdk` → `iris-ts` resolve), and consumers track the `latest` tag. There are no changesets, no semver bumps, and no `CHANGELOG.md` files to update — that policy gets revisited when the API stabilizes.
 
-One operational caveat: a brand-new package cannot be published by the workflow until it has been published manually once and had its trusted publisher configured on npmjs.com. Because versioning is lockstep, a package missing that setup fails the run and strands the other packages on the previous version.
+One operational caveat: a brand-new package cannot be published by the workflow until it has been published manually once and had its trusted publisher configured on npmjs.com. A package missing that setup does not just fail its own step — `pnpm -r publish` runs with pnpm's default workspace concurrency and npm has no cross-package rollback, so packages that already went out stay published. The result is a partial release: some packages at the new version, the unconfigured one still at the previous one, which breaks the lockstep assumption that peer ranges rely on.
+
+To recover, finish the trusted-publisher setup and re-run the workflow via `workflow_dispatch`. Because the version is stamped from `github.run_number`, the re-run mints a higher version and republishes every package, which realigns the set — don't try to re-publish the failed package at the version the others already took.
 
 ## Listing a New Chain to Support
 
@@ -137,7 +139,9 @@ Update `CHAIN_ADDRESSES` in `packages/core-sdk/src/addresses.ts`:
 },
 ```
 
-Only the `ChainAddressesBase` fields are required on every chain. Protocol integrations and tokens are inferred per chain, so omit an integration the chain does not have rather than adding a null-checked entry. Reuse the shared `PERMIT2_ADDRESS` and `MULTICALL3_ADDRESS` constants unless the chain deploys them off their canonical addresses.
+Everything up to and including `wNative` is declared in `ChainAddressesBase` and required on every chain. The protocol integrations and `tokens` entries below it are inferred per chain, so omit an integration the chain does not have rather than adding a null-checked entry. Reuse the shared `PERMIT2_ADDRESS` and `MULTICALL3_ADDRESS` constants unless the chain deploys them off their canonical addresses.
+
+When the chain's native wrapper is also a `tokens` entry, bind both to one constant instead of repeating the literal — `wNative` is a role and the `tokens` key is an identity, and nothing enforces that two copies of the same address stay in sync.
 
 ### 4. Add the Onchain Registry
 
@@ -163,9 +167,11 @@ Update `unwrappedTokensMapping` in `packages/core-sdk/src/addresses.ts`:
 
 ```typescript
 [ChainId.YourNewChain]: {
-  [CHAIN_ADDRESSES[ChainId.YourNewChain].tokens.WETH]: NATIVE_ADDRESS,
+  [CHAIN_ADDRESSES[ChainId.YourNewChain].wNative]: NATIVE_ADDRESS,
 },
 ```
+
+Key this entry off `wNative`, never off a `tokens` symbol. The two alias on mainnet, but on a chain whose native wrapper isn't WETH, `tokens.WETH` is bridged WETH — keying off it would register the wrong asset as the native wrapper and leave the real one unmapped, and the mapping's `Record<Address, Address>` type would not catch it.
 
 ### 6. Verify the Chain Listing
 
