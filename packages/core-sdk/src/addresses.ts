@@ -28,6 +28,9 @@ interface ChainAddressesBase {
   readonly whitelistBlm: Address;
   readonly permit2: Address;
   readonly multicall3: Address;
+  // Every evm chain wraps its native token, and `validateNativeAsset` reads this off an
+  // unnarrowed chain id, so it is guaranteed rather than inferred per chain.
+  readonly wNative: Address;
   readonly bundler3: Readonly<Record<string, Address>>;
   readonly tokens: Readonly<Record<string, Address>>;
 }
@@ -120,13 +123,13 @@ export const getChainAddresses = <T extends ChainId>(chainId: T): (typeof CHAIN_
  */
 const unwrappedTokensMapping = {
   [ChainId.EthMainnet]: {
-    [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.EthMainnet].wNative]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]:
       CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.stETH,
   },
   [ChainId.VNet]: {
-    [CHAIN_ADDRESSES[ChainId.VNet].tokens.WETH]: NATIVE_ADDRESS,
+    [CHAIN_ADDRESSES[ChainId.VNet].wNative]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH]: NATIVE_ADDRESS,
     [CHAIN_ADDRESSES[ChainId.VNet].tokens.wstETH]: CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH,
   },
