@@ -79,10 +79,12 @@ export const CHAIN_REGISTRIES = defineChainRegistries({
       "morphoBlue:wstETH/USDT": { venue: "morphoBlue", data: MORPHO_WSTETH_USDT_DATA },
     },
   },
-  // Fork of mainnet: inherits the mainnet deployment and mirrors its enabled configuration.
+  // Fork of mainnet, but with its own Iris deployment: the enabled configuration is set
+  // separately and does not track mainnet's.
   [ChainId.VNet]: {
-    deploymentBlock: 25_442_833n,
-    bondLltvs: [900_000_000_000_000_000n],
+    deploymentBlock: 25_644_062n,
+    bondLltvs: [800_000_000_000_000_000n],
+    // `whitelistBlm` is deployed but not enabled yet.
     blms: { blm: CHAIN_ADDRESSES[ChainId.VNet].blm },
     venues: { aaveV3: 0n, morphoBlue: 1n },
     marketDatas: {
