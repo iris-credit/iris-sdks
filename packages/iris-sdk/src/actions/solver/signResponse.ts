@@ -23,8 +23,9 @@ export interface SignResponseParams {
  * {@link signQuote} and (in the `usePermit2` mode) {@link signSolverPermit2} in one call.
  *
  * The bond funding payload is derived from the quote itself (`solver`, `debtToken`, `bond`),
- * so it can never mismatch the quote it accompanies, and its allowance `expiration` is set to
- * `quote.deadline` — an unfilled quote's permit dies with the quote, leaving nothing behind.
+ * so it can never mismatch the quote it accompanies, and its signature `deadline` is set to
+ * `quote.deadline` — an unfilled quote's permit becomes unsubmittable once the quote dies,
+ * while a submitted allowance never expires, mimicking a standing approval.
  * The two signatures are produced in parallel.
  *
  * @param client - Wallet client whose account is `quote.solver`; its transport must support
@@ -63,7 +64,7 @@ export const signResponse = async (
           solver: quote.solver,
           debtToken: quote.debtToken,
           bond: quote.bond,
-          expiration: quote.deadline,
+          deadline: quote.deadline,
         })
       : undefined,
   ]);
