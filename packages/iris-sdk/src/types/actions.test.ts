@@ -1,4 +1,11 @@
-import type { ERC20ApprovalAction, IrisAuthorizationAction, Transaction } from "./actions.js";
+import type {
+  AuthorizationRequirementSignature,
+  ERC20ApprovalAction,
+  IrisAuthorizationAction,
+  PermitRequirementSignature,
+  Requirement,
+  Transaction,
+} from "./actions.js";
 
 import { describe, expect, test } from "vitest";
 import { getChainAddresses } from "@iris-credit/core-sdk";
@@ -134,6 +141,31 @@ describe("isRequirementSignature", () => {
 
   test("behavior: false for undefined", () => {
     expect(isRequirementSignature(undefined)).toBe(false);
+  });
+
+  // Regression: a union mixing both Requirement kinds (as take / escape / refinance
+  // return) must stay callable — the non-generic overload catches what the generic
+  // one cannot infer.
+  test("behavior: narrows a mixed transaction / requirement union", () => {
+    const authorizationRequirement = {
+      action: authorization.action,
+      sign: async () => authorization,
+    };
+    const requirements: (
+      | Transaction<ERC20ApprovalAction>
+      | Transaction<IrisAuthorizationAction>
+      | Requirement<PermitRequirementSignature>
+      | Requirement<AuthorizationRequirementSignature>
+    )[] = [
+      approvalTransaction,
+      irisAuthorizationTransaction,
+      permitRequirement,
+      authorizationRequirement,
+    ];
+
+    const signable = requirements.filter((requirement) => isRequirementSignature(requirement));
+
+    expect(signable).toEqual([permitRequirement, authorizationRequirement]);
   });
 });
 
