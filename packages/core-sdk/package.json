@@ -48,6 +48,7 @@
     "test": "vitest run --root ../.. --project core-sdk"
   },
   "devDependencies": {
+    "@iris-credit/iris-ts": "workspace:^",
     "@iris-credit/test": "workspace:^",
     "@types/node": "^22.0.0",
     "viem": "^2.55.8"
