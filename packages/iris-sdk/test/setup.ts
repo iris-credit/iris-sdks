@@ -1,12 +1,7 @@
 import type { AnvilTestClient } from "@iris-credit/test";
 
 import { mainnet } from "viem/chains";
-import { vi } from "vitest";
 import { createViemTest } from "@iris-credit/test/vitest";
-
-// Every fork test spawns its own anvil against a live archive RPC; the 5s default is not enough
-// once several fork files run in parallel. Scoped to the files importing this setup.
-vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
 /**
  * This test will run on `mainnet` forked at block `25_572_460`, after the Jul 20 Iris
