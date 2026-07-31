@@ -35,7 +35,7 @@
     "build": "tsc --noEmit && $npm_execpath build:cjs && $npm_execpath build:esm",
     "build:cjs": "tsc --build tsconfig.build.cjs.json && echo '{\"type\":\"commonjs\"}' > lib/cjs/package.json",
     "build:esm": "tsc --build tsconfig.build.esm.json && echo '{\"type\":\"module\"}' > lib/esm/package.json",
-    "test": "vitest run"
+    "test": "vitest run --root ../.. --project iris-sdk"
   },
   "dependencies": {
     "@iris-credit/core-sdk": "workspace:^",
@@ -44,7 +44,6 @@
   "devDependencies": {
     "@iris-credit/test": "workspace:^",
     "@types/node": "^22.0.0",
-    "dotenv": "^17.4.2",
     "fast-check": "^4.0.0",
     "viem": "^2.55.8"
   },

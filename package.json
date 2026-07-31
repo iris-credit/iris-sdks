@@ -15,15 +15,16 @@
   "type": "module",
   "scripts": {
     "prepare": "husky",
-    "build": "pnpm -r --if-present --workspace-concurrency=1 build",
+    "build": "turbo run build",
     "clean": "rm -rf dist",
-    "test": "turbo run test",
+    "test": "dotenv -- turbo run test",
     "lint": "oxlint",
     "lint:address": "node scripts/lint/checksum-address.js",
     "format": "oxfmt",
     "format:check": "oxfmt --check"
   },
   "devDependencies": {
+    "dotenv-cli": "^11.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "npm-run-all2": "^8.0.0",

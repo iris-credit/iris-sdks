@@ -38,7 +38,7 @@ pnpm test
 
 `pnpm build` runs `tsc --noEmit` plus the CJS/ESM compile in every package, so it is the typecheck gate as well. `pnpm test` fans out through Turborepo.
 
-Fork-backed tests default to the public `https://eth.drpc.org` endpoint, which rate-limits shared IPs. Point `MAINNET_RPC_URL` at a dedicated archive RPC when they flake:
+Fork-backed tests default to the public `https://eth.drpc.org` endpoint, which rate-limits shared IPs. Point `MAINNET_RPC_URL` at a dedicated archive RPC when they flake — either export it, or copy `.env.example` to `.env` (loaded by `pnpm test` at the root):
 
 ```bash
 export MAINNET_RPC_URL="https://mainnet.gateway.tenderly.co"
