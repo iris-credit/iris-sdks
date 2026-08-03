@@ -3,7 +3,7 @@ import type { IVenue } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
-import { Venue } from "../Venue.js";
+import { Venue, VenueName } from "../Venue.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
 import { MorphoBlueMath } from "./MorphoBlueMath.js";
 
@@ -26,6 +26,10 @@ export interface IMorphoBluePosition {
  * it, with Morpho's interest math used to accrue the borrow side.
  */
 export class MorphoBlueVenue extends Venue {
+  /**
+   * The venue's name.
+   */
+  public readonly name = VenueName.MorphoBlue;
   /**
    * The market state at its `lastUpdate`.
    */

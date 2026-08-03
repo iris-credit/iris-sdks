@@ -1,10 +1,13 @@
 import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE } from "../../constants.js";
 import { MathLib } from "../../math/index.js";
-import { Venue } from "./Venue.js";
+import { Venue, VenueName } from "./Venue.js";
 
 /** Concrete stub: the base class only stores the live view. */
 class TestVenue extends Venue {
+  // Arbitrary: the stub models no venue-specific behavior.
+  public readonly name = VenueName.AaveV3;
+
   public accrueInterest() {
     return this;
   }

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
+import { VenueName } from "../Venue.js";
 import { AaveV3Venue } from "./AaveV3Venue.js";
 
 describe("AaveV3Venue", () => {
@@ -23,6 +24,10 @@ describe("AaveV3Venue", () => {
     { index: MathLib.RAY, rate: MathLib.RAY / 10n, lastUpdateTimestamp: 1_000n },
     { index: MathLib.RAY, rate: MathLib.RAY / 5n, lastUpdateTimestamp: 1_000n },
   );
+
+  test("should carry its venue name", () => {
+    expect(venue.name).toBe(VenueName.AaveV3);
+  });
 
   test("should keep the stored indices at the reserves' last update", () => {
     const accrued = venue.accrueInterest(1_000n);

@@ -6,6 +6,14 @@ import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { PositionUtils } from "../position/PositionUtils.js";
 
+/** The names of the venues the SDK models, keying the chain registries' `venues`. */
+export const VenueName = {
+  AaveV3: "aaveV3",
+  MorphoBlue: "morphoBlue",
+} as const;
+
+export type VenueName = (typeof VenueName)[keyof typeof VenueName];
+
 /** Plain input shape for a venue's view of a pod. */
 export interface IVenue {
   id: bigint;
@@ -30,6 +38,11 @@ export interface IVenue {
  * silently diverges from Iris's onchain results.
  */
 export abstract class Venue implements IVenue {
+  /**
+   * The name of the venue this instance models, as keyed in the chain registries' `venues`;
+   * discriminates `Venue` unions without `instanceof`.
+   */
+  public abstract readonly name: VenueName;
   /**
    * The venue ID.
    */

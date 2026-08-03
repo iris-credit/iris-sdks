@@ -2,7 +2,7 @@ import type { BigIntish } from "../../../types.js";
 import type { IVenue } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
-import { Venue } from "../Venue.js";
+import { Venue, VenueName } from "../Venue.js";
 import { AaveV3Math } from "./AaveV3Math.js";
 
 /** Plain input shape for one side of an Aave V3 venue: the reserve state a projection needs. */
@@ -20,6 +20,10 @@ export interface IAaveReserve {
  * interest model used to project the reserve indices.
  */
 export class AaveV3Venue extends Venue {
+  /**
+   * The venue's name.
+   */
+  public readonly name = VenueName.AaveV3;
   /**
    * The collateral asset's reserve state.
    */
