@@ -59,8 +59,8 @@ interface ChainRegistryBase {
   readonly bondLltvs: readonly bigint[];
   /** Enabled BLMs by name. */
   readonly blms: Readonly<Record<string, Address>>;
-  /** Registered venue ids by name (`venueId < 128`). */
-  readonly venues: Readonly<Record<VenueName, bigint>>;
+  /** Registered venue ids by name (`venueId < 128`); each chain registers its own subset. */
+  readonly venues: Readonly<Partial<Record<VenueName, bigint>>>;
   /** Enabled market data payloads by label. */
   readonly marketDatas: Readonly<Record<string, MarketData>>;
 }
