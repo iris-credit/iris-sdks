@@ -51,9 +51,27 @@ export class Blm implements IBlm {
   /**
    * The required bond for a quote of `debt` and `duration`, in debt token units.
    *
+   * @param quote.debt Principal, in debt token units.
+   * @param quote.duration Duration, in seconds.
+   * @returns Required bond, in debt token units.
    * @throws {IrisCoreErrors.ZeroBondRequirement} When the requirement is zero (unconfigured
    * token or dust debt): such a quote is unsubmittable since `Iris.open` requires a nonzero
    * bond requirement.
+   * @example
+   * ```ts
+   * import { Blm } from "@iris-credit/core-sdk";
+   *
+   * const blm = new Blm({
+   *   address: "0x0000000000000000000000000000000000000001",
+   *   token: "0x0000000000000000000000000000000000000002",
+   *   slope: 10_000_000_000_000_000n, // 0.01 WAD per day of duration.
+   *   intercept: 5_000_000_000_000_000n, // 0.005 WAD base ratio.
+   * });
+   *
+   * // ratio = 0.01 WAD/day * 30 days + 0.005 WAD = 0.305 WAD.
+   * const bond = blm.bondRequirement({ debt: 1_000_000_000n, duration: 2_592_000n });
+   * // bond === 305000000n
+   * ```
    */
   public bondRequirement(quote: { debt: BigIntish; duration: BigIntish }) {
     const requirement = BlmUtils.bondRequirement(this, quote);
