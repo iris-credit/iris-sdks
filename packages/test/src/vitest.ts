@@ -1,4 +1,5 @@
 import type { Chain, SendTransactionParameters } from "viem";
+import type { TestAPI } from "vitest";
 import type { AnvilArgs } from "./anvil.js";
 import type { AnvilTestClient } from "./client.js";
 
@@ -18,7 +19,10 @@ export interface ViemTestContext<chain extends Chain = Chain> {
   client: AnvilTestClient<chain>;
 }
 
-export const createViemTest = <chain extends Chain>(chain: chain, parameters: AnvilArgs = {}) => {
+export const createViemTest = <chain extends Chain>(
+  chain: chain,
+  parameters: AnvilArgs = {},
+): TestAPI<ViemTestContext<chain>> => {
   parameters.forkChainId ??= chain?.id;
   parameters.forkUrl ??= chain?.rpcUrls.default.http[0];
   parameters.autoImpersonate ??= true;
