@@ -66,17 +66,36 @@ The per-package rules — entity/`*Utils` split, `bigint` for onchain quantities
 2. Make the smallest coherent change for the PR — one concern per PR.
 3. Add or update tests when behavior changes. Colocate unit tests as `{module}.test.ts` next to the source in `src/`; keep fork-based E2E tests in the package's `test/` directory on the shared `setup.ts` fixture.
 4. Run `pnpm lint`, `pnpm build`, and `pnpm test`.
-5. Don't hand-write versions or changelog entries — releases are automated (see below).
+5. Include a changeset (`pnpm changeset`) when the change is semver-relevant for a published package — see [Releases](#releases). Don't hand-write versions or changelog entries.
 
 ## Releases
 
-Publishing is automated by [`publish.yml`](./.github/workflows/publish.yml) and needs nothing from a feature PR. On every merge to `main` that touches `packages/**`, the workflow builds and publishes the `@iris-credit/*` packages to public npm through OIDC Trusted Publishing — no npm token is involved.
+Releases are automated with [Changesets](https://github.com/changesets/changesets) through [`publish.yml`](./.github/workflows/publish.yml). Packages are published to public npm through OIDC Trusted Publishing — no npm token is involved.
 
-Versioning is intentionally throwaway while the API is unstable: every publishable package is stamped the same `0.0.<run_number>` (lockstep, so `workspace:^` peers such as `core-sdk` → `iris-ts` resolve), and consumers track the `latest` tag. There are no changesets, no semver bumps, and no `CHANGELOG.md` files to update — that policy gets revisited when the API stabilizes.
+### Adding a changeset
 
-One operational caveat: a brand-new package cannot be published by the workflow until it has been published manually once and had its trusted publisher configured on npmjs.com. A package missing that setup does not just fail its own step — `pnpm -r publish` runs with pnpm's default workspace concurrency and npm has no cross-package rollback, so packages that already went out stay published. The result is a partial release: some packages at the new version, the unconfigured one still at the previous one, which breaks the lockstep assumption that peer ranges rely on.
+Every PR that makes a semver-relevant change to published package source must include a changeset:
 
-To recover, finish the trusted-publisher setup and re-run the workflow via `workflow_dispatch`. Because the version is stamped from `github.run_number`, the re-run mints a higher version and republishes every package, which realigns the set — don't try to re-publish the failed package at the version the others already took.
+```bash
+pnpm changeset
+```
+
+Pick the affected packages and the bump level — `patch` (bug fixes, internal maintenance), `minor` (additive API surface), `major` (breaking changes) — and write a consumer-facing summary; it becomes the `CHANGELOG.md` entry. Commit the generated `.changeset/*.md` file together with the change. While packages are on `0.x`, `minor` is the breaking bump; `major` is reserved for graduating to `1.0.0`.
+
+Skip the changeset when the diff only touches repo metadata, CI, documentation, or tests — those don't change the published package contract. Never edit package versions or `CHANGELOG.md` files by hand; the release automation owns them.
+
+Internal dependents that consume a package through regular `dependencies` are bumped automatically — a changeset for `iris-ts` also patch-bumps `iris-sdk` and `evm-simulation` so their published ranges keep resolving. Internal `peerDependencies` are deliberately explicit semver ranges instead of `workspace:` ranges (`core-sdk` → `iris-ts`), so Changesets never auto-escalates the peer dependent to a major; the flip side is manual: when a bump moves a package outside a dependent's declared peer range, widen that range and include the dependent in your changeset yourself.
+
+### Release flow (what happens after merge)
+
+On every push to `main`, the workflow does one of two things:
+
+1. Pending changesets exist → it opens or updates the `chore: version packages` **Version PR**, which applies all pending bumps and `CHANGELOG.md` entries.
+2. No pending changesets (a Version PR just merged) → it builds and publishes the bumped packages to npm, pushes one git tag per package (e.g. `@iris-credit/core-sdk@0.2.0`), and creates matching GitHub Releases.
+
+Merging the Version PR is the release trigger, so changesets from several PRs can batch into a single release.
+
+One operational caveat: a brand-new package cannot be published by the workflow until it has been published manually once and had its trusted publisher configured on npmjs.com (bound to this repository and the `publish.yml` workflow filename). Finish that setup before merging the Version PR that first releases the package.
 
 ## Listing a New Chain to Support
 
