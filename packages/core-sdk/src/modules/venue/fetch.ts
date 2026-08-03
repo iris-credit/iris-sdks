@@ -1,7 +1,6 @@
 import type { Address, Client, Hex } from "viem";
 import type { BigIntish, FetchParameters } from "../../types.js";
-import type { AaveV3Venue } from "./aaveV3/AaveV3Venue.js";
-import type { MorphoBlueVenue } from "./morphoBlue/MorphoBlueVenue.js";
+import type { Venue } from "./Venue.js";
 
 import { zeroAddress } from "viem";
 import { getBlock, getChainId, readContract } from "viem/actions";
@@ -12,9 +11,6 @@ import { ChainUtils } from "../../chain.js";
 import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
 import { fetchAaveV3Venue } from "./aaveV3/fetch.js";
 import { fetchMorphoBlueVenue } from "./morphoBlue/fetch.js";
-
-/** A modeled venue of either flavor, discriminated by `name` (e.g. `venue.name === VenueName.AaveV3`). */
-export type AnyVenue = AaveV3Venue | MorphoBlueVenue;
 
 /** Parameters identifying the venue backing a loan (all read from its position and loan). */
 export interface FetchVenueArgs {
@@ -48,16 +44,33 @@ export interface FetchVenueArgs {
  * @param parameters.blockTag - Optional block tag for historical reads.
  * @param parameters.stateOverride - Optional viem state override.
  * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
- * @returns The hydrated `AnyVenue` entity, narrowable via `name`.
+ * @returns The hydrated `Venue` entity; narrow to a concrete venue with `instanceof`.
  * @throws {UnsupportedChainIdError} when the chain has no registered addresses.
  * @throws {UnsupportedVenueAdapterError} when no venue adapter is registered for the venue
  *   id or the adapter has no offline rate model.
+ * @example
+ * ```ts
+ * import { AaveV3Venue, fetchVenue } from "@iris-credit/core-sdk";
+ *
+ * const venue = await fetchVenue(
+ *   {
+ *     pod: position.pod,
+ *     venueId: position.venueId,
+ *     data: position.data,
+ *     collateralToken: loan.collateralToken,
+ *     debtToken: loan.debtToken,
+ *   },
+ *   client,
+ * );
+ *
+ * if (venue instanceof AaveV3Venue) console.log(venue.collateralReserve);
+ * ```
  */
 export async function fetchVenue(
   { pod, venueId, data, collateralToken, debtToken }: FetchVenueArgs,
   client: Client,
   parameters: FetchParameters = {},
-): Promise<AnyVenue> {
+): Promise<Venue> {
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
