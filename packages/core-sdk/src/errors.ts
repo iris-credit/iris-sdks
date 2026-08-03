@@ -166,4 +166,14 @@ export namespace IrisCoreErrors {
       super(`insufficient bond for pod ${pod}`);
     }
   }
+
+  /** Error thrown when a quote's bond requirement is zero, making it unsubmittable. */
+  export class ZeroBondRequirement extends Error {
+    constructor(
+      public readonly blm: Address,
+      public readonly token: Address,
+    ) {
+      super(`zero bond requirement for token ${token} on blm ${blm}: unsubmittable quote`);
+    }
+  }
 }

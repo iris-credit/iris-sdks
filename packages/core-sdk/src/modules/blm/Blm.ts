@@ -1,6 +1,7 @@
 import type { Address } from "viem";
 import type { BigIntish } from "../../types.js";
 
+import { IrisCoreErrors } from "../../errors.js";
 import { BlmUtils } from "./BlmUtils.js";
 
 /** Plain input shape for a BLM's per-token state. */
@@ -49,9 +50,17 @@ export class Blm implements IBlm {
 
   /**
    * The required bond for a quote of `debt` and `duration`, in debt token units.
+   *
+   * @throws {IrisCoreErrors.ZeroBondRequirement} When the requirement is zero (unconfigured
+   * token or dust debt): such a quote is unsubmittable since `Iris.open` requires a nonzero
+   * bond requirement.
    */
   public bondRequirement(quote: { debt: BigIntish; duration: BigIntish }) {
-    return BlmUtils.bondRequirement(this, quote);
+    const requirement = BlmUtils.bondRequirement(this, quote);
+
+    if (requirement === 0n) throw new IrisCoreErrors.ZeroBondRequirement(this.address, this.token);
+
+    return requirement;
   }
 
   /**

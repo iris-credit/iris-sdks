@@ -8,7 +8,9 @@ import { MathLib } from "../../math/index.js";
 export namespace BlmUtils {
   /**
    * Bit-exact mirror of `Blm.bondRequirement` / `WhitelistBlm.bondRequirement` (both share the
-   * formula). The ratio can exceed WAD, so the required bond can exceed the debt.
+   * formula). The ratio can exceed WAD, so the required bond can exceed the debt. Returns 0 for
+   * unconfigured tokens or dust debt — unsubmittable quotes (`Iris.open` requires a nonzero
+   * requirement), which the `Blm` entity guards by throwing.
    *
    * @param params.slope WAD-scaled slope for the quote's debt token.
    * @param params.intercept WAD-scaled intercept for the quote's debt token.
