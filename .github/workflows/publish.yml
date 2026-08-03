@@ -56,6 +56,8 @@ jobs:
         with:
           version: pnpm changeset version
           publish: pnpm release
+          title: "chore: version packages"
+          commit: "chore: version packages"
         env:
           # Read by the action (PR/release management) and by
           # @changesets/changelog-github (PR metadata for CHANGELOG links).
