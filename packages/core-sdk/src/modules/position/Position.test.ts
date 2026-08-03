@@ -2,8 +2,9 @@ import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../constants.js";
 import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
+import { VenueName } from "../../registries.js";
 import { Loan } from "../loan/Loan.js";
-import { Venue, VenueName } from "../venue/Venue.js";
+import { Venue } from "../venue/Venue.js";
 import { AccrualPosition, Position } from "./Position.js";
 
 /** Concrete venue stub with identity accrual: fixtures hold the venue at the evaluated time. */

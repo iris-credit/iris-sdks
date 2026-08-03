@@ -1,18 +1,11 @@
 import type { Address, Hex } from "viem";
+import type { VenueName } from "../../registries.js";
 import type { BigIntish } from "../../types.js";
 
 import { ORACLE_PRICE_SCALE } from "../../constants.js";
 import { IrisCoreErrors } from "../../errors.js";
 import { MathLib } from "../../math/index.js";
 import { PositionUtils } from "../position/PositionUtils.js";
-
-/** The names of the venues the SDK models, keying the chain registries' `venues`. */
-export const VenueName = {
-  AaveV3: "aaveV3",
-  MorphoBlue: "morphoBlue",
-} as const;
-
-export type VenueName = (typeof VenueName)[keyof typeof VenueName];
 
 /** Plain input shape for a venue's view of a pod. */
 export interface IVenue {

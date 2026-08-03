@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
-import { VenueName } from "../Venue.js";
+import { VenueName } from "../../../registries.js";
 import { AaveV3Venue } from "./AaveV3Venue.js";
 
 describe("AaveV3Venue", () => {

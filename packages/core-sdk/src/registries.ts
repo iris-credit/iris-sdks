@@ -1,5 +1,4 @@
 import type { Address, Hex } from "viem";
-import type { VenueName } from "./modules/venue/Venue.js";
 
 import { CHAIN_ADDRESSES } from "./addresses.js";
 import { ChainId } from "./chain.js";
@@ -18,6 +17,14 @@ import { UnsupportedChainIdError } from "./errors.js";
  * `keccak256(data)`: the hashes are unrecoverable from onchain or indexed state, so newly
  * enabled payloads must be added here from the enablement (ops) side.
  */
+
+/** The names of the venues registered on Iris, keying each chain registry's `venues`. */
+export const VenueName = {
+  AaveV3: "aaveV3",
+  MorphoBlue: "morphoBlue",
+} as const;
+
+export type VenueName = (typeof VenueName)[keyof typeof VenueName];
 
 /** A market data payload enabled on Iris. */
 export interface MarketData {

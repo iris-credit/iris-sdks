@@ -3,7 +3,8 @@ import type { IVenue } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
-import { Venue, VenueName } from "../Venue.js";
+import { VenueName } from "../../../registries.js";
+import { Venue } from "../Venue.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
 import { MorphoBlueMath } from "./MorphoBlueMath.js";
 

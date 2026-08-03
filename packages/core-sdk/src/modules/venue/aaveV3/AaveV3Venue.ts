@@ -2,7 +2,8 @@ import type { BigIntish } from "../../../types.js";
 import type { IVenue } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
-import { Venue, VenueName } from "../Venue.js";
+import { VenueName } from "../../../registries.js";
+import { Venue } from "../Venue.js";
 import { AaveV3Math } from "./AaveV3Math.js";
 
 /** Plain input shape for one side of an Aave V3 venue: the reserve state a projection needs. */

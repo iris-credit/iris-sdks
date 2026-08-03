@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
-import { VenueName } from "../Venue.js";
+import { VenueName } from "../../../registries.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
 import { MorphoBlueMath } from "./MorphoBlueMath.js";
 import { MorphoBlueVenue } from "./MorphoBlueVenue.js";
