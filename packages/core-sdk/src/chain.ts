@@ -57,8 +57,9 @@ export namespace ChainUtils {
       name: "VNet",
       id: ChainId.VNet,
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      // The vnet mirrors mainnet addresses, so etherscan is the closest useful explorer.
-      explorerUrl: "https://etherscan.io",
+      // Explorer root, so `/tx/<hash>` resolves; the vnet explorer has no address route.
+      explorerUrl:
+        "https://dashboard.tenderly.co/explorer/vnet/1d48b36f-5ce7-4b0d-b742-1a279b04aebf",
       identifier: "vnet",
     },
     // [ChainId.BaseMainnet]: {
