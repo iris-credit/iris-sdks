@@ -51,7 +51,7 @@
     "@iris-credit/iris-ts": "workspace:^",
     "@iris-credit/test": "workspace:^",
     "@types/node": "^22.0.0",
-    "viem": "^2.55.8"
+    "viem": "^2.55.10"
   },
   "peerDependencies": {
     "@iris-credit/iris-ts": "^0.1.0",
