@@ -40,4 +40,33 @@ describe("MorphoBlueMath", () => {
       );
     });
   });
+
+  describe("toAssetsDown", () => {
+    test("should price the shares against the market's assets", () => {
+      // The whole share supply converts back to the whole borrow.
+      expect(
+        MorphoBlueMath.toAssetsDown(
+          MathLib.WAD * 1_000_000n,
+          MathLib.WAD,
+          MathLib.WAD * 1_000_000n,
+        ),
+      ).toBe(MathLib.WAD);
+    });
+
+    test("should shed the wei the down-and-back round-trip cannot keep", () => {
+      // Above one asset per share, 1 wei converts to 0 shares and back to 0 assets.
+      expect(
+        MorphoBlueMath.toAssetsDown(
+          MorphoBlueMath.toSharesDown(1n, MathLib.WAD * 2n, MathLib.WAD),
+          MathLib.WAD * 2n,
+          MathLib.WAD,
+        ),
+      ).toBe(0n);
+    });
+
+    test("should price against the virtual offsets on an empty market", () => {
+      // A share is worth VIRTUAL_ASSETS / VIRTUAL_SHARES of an asset when nothing is borrowed.
+      expect(MorphoBlueMath.toAssetsDown(MorphoBlueMath.VIRTUAL_SHARES, 0n, 0n)).toBe(1n);
+    });
+  });
 });
