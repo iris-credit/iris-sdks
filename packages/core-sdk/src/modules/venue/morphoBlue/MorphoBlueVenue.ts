@@ -4,6 +4,7 @@ import type { IVenue } from "../Venue.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { VenueName } from "../../../registries.js";
+import { PositionUtils } from "../../position/PositionUtils.js";
 import { Venue } from "../Venue.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
 import { MorphoBlueMath } from "./MorphoBlueMath.js";
@@ -190,6 +191,48 @@ export class MorphoBlueVenue extends Venue {
         this.market.totalBorrowAssets,
         MorphoBlueMath.wTaylorCompounded(borrowRate, elapsed),
       )
+    );
+  }
+
+  /**
+   * Returns the maximum supply capacity.
+   */
+  public getMaxSupplyCapacity() {
+    return MathLib.MAX_UINT_256;
+  }
+
+  /**
+   * Returns the maximum borrow capacity: the accrued market's idle supply, optionally
+   * down to a target utilization (scaled by WAD).
+   */
+  public getMaxBorrowCapacity(timestamp?: BigIntish, targetUtilization: BigIntish = MathLib.WAD) {
+    const { market } = this.accrueInterest(timestamp);
+
+    return MathLib.zeroFloorSub(
+      MathLib.mulDivDown(market.totalSupplyAssets, targetUtilization, MathLib.WAD),
+      market.totalBorrowAssets,
+    );
+  }
+
+  /**
+   * Returns the maximum borrow amount against the given collateral, bounded by `getMaxBorrowCapacity`.
+   */
+  public getMaxBorrowAmount(collateral: bigint, timestamp?: BigIntish) {
+    const collateralValue = PositionUtils.getCollateralValue({ collateral }, { price: this.price });
+    if (collateralValue == null) return;
+
+    const maxBorrow = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
+    const { totalBorrowAssets, totalBorrowShares } = this.accrueInterest(timestamp).market;
+
+    // Account for Morpho's share/asset rounding: a borrow of `assets` is checked as
+    // toAssetsUp(toSharesUp(assets)) >= assets, so round down to stay within maxBorrow.
+    return MathLib.min(
+      MorphoBlueMath.toAssetsDown(
+        MorphoBlueMath.toSharesDown(maxBorrow, totalBorrowAssets, totalBorrowShares),
+        totalBorrowAssets,
+        totalBorrowShares,
+      ),
+      this.getMaxBorrowCapacity(timestamp),
     );
   }
 

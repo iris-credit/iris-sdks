@@ -2,9 +2,15 @@ import type { Address, Client } from "viem";
 import type { FetchParameters } from "../../../types.js";
 import type { IVenue } from "../Venue.js";
 
+import { erc20Abi } from "viem";
 import { getChainId, readContract } from "viem/actions";
-import { aaveV3PoolAbi } from "../../../abis/aaveV3.js";
-import { getChainAddresses } from "../../../addresses.js";
+import {
+  aaveV3ATokenAbi,
+  aaveV3OracleAbi,
+  aaveV3PoolAbi,
+  aaveV3VariableDebtTokenAbi,
+} from "../../../abis/aaveV3.js";
+import { getAToken, getChainAddresses, getVToken } from "../../../addresses.js";
 import { ChainUtils } from "../../../chain.js";
 import { UnsupportedChainIdError } from "../../../errors.js";
 import { AaveV3Venue } from "./AaveV3Venue.js";
@@ -19,7 +25,8 @@ export interface FetchAaveV3VenueArgs {
 
 /**
  * Fetches the Aave V3 state backing a venue's view of a pod: the collateral and debt
- * reserves' indices, rates and last update timestamps.
+ * reserves' indices, rates, last update timestamps, configuration and oracle prices,
+ * plus the token-level supply and liquidity data the borrow and supply bounds need.
  *
  * @param venue - The venue's live view of the pod, read from the venue adapter.
  * @param args - See {@link FetchAaveV3VenueArgs}.
@@ -39,9 +46,21 @@ export async function fetchAaveV3Venue(
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
-  const { aaveV3Pool } = getChainAddresses(chainId);
+  const { aaveV3Pool, aaveV3Oracle } = getChainAddresses(chainId);
+  const debtAToken = getAToken(debtToken, chainId);
 
-  const [collateralReserve, debtReserve] = await Promise.all([
+  const [
+    collateralReserve,
+    debtReserve,
+    collateralPrice,
+    debtPrice,
+    collateralATokenScaledTotalSupply,
+    collateralVTokenScaledTotalSupply,
+    debtATokenScaledTotalSupply,
+    debtVTokenScaledTotalSupply,
+    debtUnderlyingBalance,
+    debtVirtualUnderlyingBalance,
+  ] = await Promise.all([
     readContract(client, {
       ...parameters,
       address: aaveV3Pool,
@@ -56,19 +75,91 @@ export async function fetchAaveV3Venue(
       functionName: "getReserveData",
       args: [debtToken],
     }),
+    readContract(client, {
+      ...parameters,
+      address: aaveV3Oracle,
+      abi: aaveV3OracleAbi,
+      functionName: "getAssetPrice",
+      args: [collateralToken],
+    }),
+    readContract(client, {
+      ...parameters,
+      address: aaveV3Oracle,
+      abi: aaveV3OracleAbi,
+      functionName: "getAssetPrice",
+      args: [debtToken],
+    }),
+    readContract(client, {
+      ...parameters,
+      address: getAToken(collateralToken, chainId),
+      abi: aaveV3ATokenAbi,
+      functionName: "scaledTotalSupply",
+    }),
+    readContract(client, {
+      ...parameters,
+      address: getVToken(collateralToken, chainId),
+      abi: aaveV3VariableDebtTokenAbi,
+      functionName: "scaledTotalSupply",
+    }),
+    readContract(client, {
+      ...parameters,
+      address: debtAToken,
+      abi: aaveV3ATokenAbi,
+      functionName: "scaledTotalSupply",
+    }),
+    readContract(client, {
+      ...parameters,
+      address: getVToken(debtToken, chainId),
+      abi: aaveV3VariableDebtTokenAbi,
+      functionName: "scaledTotalSupply",
+    }),
+    readContract(client, {
+      ...parameters,
+      address: debtToken,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [debtAToken],
+    }),
+    readContract(client, {
+      ...parameters,
+      address: aaveV3Pool,
+      abi: aaveV3PoolAbi,
+      functionName: "getVirtualUnderlyingBalance",
+      args: [debtToken],
+    }),
   ]);
 
   return new AaveV3Venue(
     venue,
     {
-      index: collateralReserve.liquidityIndex,
-      rate: collateralReserve.currentLiquidityRate,
+      configuration: collateralReserve.configuration.data,
+      liquidityIndex: collateralReserve.liquidityIndex,
+      currentLiquidityRate: collateralReserve.currentLiquidityRate,
+      variableBorrowIndex: collateralReserve.variableBorrowIndex,
+      currentVariableBorrowRate: collateralReserve.currentVariableBorrowRate,
       lastUpdateTimestamp: BigInt(collateralReserve.lastUpdateTimestamp),
+      accruedToTreasury: collateralReserve.accruedToTreasury,
     },
     {
-      index: debtReserve.variableBorrowIndex,
-      rate: debtReserve.currentVariableBorrowRate,
+      configuration: debtReserve.configuration.data,
+      liquidityIndex: debtReserve.liquidityIndex,
+      currentLiquidityRate: debtReserve.currentLiquidityRate,
+      variableBorrowIndex: debtReserve.variableBorrowIndex,
+      currentVariableBorrowRate: debtReserve.currentVariableBorrowRate,
       lastUpdateTimestamp: BigInt(debtReserve.lastUpdateTimestamp),
+      accruedToTreasury: debtReserve.accruedToTreasury,
+    },
+    {
+      price: collateralPrice,
+      aTokenScaledTotalSupply: collateralATokenScaledTotalSupply,
+      vTokenScaledTotalSupply: collateralVTokenScaledTotalSupply,
+    },
+    {
+      price: debtPrice,
+      aTokenScaledTotalSupply: debtATokenScaledTotalSupply,
+      vTokenScaledTotalSupply: debtVTokenScaledTotalSupply,
+      underlyingBalance: debtUnderlyingBalance,
+      virtualUnderlyingBalance: debtVirtualUnderlyingBalance,
     },
   );
 }

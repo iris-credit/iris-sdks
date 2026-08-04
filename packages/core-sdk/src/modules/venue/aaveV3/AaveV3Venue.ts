@@ -2,18 +2,59 @@ import type { BigIntish } from "../../../types.js";
 import type { IVenue } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
+import { MathLib } from "../../../math/index.js";
 import { VenueName } from "../../../registries.js";
 import { Venue } from "../Venue.js";
 import { AaveV3Math } from "./AaveV3Math.js";
+import { ReserveConfigurationLib } from "./ReserveConfigurationLib.js";
 
 /** Plain input shape for one side of an Aave V3 venue: the reserve state a projection needs. */
 export interface IAaveReserve {
-  /** The reserve's stored index — `liquidityIndex` (collateral) or `variableBorrowIndex` (debt), scaled by RAY. */
-  index: bigint;
-  /** The reserve's current annual rate — `currentLiquidityRate` or `currentVariableBorrowRate`, scaled by RAY. */
-  rate: bigint;
+  /** The packed `ReserveConfigurationMap.data` word, decoded by `ReserveConfigurationLib`. */
+  configuration: bigint;
+  /** The reserve's stored `liquidityIndex` (scaled by RAY). */
+  liquidityIndex: bigint;
+  /** The reserve's `currentLiquidityRate` (annual, scaled by RAY). */
+  currentLiquidityRate: bigint;
+  /** The reserve's stored `variableBorrowIndex` (scaled by RAY). */
+  variableBorrowIndex: bigint;
+  /** The reserve's `currentVariableBorrowRate` (annual, scaled by RAY). */
+  currentVariableBorrowRate: bigint;
   /** The reserve's `lastUpdateTimestamp` (in seconds). */
   lastUpdateTimestamp: bigint;
+  /** The reserve's `accruedToTreasury` (scaled aToken units). */
+  accruedToTreasury: bigint;
+}
+
+/**
+ * The collateral side's data beyond the reserve itself — the oracle price and the token
+ * supplies the supply bound needs, fetched at the same block as the reserves.
+ */
+export interface IAaveCollateralData {
+  /** The collateral asset's price from Aave's oracle, in base currency units. */
+  price: bigint;
+  /** The collateral aToken's `scaledTotalSupply`. */
+  aTokenScaledTotalSupply: bigint;
+  /** The collateral variable debt token's `scaledTotalSupply`. */
+  vTokenScaledTotalSupply: bigint;
+}
+
+/**
+ * The debt side's data beyond the reserve itself — the oracle price and the
+ * supply/liquidity values the borrow bound needs, fetched at the same block as the
+ * reserves.
+ */
+export interface IAaveDebtData {
+  /** The debt asset's price from Aave's oracle, in base currency units. */
+  price: bigint;
+  /** The debt aToken's `scaledTotalSupply`. */
+  aTokenScaledTotalSupply: bigint;
+  /** The debt variable debt token's `scaledTotalSupply`. */
+  vTokenScaledTotalSupply: bigint;
+  /** The debt underlying held by its aToken, in underlying units. */
+  underlyingBalance: bigint;
+  /** The pool's `getVirtualUnderlyingBalance` for the debt reserve, in underlying units. */
+  virtualUnderlyingBalance: bigint;
 }
 
 /**
@@ -33,12 +74,30 @@ export class AaveV3Venue extends Venue {
    * The debt asset's reserve state.
    */
   public debtReserve: IAaveReserve;
+  /**
+   * The collateral side's data `getMaxSupplyCapacity` and `getMaxBorrowAmount` need,
+   * `undefined` when not fetched.
+   */
+  public collateralData?: IAaveCollateralData;
+  /**
+   * The debt side's data `getMaxBorrowCapacity` and `getMaxBorrowAmount` need,
+   * `undefined` when not fetched.
+   */
+  public debtData?: IAaveDebtData;
 
-  constructor(venue: IVenue, collateralReserve: IAaveReserve, debtReserve: IAaveReserve) {
+  constructor(
+    venue: IVenue,
+    collateralReserve: IAaveReserve,
+    debtReserve: IAaveReserve,
+    collateralData?: IAaveCollateralData,
+    debtData?: IAaveDebtData,
+  ) {
     super(venue);
 
     this.collateralReserve = collateralReserve;
     this.debtReserve = debtReserve;
+    this.collateralData = collateralData;
+    this.debtData = debtData;
   }
 
   /**
@@ -58,16 +117,10 @@ export class AaveV3Venue extends Venue {
 
     return new AaveV3Venue(
       this.accruedView(timestamp),
-      {
-        ...this.collateralReserve,
-        index: this.getAccrualCollateralIndex(timestamp),
-        lastUpdateTimestamp: timestamp,
-      },
-      {
-        ...this.debtReserve,
-        index: this.getAccrualDebtIndex(timestamp),
-        lastUpdateTimestamp: timestamp,
-      },
+      this.accrueCollateralReserve(timestamp),
+      this.accrueDebtReserve(timestamp),
+      this.collateralData,
+      this.debtData,
     );
   }
 
@@ -98,21 +151,7 @@ export class AaveV3Venue extends Venue {
    * `lastUpdateTimestamp` (scaled by RAY). Throws on a timestamp prior to it.
    */
   public getAccrualCollateralIndex(timestamp: BigIntish): bigint {
-    timestamp = BigInt(timestamp);
-
-    const elapsed = timestamp - this.collateralReserve.lastUpdateTimestamp;
-    if (elapsed < 0n) {
-      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
-        "collateral",
-        timestamp,
-        this.collateralReserve.lastUpdateTimestamp,
-      );
-    }
-
-    return AaveV3Math.rayMul(
-      AaveV3Math.getLinearInterest(this.collateralReserve.rate, elapsed),
-      this.collateralReserve.index,
-    );
+    return this.accrueCollateralReserve(BigInt(timestamp)).liquidityIndex;
   }
 
   /**
@@ -120,20 +159,139 @@ export class AaveV3Venue extends Venue {
    * `lastUpdateTimestamp` (scaled by RAY). Throws on a timestamp prior to it.
    */
   public getAccrualDebtIndex(timestamp: BigIntish): bigint {
-    timestamp = BigInt(timestamp);
+    return this.accrueDebtReserve(BigInt(timestamp)).variableBorrowIndex;
+  }
 
-    const elapsed = timestamp - this.debtReserve.lastUpdateTimestamp;
-    if (elapsed < 0n) {
-      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
-        "debt",
-        timestamp,
-        this.debtReserve.lastUpdateTimestamp,
+  /**
+   * Returns the maximum supply capacity of the collateral reserve (`validateSupply`'s
+   * cap check), or `undefined` without `collateralData`.
+   */
+  public getMaxSupplyCapacity(timestamp: BigIntish = this.lastUpdate) {
+    const { collateralData } = this;
+    if (collateralData == null) return;
+
+    const { configuration } = this.collateralReserve;
+    const { isActive, isFrozen, isPaused } = ReserveConfigurationLib.getFlags(configuration);
+    if (!isActive || isFrozen || isPaused) return 0n;
+
+    const supplyCap = ReserveConfigurationLib.getSupplyCap(configuration);
+    if (supplyCap === 0n) return MathLib.MAX_UINT_256;
+
+    // Aave's supply validation counts the treasury's pending mint — the re-anchored
+    // reserve carries it folded into `accruedToTreasury` (see `accrueReserve`).
+    const { liquidityIndex, accruedToTreasury } = this.accrueCollateralReserve(BigInt(timestamp));
+
+    const supplyCapWithDecimals =
+      supplyCap * 10n ** ReserveConfigurationLib.getDecimals(configuration);
+    // The largest scaled supply whose floor-rounded balance stays within the cap...
+    const totalScaledSupply =
+      MathLib.mulDivUp(supplyCapWithDecimals + 1n, MathLib.RAY, liquidityIndex) - 1n;
+    const currentScaledSupply = collateralData.aTokenScaledTotalSupply + accruedToTreasury;
+    if (totalScaledSupply <= currentScaledSupply) return 0n;
+
+    // ...and the largest supply whose floor-scaled mint stays within that headroom.
+    return (
+      MathLib.mulDivUp(totalScaledSupply - currentScaledSupply + 1n, liquidityIndex, MathLib.RAY) -
+      1n
+    );
+  }
+
+  /**
+   * Returns the maximum borrow capacity of the debt reserve (`validateBorrow`'s reserve
+   * checks), or `undefined` without `debtData`.
+   */
+  public getMaxBorrowCapacity(timestamp: BigIntish = this.lastUpdate) {
+    const { debtData } = this;
+    if (debtData == null) return;
+
+    const { configuration } = this.debtReserve;
+    const { isActive, isFrozen, borrowingEnabled, isPaused } =
+      ReserveConfigurationLib.getFlags(configuration);
+    if (!isActive || isFrozen || !borrowingEnabled || isPaused) return 0n;
+
+    const {
+      aTokenScaledTotalSupply,
+      vTokenScaledTotalSupply,
+      underlyingBalance,
+      virtualUnderlyingBalance,
+    } = debtData;
+
+    const { liquidityIndex, variableBorrowIndex: debtIndex } = this.accrueDebtReserve(
+      BigInt(timestamp),
+    );
+    const liquidity = MathLib.min(underlyingBalance, virtualUnderlyingBalance);
+    // `validateBorrow` reads the aToken supply back at the borrow-time liquidity index.
+    const aTokenTotalSupply = AaveV3Math.getATokenBalance(aTokenScaledTotalSupply, liquidityIndex);
+    // The borrow's ceil round-trip must stay within the aToken total supply.
+    let maxBorrow = MathLib.min(
+      liquidity,
+      MathLib.mulDivDown(
+        MathLib.mulDivDown(aTokenTotalSupply, MathLib.RAY, debtIndex),
+        debtIndex,
+        MathLib.RAY,
+      ),
+    );
+
+    const borrowCap = ReserveConfigurationLib.getBorrowCap(configuration);
+    if (borrowCap !== 0n) {
+      const borrowCapWithDecimals =
+        borrowCap * 10n ** ReserveConfigurationLib.getDecimals(configuration);
+      // The largest scaled debt whose ceil-rounded balance stays within the cap.
+      const maxTotalScaledDebt = MathLib.mulDivDown(borrowCapWithDecimals, MathLib.RAY, debtIndex);
+      if (maxTotalScaledDebt <= vTokenScaledTotalSupply) return 0n;
+
+      maxBorrow = MathLib.min(
+        maxBorrow,
+        MathLib.mulDivDown(maxTotalScaledDebt - vTokenScaledTotalSupply, debtIndex, MathLib.RAY),
       );
     }
 
-    return AaveV3Math.rayMul(
-      AaveV3Math.getCompoundedInterest(this.debtReserve.rate, elapsed),
-      this.debtReserve.index,
+    return maxBorrow;
+  }
+
+  /**
+   * Returns the maximum borrow amount against the given collateral, bounded by `getMaxBorrowCapacity`.
+   */
+  public getMaxBorrowAmount(collateral: bigint, timestamp: BigIntish = this.lastUpdate) {
+    const { collateralData, debtData } = this;
+    if (collateralData == null || debtData == null) return;
+
+    const { configuration } = this.collateralReserve;
+    const ltv = ReserveConfigurationLib.getLtv(configuration);
+    if (collateral === 0n || ltv === 0n) return 0n;
+
+    // Account for Aave's two floor roundings: supply amount to aToken shares, then
+    // shares to balance.
+    const liquidityIndex = this.getAccrualCollateralIndex(timestamp);
+    const scaledCollateral = AaveV3Math.getATokenMintScaledAmount(collateral, liquidityIndex);
+    if (scaledCollateral === 0n) return 0n;
+
+    const collateralBalance = AaveV3Math.getATokenBalance(scaledCollateral, liquidityIndex);
+    const collateralBase = MathLib.mulDivDown(
+      collateralBalance,
+      collateralData.price,
+      10n ** ReserveConfigurationLib.getDecimals(configuration),
+    );
+    const maxDebtBase = MathLib.mulDivDown(collateralBase, ltv, AaveV3Math.PERCENTAGE_FACTOR);
+    const maxActualDebt = MathLib.mulDivDown(
+      maxDebtBase,
+      10n ** ReserveConfigurationLib.getDecimals(this.debtReserve.configuration),
+      debtData.price,
+    );
+
+    const capacity = this.getMaxBorrowCapacity(timestamp);
+    if (capacity == null) return;
+
+    // Account for Aave's two ceil roundings: borrow amount to vToken shares, then
+    // shares to debt.
+    const debtIndex = this.getAccrualDebtIndex(timestamp);
+    return MathLib.min(
+      MathLib.mulDivDown(
+        MathLib.mulDivDown(maxActualDebt, MathLib.RAY, debtIndex),
+        debtIndex,
+        MathLib.RAY,
+      ),
+      capacity,
     );
   }
 
@@ -216,5 +374,97 @@ export class AaveV3Venue extends Venue {
     venue.debt += amount;
 
     return venue;
+  }
+
+  /**
+   * Returns the reserve re-anchored at the given timestamp, as Aave's `updateState` would:
+   * the liquidity index accrued linearly, the variable borrow index compounded — held
+   * still when the given vToken scaled supply is zero, as `_updateIndexes` only
+   * advances it while variable debt exists — and the treasury's pending mint
+   * (`_accrueToTreasury`) folded into `accruedToTreasury` when the scaled supply is
+   * given. The timestamp must not be prior to the reserve's `lastUpdateTimestamp`.
+   */
+  protected accrueReserve(
+    reserve: IAaveReserve,
+    timestamp: bigint,
+    vTokenScaledTotalSupply?: bigint,
+  ): IAaveReserve {
+    const elapsed = timestamp - reserve.lastUpdateTimestamp;
+
+    const liquidityIndex = AaveV3Math.rayMul(
+      AaveV3Math.getLinearInterest(reserve.currentLiquidityRate, elapsed),
+      reserve.liquidityIndex,
+    );
+    const variableBorrowIndex =
+      vTokenScaledTotalSupply === 0n
+        ? reserve.variableBorrowIndex
+        : AaveV3Math.rayMul(
+            AaveV3Math.getCompoundedInterest(reserve.currentVariableBorrowRate, elapsed),
+            reserve.variableBorrowIndex,
+          );
+
+    let accruedToTreasury = reserve.accruedToTreasury;
+    const reserveFactor = ReserveConfigurationLib.getReserveFactor(reserve.configuration);
+    if (reserveFactor !== 0n && vTokenScaledTotalSupply != null) {
+      const totalDebtAccrued = MathLib.mulDivDown(
+        vTokenScaledTotalSupply,
+        variableBorrowIndex - reserve.variableBorrowIndex,
+        MathLib.RAY,
+      );
+      const amountToMint = AaveV3Math.percentMul(totalDebtAccrued, reserveFactor);
+
+      if (amountToMint !== 0n) {
+        accruedToTreasury += AaveV3Math.getATokenMintScaledAmount(amountToMint, liquidityIndex);
+      }
+    }
+
+    return {
+      ...reserve,
+      liquidityIndex,
+      variableBorrowIndex,
+      accruedToTreasury,
+      lastUpdateTimestamp: timestamp,
+    };
+  }
+
+  /**
+   * Returns the collateral reserve re-anchored at the given timestamp (see
+   * `accrueReserve`). Throws on a timestamp prior to the reserve's
+   * `lastUpdateTimestamp`.
+   */
+  protected accrueCollateralReserve(timestamp: bigint): IAaveReserve {
+    const { collateralReserve } = this;
+
+    if (timestamp < collateralReserve.lastUpdateTimestamp) {
+      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
+        "collateral",
+        timestamp,
+        collateralReserve.lastUpdateTimestamp,
+      );
+    }
+
+    return this.accrueReserve(
+      collateralReserve,
+      timestamp,
+      this.collateralData?.vTokenScaledTotalSupply,
+    );
+  }
+
+  /**
+   * Returns the debt reserve re-anchored at the given timestamp (see `accrueReserve`).
+   * Throws on a timestamp prior to the reserve's `lastUpdateTimestamp`.
+   */
+  protected accrueDebtReserve(timestamp: bigint): IAaveReserve {
+    const { debtReserve } = this;
+
+    if (timestamp < debtReserve.lastUpdateTimestamp) {
+      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
+        "debt",
+        timestamp,
+        debtReserve.lastUpdateTimestamp,
+      );
+    }
+
+    return this.accrueReserve(debtReserve, timestamp, this.debtData?.vTokenScaledTotalSupply);
   }
 }

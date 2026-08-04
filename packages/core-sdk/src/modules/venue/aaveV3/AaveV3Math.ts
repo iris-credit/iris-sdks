@@ -8,6 +8,9 @@ import { MathLib } from "../../../math/index.js";
  * calculations.
  */
 export namespace AaveV3Math {
+  /** Aave's `PercentageMath.PERCENTAGE_FACTOR` — percentages are carried in basis points. */
+  export const PERCENTAGE_FACTOR = 10_000n;
+
   /**
    * Multiplies two RAY-scaled values, rounding half up, matching Aave's `WadRayMath.rayMul`.
    *
@@ -30,8 +33,30 @@ export namespace AaveV3Math {
   };
 
   /**
+   * Multiplies a value by a basis-points percentage, rounding half up, matching Aave's
+   * `PercentageMath.percentMul`.
+   *
+   * @param value The value to take the percentage of.
+   * @param percentage The percentage (in basis points).
+   * @returns `value × percentage` (rounded half up).
+   * @example
+   * ```ts
+   * import { AaveV3Math } from "@iris-credit/core-sdk";
+   *
+   * const cut = AaveV3Math.percentMul(3n, 5_000n);
+   * // cut === 2n (1.5 rounds half up)
+   * ```
+   */
+  export const percentMul = (value: BigIntish, percentage: BigIntish) => {
+    value = BigInt(value);
+    percentage = BigInt(percentage);
+
+    return (value * percentage + PERCENTAGE_FACTOR / 2n) / PERCENTAGE_FACTOR;
+  };
+
+  /**
    * Returns the aToken balance for a scaled balance at the given liquidity index, rounding
-   * down, matching Aave v3.5's `TokenMath.getATokenBalance` (`AToken.balanceOf`).
+   * down, matching Aave v3.6's `TokenMath.getATokenBalance` (`AToken.balanceOf`).
    *
    * @param scaledAmount The scaled aToken balance.
    * @param liquidityIndex The liquidity index (scaled by RAY).
@@ -53,7 +78,7 @@ export namespace AaveV3Math {
    * every balance a unique scaled preimage, and rounding up recovers it. The balance and
    * index must be observed at the same block.
    *
-   * @dev Formula-equal to Aave v3.5's `TokenMath.getATokenBurnScaledAmount`.
+   * @dev Formula-equal to Aave v3.6's `TokenMath.getATokenBurnScaledAmount`.
    * @param balance The aToken balance in underlying units.
    * @param liquidityIndex The liquidity index the balance was observed at (scaled by RAY).
    * @returns The scaled aToken balance.
@@ -62,8 +87,26 @@ export namespace AaveV3Math {
     MathLib.mulDivUp(balance, MathLib.RAY, liquidityIndex);
 
   /**
+   * Returns the scaled aToken amount a supply of `amount` mints at the given liquidity
+   * index, rounding down, matching Aave v3.6's `TokenMath.getATokenMintScaledAmount`.
+   *
+   * @param amount The supplied amount in underlying units.
+   * @param liquidityIndex The liquidity index at the supply (scaled by RAY).
+   * @returns The scaled aToken amount minted.
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const scaled = AaveV3Math.getATokenMintScaledAmount(3n, MathLib.RAY + MathLib.RAY / 2n);
+   * // scaled === 2n (3 / 1.5, rounded down)
+   * ```
+   */
+  export const getATokenMintScaledAmount = (amount: BigIntish, liquidityIndex: BigIntish) =>
+    MathLib.mulDivDown(amount, MathLib.RAY, liquidityIndex);
+
+  /**
    * Returns the vToken balance (debt) for a scaled balance at the given borrow index,
-   * rounding up, matching Aave v3.5's `TokenMath.getVTokenBalance`
+   * rounding up, matching Aave v3.6's `TokenMath.getVTokenBalance`
    * (`VariableDebtToken.balanceOf`).
    *
    * @param scaledAmount The scaled vToken balance.
@@ -86,7 +129,7 @@ export namespace AaveV3Math {
    * every balance a unique scaled preimage, and rounding down recovers it. The balance and
    * index must be observed at the same block.
    *
-   * @dev Formula-equal to Aave v3.5's `TokenMath.getVTokenBurnScaledAmount`.
+   * @dev Formula-equal to Aave v3.6's `TokenMath.getVTokenBurnScaledAmount`.
    * @param balance The vToken balance (debt) in underlying units.
    * @param variableBorrowIndex The variable borrow index the balance was observed at
    *   (scaled by RAY).

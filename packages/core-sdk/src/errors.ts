@@ -18,6 +18,16 @@ export class UnsupportedVenueAdapterError extends Error {
   }
 }
 
+/** Error thrown when a token has no Aave V3 reserve tokens registered in the SDK. */
+export class UnsupportedAaveV3TokenError extends Error {
+  constructor(
+    public readonly token: Address,
+    public readonly chainId: ChainId,
+  ) {
+    super(`unsupported Aave V3 token ${token} on chain ${chainId}`);
+  }
+}
+
 export namespace IrisCoreErrors {
   /** Error thrown when position accrual is requested before `lastUpdate`. */
   export class InvalidInterestAccrual extends Error {
