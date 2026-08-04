@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
+import { VenueName } from "../../../registries.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
 import { MorphoBlueMath } from "./MorphoBlueMath.js";
 import { MorphoBlueVenue } from "./MorphoBlueVenue.js";
@@ -38,6 +39,10 @@ describe("MorphoBlueVenue", () => {
       MorphoBlueMath.INDEX_SCALE,
       accrued.totalBorrowShares + MorphoBlueMath.VIRTUAL_SHARES,
     );
+
+  test("should carry its venue name", () => {
+    expect(venue.name).toBe(VenueName.MorphoBlue);
+  });
 
   test("should pin the collateral index and keep the debt index at the last update", () => {
     const accrued = venue.accrueInterest(1_000n);

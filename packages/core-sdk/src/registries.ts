@@ -18,10 +18,18 @@ import { UnsupportedChainIdError } from "./errors.js";
  * enabled payloads must be added here from the enablement (ops) side.
  */
 
+/** The names of the venues registered on Iris, keying each chain registry's `venues`. */
+export const VenueName = {
+  AaveV3: "aaveV3",
+  MorphoBlue: "morphoBlue",
+} as const;
+
+export type VenueName = (typeof VenueName)[keyof typeof VenueName];
+
 /** A market data payload enabled on Iris. */
 export interface MarketData {
   /** Name of the venue the payload targets; a key of the chain registry's `venues`. */
-  readonly venue: string;
+  readonly venue: VenueName;
   /** Raw `quote.data` bytes; the contract enables `keccak256(data)`. */
   readonly data: Hex;
 }
@@ -51,8 +59,8 @@ interface ChainRegistryBase {
   readonly bondLltvs: readonly bigint[];
   /** Enabled BLMs by name. */
   readonly blms: Readonly<Record<string, Address>>;
-  /** Registered venue ids by name (`venueId < 128`). */
-  readonly venues: Readonly<Record<string, bigint>>;
+  /** Registered venue ids by name (`venueId < 128`); each chain registers its own subset. */
+  readonly venues: Readonly<Partial<Record<VenueName, bigint>>>;
   /** Enabled market data payloads by label. */
   readonly marketDatas: Readonly<Record<string, MarketData>>;
 }

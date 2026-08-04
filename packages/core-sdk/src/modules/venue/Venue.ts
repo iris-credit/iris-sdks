@@ -1,4 +1,5 @@
 import type { Address, Hex } from "viem";
+import type { VenueName } from "../../registries.js";
 import type { BigIntish } from "../../types.js";
 
 import { ORACLE_PRICE_SCALE } from "../../constants.js";
@@ -30,6 +31,11 @@ export interface IVenue {
  * silently diverges from Iris's onchain results.
  */
 export abstract class Venue implements IVenue {
+  /**
+   * The name of the venue this instance models, as keyed in the chain registries' `venues`;
+   * discriminates `Venue` unions without `instanceof`.
+   */
+  public abstract readonly name: VenueName;
   /**
    * The venue ID.
    */

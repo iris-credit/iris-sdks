@@ -44,10 +44,27 @@ export interface FetchVenueArgs {
  * @param parameters.blockTag - Optional block tag for historical reads.
  * @param parameters.stateOverride - Optional viem state override.
  * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
- * @returns The hydrated `Venue` entity.
+ * @returns The hydrated `Venue` entity; narrow to a concrete venue with `instanceof`.
  * @throws {UnsupportedChainIdError} when the chain has no registered addresses.
  * @throws {UnsupportedVenueAdapterError} when no venue adapter is registered for the venue
  *   id or the adapter has no offline rate model.
+ * @example
+ * ```ts
+ * import { AaveV3Venue, fetchVenue } from "@iris-credit/core-sdk";
+ *
+ * const venue = await fetchVenue(
+ *   {
+ *     pod: position.pod,
+ *     venueId: position.venueId,
+ *     data: position.data,
+ *     collateralToken: loan.collateralToken,
+ *     debtToken: loan.debtToken,
+ *   },
+ *   client,
+ * );
+ *
+ * if (venue instanceof AaveV3Venue) console.log(venue.collateralReserve);
+ * ```
  */
 export async function fetchVenue(
   { pod, venueId, data, collateralToken, debtToken }: FetchVenueArgs,
