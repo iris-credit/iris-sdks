@@ -1,5 +1,11 @@
 # @iris-credit/core-sdk
 
+## 0.1.2
+
+### Patch Changes
+
+- [#88](https://github.com/iris-credit/iris-sdks/pull/88) [`0c32097`](https://github.com/iris-credit/iris-sdks/commit/0c3209750c809f552b29be60b5a836eb6fd187ab) Thanks [@madiha-right](https://github.com/madiha-right)! - Add `VenueName` (`aaveV3` | `morphoBlue`, matching the chain registries' `venues` keys) and an abstract `Venue.name` discriminant carried by every venue subclass, and tighten the registry types (`venues`, `MarketData.venue`) to it.
+
 ## 0.1.1
 
 ### Patch Changes
