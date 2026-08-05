@@ -1,5 +1,13 @@
 # @iris-credit/core-sdk
 
+## 0.1.4
+
+### Patch Changes
+
+- [#95](https://github.com/iris-credit/iris-sdks/pull/95) [`9f2f7a9`](https://github.com/iris-credit/iris-sdks/commit/9f2f7a9b7ab3d26eb821ea5fefdd7028874e10cc) Thanks [@u-zzam](https://github.com/u-zzam)! - Add `Venue.borrowApy` — the venue's current borrow-side APY as the venue itself quotes it (scaled by WAD). Aave V3 compounds the debt reserve's `currentVariableBorrowRate` per second over a year in exact integer math (the Aave app's `variableBorrowAPY` — the new `AaveV3Math.rateToApy`, backed by the new `rayPow`/`rayToWad`); Morpho Blue compounds the Adaptive Curve IRM's instantaneous rate at the market's utilization continuously (the new `MorphoBlueMath.rateToApy`) — `MorphoBlueVenue.getBorrowApy(timestamp)` projects the rate's adaptation to a later timestamp; markets off the canonical IRM answer 0n, matching their zero-rate accrual.
+
+- [#98](https://github.com/iris-credit/iris-sdks/pull/98) [`b705cfd`](https://github.com/iris-credit/iris-sdks/commit/b705cfd748a48431ee7002ceec981d92bf592bc2) Thanks [@u-zzam](https://github.com/u-zzam)! - Add `Venue.ltv` — the venue's maximum borrow LTV (scaled by WAD), the limit new debt is validated against: Aave V3 answers the collateral reserve's max LTV (not the venue's `lltv`, Aave's liquidation threshold), Morpho Blue answers the market's LLTV itself.
+
 ## 0.1.3
 
 ### Patch Changes
