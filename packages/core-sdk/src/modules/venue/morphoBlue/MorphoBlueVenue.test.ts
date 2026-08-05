@@ -44,6 +44,12 @@ describe("MorphoBlueVenue", () => {
     expect(venue.name).toBe(VenueName.MorphoBlue);
   });
 
+  test("should expose the market's LLTV as the max borrow LTV", () => {
+    const capped = new MorphoBlueVenue({ ...view, lltv: MathLib.WAD / 2n }, market, position);
+
+    expect(capped.ltv).toBe(MathLib.WAD / 2n);
+  });
+
   test("should compound the IRM's rate at the market's utilization into the borrow APY", () => {
     // At target utilization the curve is flat: ~4% per year compounds to e^0.04 - 1.
     const atTarget = new MorphoBlueVenue(
