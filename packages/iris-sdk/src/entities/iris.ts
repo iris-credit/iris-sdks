@@ -1290,9 +1290,12 @@ export class Iris implements IrisActions {
     if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
 
     // Forward-accrue (2h) before sizing the funding: Iris pulls the venue debt as it stands at
-    // execution, so funding the amount owed now under-funds the pull.
+    // execution, so funding the amount owed now under-funds the pull. The floor covers the new
+    // venue's `lastUpdate` too: the migration accrues the new venue as well, and its chain
+    // timestamp can be ahead of the local clock.
     const accrualTimestamp =
-      MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate) + Time.s.from.h(2n);
+      MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate, newVenue.lastUpdate) +
+      Time.s.from.h(2n);
     positionData.refinance(newVenue, accrualTimestamp);
     const venueDebt = venue.getAccrualDebt(accrualTimestamp);
     // Native funds the pull first; the ERC-20 pulled is the remainder.
