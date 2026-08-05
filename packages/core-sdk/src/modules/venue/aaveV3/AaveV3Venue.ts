@@ -101,6 +101,16 @@ export class AaveV3Venue extends Venue {
   }
 
   /**
+   * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY): the debt
+   * reserve's `currentVariableBorrowRate` compounded per second over a year, as the Aave
+   * app quotes it (`variableBorrowAPY`; scaled by WAD). The rate itself only moves on
+   * reserve interactions, so no timestamp projection applies.
+   */
+  get borrowApy() {
+    return AaveV3Math.rateToApy(this.debtReserve.currentVariableBorrowRate);
+  }
+
+  /**
    * Returns a new venue accrued up to the given timestamp, accumulating each reserve's
    * interest from its own `lastUpdateTimestamp` with Aave's math — linear for the
    * liquidity index, compounded for the variable borrow index. The reserves re-anchor at

@@ -11,6 +11,29 @@ describe("AaveV3Math", () => {
     });
   });
 
+  describe("rayPow", () => {
+    test("should exponentiate by squaring over rayMul", () => {
+      expect(AaveV3Math.rayPow(2n * MathLib.RAY, 3n)).toBe(8n * MathLib.RAY);
+      expect(AaveV3Math.rayPow(2n * MathLib.RAY, 0n)).toBe(MathLib.RAY);
+    });
+  });
+
+  describe("rayToWad", () => {
+    test("should rescale rounding half up on the dropped digits", () => {
+      expect(AaveV3Math.rayToWad(MathLib.RAY / 5n)).toBe(MathLib.WAD / 5n);
+      expect(AaveV3Math.rayToWad(500_000_000n)).toBe(1n);
+      expect(AaveV3Math.rayToWad(499_999_999n)).toBe(0n);
+    });
+  });
+
+  describe("rateToApy", () => {
+    test("should compound the annual rate per second over a year", () => {
+      expect(AaveV3Math.rateToApy(0n)).toBe(0n);
+      // 20% APR compounded every second: just under the continuous e^0.2 - 1.
+      expect(AaveV3Math.rateToApy(MathLib.RAY / 5n)).toBe(221_402_757_385_561_290n);
+    });
+  });
+
   describe("token balances", () => {
     test("should round aToken balances down and vToken balances up", () => {
       // 3 × 1.5 = 4.5: rounds down for collateral, up for debt.

@@ -33,6 +33,55 @@ export namespace AaveV3Math {
   };
 
   /**
+   * Raises a RAY-scaled base to an integer power by squaring over {@link rayMul}, matching
+   * `@aave/math-utils`' `rayPow` — the exact per-second compounding the Aave app displays,
+   * where the protocol contracts settle for {@link getCompoundedInterest}'s approximation.
+   *
+   * @param base The RAY-scaled base.
+   * @param exponent The integer exponent.
+   * @returns `base ^ exponent` (scaled by RAY).
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const cube = AaveV3Math.rayPow(2n * MathLib.RAY, 3n);
+   * // cube === 8n * MathLib.RAY
+   * ```
+   */
+  export const rayPow = (base: BigIntish, exponent: BigIntish) => {
+    let x = BigInt(base);
+    let n = BigInt(exponent);
+    let z = n % 2n === 0n ? MathLib.RAY : x;
+
+    for (n /= 2n; n !== 0n; n /= 2n) {
+      x = rayMul(x, x);
+      if (n % 2n !== 0n) z = rayMul(z, x);
+    }
+
+    return z;
+  };
+
+  /**
+   * Rescales a RAY value to WAD, rounding half up on the dropped digits, matching Aave's
+   * `WadRayMath.rayToWad`.
+   *
+   * @param value The RAY-scaled value.
+   * @returns The WAD-scaled value (rounded half up).
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const wad = AaveV3Math.rayToWad(MathLib.RAY / 5n);
+   * // wad === MathLib.WAD / 5n
+   * ```
+   */
+  export const rayToWad = (value: BigIntish) => {
+    const ratio = MathLib.RAY / MathLib.WAD;
+
+    return (BigInt(value) + ratio / 2n) / ratio;
+  };
+
+  /**
    * Multiplies a value by a basis-points percentage, rounding half up, matching Aave's
    * `PercentageMath.percentMul`.
    *
@@ -189,4 +238,23 @@ export namespace AaveV3Math {
 
     return MathLib.RAY + x + rayMul(x, x / 2n + rayMul(x, x / 6n));
   };
+
+  /**
+   * Returns the annual rate compounded per second over a year via the exact {@link rayPow}
+   * — the APY the Aave app displays (`@aave/math-utils`' `calculateCompoundedRate`,
+   * rescaled by {@link rayToWad}), where the protocol contracts settle for
+   * {@link getCompoundedInterest}'s approximation.
+   *
+   * @param rate The annual rate to compound per second (scaled by RAY).
+   * @returns The annual percentage yield (scaled by WAD).
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const apy = AaveV3Math.rateToApy(MathLib.RAY / 5n); // 20% annual rate
+   * // apy === 221_402_757_385_561_290n (~22.14%)
+   * ```
+   */
+  export const rateToApy = (rate: BigIntish) =>
+    rayToWad(rayPow(BigInt(rate) / SECONDS_PER_YEAR + MathLib.RAY, SECONDS_PER_YEAR) - MathLib.RAY);
 }

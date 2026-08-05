@@ -1,0 +1,5 @@
+---
+"@iris-credit/core-sdk": patch
+---
+
+Add `Venue.borrowApy` — the venue's current borrow-side APY as the venue itself quotes it (scaled by WAD). Aave V3 compounds the debt reserve's `currentVariableBorrowRate` per second over a year in exact integer math (the Aave app's `variableBorrowAPY` — the new `AaveV3Math.rateToApy`, backed by the new `rayPow`/`rayToWad`); Morpho Blue compounds the Adaptive Curve IRM's instantaneous rate at the market's utilization continuously (the new `MorphoBlueMath.rateToApy`) — `MorphoBlueVenue.getBorrowApy(timestamp)` projects the rate's adaptation to a later timestamp; markets off the canonical IRM answer 0n, matching their zero-rate accrual.

@@ -69,6 +69,50 @@ export class MorphoBlueVenue extends Venue {
   }
 
   /**
+   * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY) (see
+   * `getBorrowApy`).
+   */
+  get borrowApy() {
+    return this.getBorrowApy();
+  }
+
+  /**
+   * Returns the venue's instantaneous borrow-side Annual Percentage Yield (APY) at the
+   * given timestamp, if the market state remains untouched until then: the Adaptive Curve
+   * IRM's rate at the market's utilization, compounded continuously — scaled by WAD, as
+   * Morpho quotes it (see `MorphoBlueMath.rateToApy` for the precision bound). Markets
+   * without {@link rateAtTarget} (not on the canonical IRM) answer 0n, matching their
+   * zero-rate accrual.
+   *
+   * @param timestamp - The timestamp to project the rate's adaptation to (in seconds).
+   *   Must be at or after the market's last update. Defaults to `lastUpdate` — the venue
+   *   snapshot's timestamp, so a market untouched since before the fetch answers the rate
+   *   the venue would charge at the fetch block (as `accrueInterest` accrues by default).
+   */
+  public getBorrowApy(timestamp: BigIntish = this.lastUpdate): bigint {
+    timestamp = BigInt(timestamp);
+
+    const elapsed = timestamp - this.market.lastUpdate;
+    if (elapsed < 0n) {
+      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
+        "debt",
+        timestamp,
+        this.market.lastUpdate,
+      );
+    }
+
+    if (this.rateAtTarget == null) return 0n;
+
+    const { endBorrowRate } = AdaptiveCurveIrmLib.getBorrowRate(
+      this.utilization,
+      this.rateAtTarget,
+      elapsed,
+    );
+
+    return MorphoBlueMath.rateToApy(endBorrowRate);
+  }
+
+  /**
    * Returns a new venue accrued up to the given timestamp, compounding the market's borrow
    * assets from its `lastUpdate` at the Adaptive Curve IRM's average borrow rate and
    * crediting the interest to the supply assets, as Morpho's `_accrueInterest` does —

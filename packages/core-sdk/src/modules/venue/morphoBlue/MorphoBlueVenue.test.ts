@@ -44,6 +44,52 @@ describe("MorphoBlueVenue", () => {
     expect(venue.name).toBe(VenueName.MorphoBlue);
   });
 
+  test("should compound the IRM's rate at the market's utilization into the borrow APY", () => {
+    // At target utilization the curve is flat: ~4% per year compounds to e^0.04 - 1.
+    const atTarget = new MorphoBlueVenue(
+      view,
+      { ...market, totalSupplyAssets: MathLib.WAD * 10n, totalBorrowAssets: MathLib.WAD * 9n },
+      position,
+      rateAtTarget,
+    );
+    expect(atTarget.getBorrowApy(1_000n)).toBe(40_810_774_180_881_016n);
+
+    // At full utilization the curve tops out at `CURVE_STEEPNESS` times the target rate.
+    const full = new MorphoBlueVenue(
+      view,
+      { ...market, totalSupplyAssets: MathLib.WAD, totalBorrowAssets: MathLib.WAD },
+      position,
+      rateAtTarget,
+    );
+    expect(full.getBorrowApy(1_000n)).toBe(173_510_870_939_912_896n);
+  });
+
+  test("should project the rate's adaptation to the given timestamp", () => {
+    // Below-target utilization: the adaptive rate decays over the window.
+    expect(venue.getBorrowApy(1_000n + SECONDS_PER_YEAR)).toBeLessThan(venue.getBorrowApy(1_000n));
+    expect(() => venue.getBorrowApy(500n)).toThrow(IrisCoreErrors.InvalidVenueInterestAccrual);
+  });
+
+  test("should default the borrow APY to the venue's snapshot time", () => {
+    expect(venue.borrowApy).toBe(venue.getBorrowApy(1_000n));
+
+    // A market untouched since before the fetch: the default projects the drift up to
+    // the venue's snapshot, not the market's older last update.
+    const stale = new MorphoBlueVenue(
+      { ...view, lastUpdate: 1_000n + SECONDS_PER_YEAR },
+      market,
+      position,
+      rateAtTarget,
+    );
+    expect(stale.borrowApy).toBe(stale.getBorrowApy(1_000n + SECONDS_PER_YEAR));
+    // Below-target utilization: the projected rate decayed over the stale window.
+    expect(stale.borrowApy).toBeLessThan(venue.borrowApy);
+  });
+
+  test("should answer a zero borrow APY without a rate model (non-canonical IRM)", () => {
+    expect(new MorphoBlueVenue(view, market, position).borrowApy).toBe(0n);
+  });
+
   test("should pin the collateral index and keep the debt index at the last update", () => {
     const accrued = venue.accrueInterest(1_000n);
 

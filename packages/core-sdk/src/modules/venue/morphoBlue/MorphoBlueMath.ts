@@ -1,5 +1,7 @@
 import type { BigIntish } from "../../../types.js";
 
+import { formatEther } from "viem";
+import { SECONDS_PER_YEAR } from "../../../constants.js";
 import { MathLib } from "../../../math/index.js";
 
 /**
@@ -41,6 +43,27 @@ export namespace MorphoBlueMath {
 
     return firstTerm + secondTerm + thirdTerm;
   };
+
+  /**
+   * Returns the per-second rate continuously compounded over a year, as calculated in
+   * Morpho Blue assuming the market is frequently accrued onchain.
+   *
+   * @dev `e^x` has no exact fixed-point form, so the compounding runs through the
+   * double-precision `Math.expm1` (~16 significant digits) and is scaled up to WAD — the
+   * trailing WAD digits carry no precision.
+   *
+   * @param rate The per-second rate to compound annually (scaled by WAD).
+   * @returns The annual percentage yield (scaled by WAD).
+   * @example
+   * ```ts
+   * import { MorphoBlueMath } from "@iris-credit/core-sdk";
+   *
+   * const apy = MorphoBlueMath.rateToApy(1_268_391_679n); // ~4% per year, per-second WAD
+   * // apy === 40_810_774_180_881_016n (~4.08%)
+   * ```
+   */
+  export const rateToApy = (rate: BigIntish) =>
+    BigInt(Math.round(Math.expm1(+formatEther(BigInt(rate) * SECONDS_PER_YEAR)) * 1e18));
 
   /**
    * Returns the borrow shares equivalent to the given borrow assets, rounding down, matching

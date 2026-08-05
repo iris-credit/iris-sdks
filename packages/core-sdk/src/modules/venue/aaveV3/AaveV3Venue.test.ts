@@ -47,6 +47,16 @@ describe("AaveV3Venue", () => {
     expect(venue.name).toBe(VenueName.AaveV3);
   });
 
+  test("should compound the debt reserve's rate per second into the borrow APY", () => {
+    // 20% APR compounded every second over a year, as the Aave app quotes it — just
+    // under the continuous e^0.2 - 1.
+    expect(venue.borrowApy).toBe(221_402_757_385_561_290n);
+    // A rate-less reserve compounds to nothing.
+    expect(new AaveV3Venue(view, venue.collateralReserve, venue.collateralReserve).borrowApy).toBe(
+      0n,
+    );
+  });
+
   test("should keep the stored indices at the reserves' last update", () => {
     const accrued = venue.accrueInterest(1_000n);
 
