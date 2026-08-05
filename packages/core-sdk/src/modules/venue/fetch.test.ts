@@ -1,12 +1,17 @@
 import type { Address } from "viem";
 import type { RpcHandler } from "@iris-credit/test/mock";
 
-import { encodeAbiParameters, keccak256, numberToHex, zeroAddress } from "viem";
+import { encodeAbiParameters, erc20Abi, keccak256, numberToHex, zeroAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { describe, expect, test } from "vitest";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
 import { POD } from "../../../test/fixtures/iris.js";
-import { aaveV3PoolAbi } from "../../abis/aaveV3.js";
+import {
+  aaveV3ATokenAbi,
+  aaveV3OracleAbi,
+  aaveV3PoolAbi,
+  aaveV3VariableDebtTokenAbi,
+} from "../../abis/aaveV3.js";
 import { irisAbi } from "../../abis/iris.js";
 import {
   adaptiveCurveIrmAbi,
@@ -14,7 +19,7 @@ import {
   morphoMarketParamsAbi,
 } from "../../abis/morphoBlue.js";
 import { venueAdapterAbi } from "../../abis/venueAdapter.js";
-import { getChainAddresses } from "../../addresses.js";
+import { getAToken, getChainAddresses, getVToken } from "../../addresses.js";
 import { ChainId } from "../../chain.js";
 import { ORACLE_PRICE_SCALE } from "../../constants.js";
 import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
@@ -22,8 +27,16 @@ import { AaveV3Venue } from "./aaveV3/AaveV3Venue.js";
 import { fetchVenue } from "./fetch.js";
 import { MorphoBlueVenue } from "./morphoBlue/MorphoBlueVenue.js";
 
-const { iris, morphoBlue, morphoBlueAdapter, aaveV3Adapter, aaveV3Pool, adaptiveCurveIrm, tokens } =
-  getChainAddresses(ChainId.EthMainnet);
+const {
+  iris,
+  morphoBlue,
+  morphoBlueAdapter,
+  aaveV3Adapter,
+  aaveV3Pool,
+  aaveV3Oracle,
+  adaptiveCurveIrm,
+  tokens,
+} = getChainAddresses(ChainId.EthMainnet);
 
 const BLOCK_TIMESTAMP = 1_800_000_000n;
 
@@ -131,9 +144,10 @@ const mockMorphoClient = ({ irm = adaptiveCurveIrm }: { irm?: Address } = {}) =>
   return { handle, id };
 };
 
-/** A reserve whose liquidity and variable-borrow fields differ, so field selection is observable. */
+/** A reserve whose liquidity and variable-borrow fields differ, so mixed-up fields show. */
 const reserve = {
-  configuration: { data: 0n },
+  // cbBTC-shaped configuration word: ltv 80%, liquidation threshold 83%, decimals 8.
+  configuration: { data: (8n << 48n) | (8_300n << 16n) | 8_000n },
   liquidityIndex: 1_100_000_000_000_000_000_000_000_000n,
   currentLiquidityRate: 30_000_000_000_000_000_000_000_000n,
   variableBorrowIndex: 1_300_000_000_000_000_000_000_000_000n,
@@ -145,7 +159,7 @@ const reserve = {
   stableDebtTokenAddress: zeroAddress,
   variableDebtTokenAddress: zeroAddress,
   interestRateStrategyAddress: zeroAddress,
-  accruedToTreasury: 0n,
+  accruedToTreasury: 7n,
   unbacked: 0n,
   isolationModeTotalDebt: 0n,
 } as const;
@@ -158,6 +172,50 @@ const mockAaveClient = () => {
     abi: aaveV3PoolAbi,
     functionName: "getReserveData",
     result: reserve,
+  });
+  mockRead(handle, {
+    address: aaveV3Oracle,
+    abi: aaveV3OracleAbi,
+    functionName: "getAssetPrice",
+    result: 200_000_000_000n,
+  });
+  // The token reads resolve through the pinned registry addresses, so each field carries
+  // a distinct value the assertions can tell apart.
+  mockRead(handle, {
+    address: getAToken(tokens.cbBTC, ChainId.EthMainnet),
+    abi: aaveV3ATokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 5_000n,
+  });
+  mockRead(handle, {
+    address: getVToken(tokens.cbBTC, ChainId.EthMainnet),
+    abi: aaveV3VariableDebtTokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 5_100n,
+  });
+  mockRead(handle, {
+    address: getAToken(tokens.USDC, ChainId.EthMainnet),
+    abi: aaveV3ATokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 6_000n,
+  });
+  mockRead(handle, {
+    address: getVToken(tokens.USDC, ChainId.EthMainnet),
+    abi: aaveV3VariableDebtTokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 5_200n,
+  });
+  mockRead(handle, {
+    address: tokens.USDC,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    result: 4_000n,
+  });
+  mockRead(handle, {
+    address: aaveV3Pool,
+    abi: aaveV3PoolAbi,
+    functionName: "getVirtualUnderlyingBalance",
+    result: 3_000n,
   });
 
   return handle;
@@ -213,16 +271,30 @@ describe("fetchVenue", () => {
     const venue = (await fetchVenue(args, handle.client)) as AaveV3Venue;
 
     expect(venue).toBeInstanceOf(AaveV3Venue);
-    // The collateral side takes the liquidity fields, the debt side the variable-borrow ones.
-    expect(venue.collateralReserve).toStrictEqual({
-      index: reserve.liquidityIndex,
-      rate: reserve.currentLiquidityRate,
+    // Each reserve mirrors its `getReserveData` subset; the mock serves both tokens the
+    // same reserve. The token-level data lives on the venue, not the reserves.
+    const expectedReserve = {
+      configuration: reserve.configuration.data,
+      liquidityIndex: reserve.liquidityIndex,
+      currentLiquidityRate: reserve.currentLiquidityRate,
+      variableBorrowIndex: reserve.variableBorrowIndex,
+      currentVariableBorrowRate: reserve.currentVariableBorrowRate,
       lastUpdateTimestamp: BigInt(reserve.lastUpdateTimestamp),
+      accruedToTreasury: 7n,
+    };
+    expect(venue.collateralReserve).toStrictEqual(expectedReserve);
+    expect(venue.debtReserve).toStrictEqual(expectedReserve);
+    expect(venue.collateralData).toStrictEqual({
+      price: 200_000_000_000n,
+      aTokenScaledTotalSupply: 5_000n,
+      vTokenScaledTotalSupply: 5_100n,
     });
-    expect(venue.debtReserve).toStrictEqual({
-      index: reserve.variableBorrowIndex,
-      rate: reserve.currentVariableBorrowRate,
-      lastUpdateTimestamp: BigInt(reserve.lastUpdateTimestamp),
+    expect(venue.debtData).toStrictEqual({
+      price: 200_000_000_000n,
+      aTokenScaledTotalSupply: 6_000n,
+      vTokenScaledTotalSupply: 5_200n,
+      underlyingBalance: 4_000n,
+      virtualUnderlyingBalance: 3_000n,
     });
   });
 
@@ -236,6 +308,20 @@ describe("fetchVenue", () => {
         address: aaveV3Pool,
         abi: aaveV3PoolAbi,
         functionName: "getReserveData",
+      }).map(({ args: callArgs }) => callArgs),
+    ).toStrictEqual([[tokens.cbBTC], [tokens.USDC]]);
+  });
+
+  test("behavior: reads one Aave oracle price per loan token", async () => {
+    const handle = mockAaveClient();
+
+    await fetchVenue(args, handle.client);
+
+    expect(
+      expectReadCall(handle, {
+        address: aaveV3Oracle,
+        abi: aaveV3OracleAbi,
+        functionName: "getAssetPrice",
       }).map(({ args: callArgs }) => callArgs),
     ).toStrictEqual([[tokens.cbBTC], [tokens.USDC]]);
   });

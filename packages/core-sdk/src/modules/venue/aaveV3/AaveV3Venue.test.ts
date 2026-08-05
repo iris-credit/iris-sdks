@@ -19,10 +19,28 @@ describe("AaveV3Venue", () => {
     lastUpdate: 1_000n,
   };
 
+  // Reserves at RAY indices: 10% linear on the collateral's liquidity side, 20%
+  // compounding on the debt's borrow side.
   const venue = new AaveV3Venue(
     view,
-    { index: MathLib.RAY, rate: MathLib.RAY / 10n, lastUpdateTimestamp: 1_000n },
-    { index: MathLib.RAY, rate: MathLib.RAY / 5n, lastUpdateTimestamp: 1_000n },
+    {
+      configuration: 0n,
+      liquidityIndex: MathLib.RAY,
+      currentLiquidityRate: MathLib.RAY / 10n,
+      variableBorrowIndex: MathLib.RAY,
+      currentVariableBorrowRate: 0n,
+      lastUpdateTimestamp: 1_000n,
+      accruedToTreasury: 0n,
+    },
+    {
+      configuration: 0n,
+      liquidityIndex: MathLib.RAY,
+      currentLiquidityRate: 0n,
+      variableBorrowIndex: MathLib.RAY,
+      currentVariableBorrowRate: MathLib.RAY / 5n,
+      lastUpdateTimestamp: 1_000n,
+      accruedToTreasury: 0n,
+    },
   );
 
   test("should carry its venue name", () => {
@@ -50,6 +68,22 @@ describe("AaveV3Venue", () => {
     );
   });
 
+  test("should hold the debt index still while the reserve has no variable debt", () => {
+    // `_updateIndexes` only advances the borrow index while variable debt exists; a
+    // zero scaled supply pins it despite the 20% rate.
+    const empty = new AaveV3Venue(view, venue.collateralReserve, venue.debtReserve, undefined, {
+      price: 0n,
+      aTokenScaledTotalSupply: 0n,
+      vTokenScaledTotalSupply: 0n,
+      underlyingBalance: 0n,
+      virtualUnderlyingBalance: 0n,
+    });
+
+    expect(empty.getAccrualDebtIndex(1_000n + SECONDS_PER_YEAR)).toBe(MathLib.RAY);
+    // Without the data the accrual is assumed.
+    expect(venue.getAccrualDebtIndex(1_000n + SECONDS_PER_YEAR)).toBeGreaterThan(MathLib.RAY);
+  });
+
   test("should grow the pod's assets with their index", () => {
     const funded = new AaveV3Venue(
       { ...view, collateral: MathLib.WAD, debt: MathLib.WAD },
@@ -70,9 +104,9 @@ describe("AaveV3Venue", () => {
     const accrued = venue.accrueInterest(1_000n + SECONDS_PER_YEAR);
 
     expect(accrued.lastUpdate).toBe(1_000n + SECONDS_PER_YEAR);
-    expect(accrued.collateralReserve.index).toBe(accrued.collateralIndex);
+    expect(accrued.collateralReserve.liquidityIndex).toBe(accrued.collateralIndex);
     expect(accrued.collateralReserve.lastUpdateTimestamp).toBe(1_000n + SECONDS_PER_YEAR);
-    expect(accrued.debtReserve.index).toBe(accrued.debtIndex);
+    expect(accrued.debtReserve.variableBorrowIndex).toBe(accrued.debtIndex);
     expect(accrued.debtReserve.lastUpdateTimestamp).toBe(1_000n + SECONDS_PER_YEAR);
   });
 
@@ -145,5 +179,211 @@ describe("AaveV3Venue", () => {
         venue.debtReserve,
       ).withdrawCollateral(1n, 1_000n),
     ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+  });
+
+  // WETH-shaped collateral into USDC-shaped debt: 80% max LTV, prices in an 8-decimals
+  // base currency (2000 vs 1), reserves at RAY indices.
+  const configured = new AaveV3Venue(
+    view,
+    { ...venue.collateralReserve, configuration: (18n << 48n) | 8_000n },
+    { ...venue.debtReserve, configuration: (1n << 58n) | (1n << 56n) | (6n << 48n) | 7_700n },
+    { price: 2_000n * 10n ** 8n, aTokenScaledTotalSupply: 0n, vTokenScaledTotalSupply: 0n },
+    {
+      price: 10n ** 8n,
+      aTokenScaledTotalSupply: 10_000_000_000n,
+      vTokenScaledTotalSupply: 1_500_000_000n,
+      underlyingBalance: 10_000_000_000n,
+      virtualUnderlyingBalance: 10_000_000_000n,
+    },
+  );
+
+  test("should bound a borrow by the collateral reserve's max LTV", () => {
+    // 1 collateral × 2000 × 80% = 1600 debt units, unrounded at RAY indices.
+    expect(configured.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(1_600_000_000n);
+  });
+
+  test("should run the borrow bound through the venue's token scaling", () => {
+    // One year in (liquidity 1.1 RAY, borrow ~1.2213 RAY): the floored aToken read-back
+    // prices to 1599999999 debt units; the vToken round-trip sheds one more wei.
+    expect(configured.getMaxBorrowAmount(MathLib.WAD, 1_000n + SECONDS_PER_YEAR)).toBe(
+      1_599_999_998n,
+    );
+  });
+
+  test("should return zero for a borrow on zero collateral or a zero max LTV", () => {
+    expect(configured.getMaxBorrowAmount(0n, 1_000n)).toBe(0n);
+    expect(
+      new AaveV3Venue(
+        view,
+        { ...configured.collateralReserve, configuration: 18n << 48n },
+        configured.debtReserve,
+        configured.collateralData,
+        configured.debtData,
+      ).getMaxBorrowAmount(MathLib.WAD, 1_000n),
+    ).toBe(0n);
+  });
+
+  test("should return undefined for a borrow bound without the data", () => {
+    expect(venue.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBeUndefined();
+  });
+
+  test("should cap the borrow bound by the borrow capacity", () => {
+    // The 1600 LTV bound meets a debt reserve with only 500 of cap headroom left.
+    const capped = new AaveV3Venue(
+      view,
+      configured.collateralReserve,
+      openForBorrow.debtReserve,
+      configured.collateralData,
+      openForBorrow.debtData,
+    );
+
+    expect(capped.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(500_000_000n);
+  });
+
+  // A USDC-shaped debt reserve open for borrowing under a 2000 cap: 3.4 virtual of 3.5
+  // held liquidity, a 5000 aToken supply against 1500 of scaled debt, at RAY indices.
+  const borrowableConfiguration = (2_000n << 80n) | (1n << 58n) | (1n << 56n) | (6n << 48n);
+  const openForBorrow = new AaveV3Venue(
+    view,
+    venue.collateralReserve,
+    { ...venue.debtReserve, configuration: borrowableConfiguration },
+    undefined,
+    {
+      price: 10n ** 8n,
+      aTokenScaledTotalSupply: 5_000_000_000n,
+      vTokenScaledTotalSupply: 1_500_000_000n,
+      underlyingBalance: 3_500_000_000n,
+      virtualUnderlyingBalance: 3_400_000_000n,
+    },
+  );
+
+  test("should bound the borrow capacity by the cap's scaled-debt headroom", () => {
+    // The cap's 500 headroom beats the 3400 virtual liquidity and the 5000 supply.
+    expect(openForBorrow.getMaxBorrowCapacity(1_000n)).toBe(500_000_000n);
+    // One year in (borrow index ~1.2213 RAY), the ceil-checked headroom shrinks.
+    expect(openForBorrow.getMaxBorrowCapacity(1_000n + SECONDS_PER_YEAR)).toBe(167_999_999n);
+  });
+
+  test("should bound the borrow capacity by the available liquidity without a cap", () => {
+    const uncapped = new AaveV3Venue(
+      view,
+      venue.collateralReserve,
+      { ...openForBorrow.debtReserve, configuration: (1n << 58n) | (1n << 56n) | (6n << 48n) },
+      undefined,
+      openForBorrow.debtData,
+    );
+
+    expect(uncapped.getMaxBorrowCapacity(1_000n)).toBe(3_400_000_000n);
+  });
+
+  test("should return zero borrow capacity when the reserve is not borrowable", () => {
+    // Paused; and a 1000 cap already outgrown by the 1500 scaled debt.
+    expect(
+      new AaveV3Venue(
+        view,
+        venue.collateralReserve,
+        { ...openForBorrow.debtReserve, configuration: borrowableConfiguration | (1n << 60n) },
+        undefined,
+        openForBorrow.debtData,
+      ).getMaxBorrowCapacity(1_000n),
+    ).toBe(0n);
+    expect(
+      new AaveV3Venue(
+        view,
+        venue.collateralReserve,
+        {
+          ...openForBorrow.debtReserve,
+          configuration: (1_000n << 80n) | (1n << 58n) | (1n << 56n) | (6n << 48n),
+        },
+        undefined,
+        openForBorrow.debtData,
+      ).getMaxBorrowCapacity(1_000n),
+    ).toBe(0n);
+  });
+
+  // A WETH-shaped collateral reserve under a 1000 supply cap: 900 scaled aTokens, 100
+  // scaled debt at a 20% borrow rate feeding a 10% reserve factor, at RAY indices.
+  const suppliableConfiguration = (1_000n << 116n) | (1_000n << 64n) | (1n << 56n) | (18n << 48n);
+  const openForSupply = new AaveV3Venue(
+    view,
+    {
+      ...venue.collateralReserve,
+      configuration: suppliableConfiguration,
+      currentVariableBorrowRate: MathLib.RAY / 5n,
+    },
+    venue.debtReserve,
+    {
+      price: 0n,
+      aTokenScaledTotalSupply: 900n * MathLib.WAD,
+      vTokenScaledTotalSupply: 100n * MathLib.WAD,
+    },
+  );
+
+  test("should bound the supply capacity by the cap's scaled-supply headroom", () => {
+    // 1000 cap over 900 scaled at a RAY index: 100 whole tokens of headroom.
+    expect(openForSupply.getMaxSupplyCapacity(1_000n)).toBe(100n * MathLib.WAD);
+    // One year in (liquidity 1.1 RAY), the treasury's pending mint eats into the
+    // headroom the grown index leaves.
+    expect(openForSupply.getMaxSupplyCapacity(1_000n + SECONDS_PER_YEAR)).toBe(
+      7_786_666_666_666_666_668n,
+    );
+  });
+
+  test("should fold the treasury's pending mint when re-anchoring the reserves", () => {
+    // The re-anchored reserve carries the treasury mint the direct projection counts, so
+    // both paths agree on the remaining headroom.
+    expect(openForSupply.accrueInterest(1_000n + SECONDS_PER_YEAR).getMaxSupplyCapacity()).toBe(
+      openForSupply.getMaxSupplyCapacity(1_000n + SECONDS_PER_YEAR),
+    );
+  });
+
+  test("should floor the treasury's debt accrual on the index delta", () => {
+    // 3 wei of scaled debt compounding 50% over a year under a 100% reserve factor and a
+    // 10-token cap at 0 decimals: flooring the scaled-supply × index-delta product
+    // accrues 1 wei to the treasury (per-balance ceil readings would say 2), leaving 4
+    // of the cap's 10 over the 5 supplied.
+    const flooring = new AaveV3Venue(
+      view,
+      {
+        configuration: (10n << 116n) | (10_000n << 64n) | (1n << 56n),
+        liquidityIndex: MathLib.RAY,
+        currentLiquidityRate: 0n,
+        variableBorrowIndex: MathLib.RAY,
+        currentVariableBorrowRate: MathLib.RAY / 2n,
+        lastUpdateTimestamp: 1_000n,
+        accruedToTreasury: 0n,
+      },
+      venue.debtReserve,
+      { price: 0n, aTokenScaledTotalSupply: 5n, vTokenScaledTotalSupply: 3n },
+    );
+
+    expect(flooring.getMaxSupplyCapacity(1_000n + SECONDS_PER_YEAR)).toBe(4n);
+  });
+
+  test("should return unlimited supply capacity without a cap and zero when frozen", () => {
+    expect(
+      new AaveV3Venue(
+        view,
+        { ...openForSupply.collateralReserve, configuration: (1n << 56n) | (18n << 48n) },
+        venue.debtReserve,
+        openForSupply.collateralData,
+      ).getMaxSupplyCapacity(1_000n),
+    ).toBe(MathLib.MAX_UINT_256);
+    expect(
+      new AaveV3Venue(
+        view,
+        {
+          ...openForSupply.collateralReserve,
+          configuration: suppliableConfiguration | (1n << 57n),
+        },
+        venue.debtReserve,
+        openForSupply.collateralData,
+      ).getMaxSupplyCapacity(1_000n),
+    ).toBe(0n);
+  });
+
+  test("should return undefined capacities without the data", () => {
+    expect(venue.getMaxBorrowCapacity(1_000n)).toBeUndefined();
+    expect(venue.getMaxSupplyCapacity(1_000n)).toBeUndefined();
   });
 });

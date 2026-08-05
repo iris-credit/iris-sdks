@@ -89,4 +89,27 @@ export namespace MorphoBlueMath {
       BigInt(totalShares) + VIRTUAL_SHARES,
       BigInt(totalAssets) + VIRTUAL_ASSETS,
     );
+
+  /**
+   * Returns the borrow assets equivalent to the given borrow shares, rounding down, matching
+   * Morpho Blue's onchain `SharesMathLib.toAssetsDown`.
+   *
+   * @param shares The borrow shares to convert.
+   * @param totalAssets The market's total borrow assets.
+   * @param totalShares The market's total borrow shares.
+   * @returns The equivalent borrow assets.
+   * @example
+   * ```ts
+   * import { MorphoBlueMath } from "@iris-credit/core-sdk";
+   *
+   * const assets = MorphoBlueMath.toAssetsDown(1_000_000n, 0n, 0n);
+   * // assets === 1n (VIRTUAL_SHARES per VIRTUAL_ASSET on an empty market)
+   * ```
+   */
+  export const toAssetsDown = (shares: BigIntish, totalAssets: BigIntish, totalShares: BigIntish) =>
+    MathLib.mulDivDown(
+      shares,
+      BigInt(totalAssets) + VIRTUAL_ASSETS,
+      BigInt(totalShares) + VIRTUAL_SHARES,
+    );
 }

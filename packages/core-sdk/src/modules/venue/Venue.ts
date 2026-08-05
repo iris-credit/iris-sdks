@@ -193,6 +193,21 @@ export abstract class Venue implements IVenue {
   public abstract getAccrualDebtIndex(timestamp: BigIntish): bigint;
 
   /**
+   * Returns the maximum supply capacity.
+   */
+  public abstract getMaxSupplyCapacity(timestamp?: BigIntish): bigint | undefined;
+
+  /**
+   * Returns the maximum borrow capacity.
+   */
+  public abstract getMaxBorrowCapacity(timestamp?: BigIntish): bigint | undefined;
+
+  /**
+   * Returns the maximum borrow amount against the given collateral, bounded by `getMaxBorrowCapacity`.
+   */
+  public abstract getMaxBorrowAmount(collateral: bigint, timestamp?: BigIntish): bigint | undefined;
+
+  /**
    * Returns a new venue accrued to the given timestamp with the collateral supplied on
    * top (see `accrueInterest`).
    *

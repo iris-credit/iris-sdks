@@ -301,4 +301,60 @@ describe("MorphoBlueVenue", () => {
     );
     expect(() => venue.withdrawCollateral(1n, 1_000n)).toThrow(IrisCoreErrors.UnknownVenuePrice);
   });
+
+  // A priced venue at an 80% LLTV, over the same WAD-per-million-shares market.
+  const priced = new MorphoBlueVenue(
+    { ...view, lltv: 800_000_000_000_000_000n, price: ORACLE_PRICE_SCALE },
+    market,
+    position,
+    rateAtTarget,
+  );
+
+  test("should bound a borrow by the LLTV through the shares round-trip", () => {
+    // 1 collateral at a 1:1 price and an 80% LLTV — the round-trip keeps it whole here.
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(800_000_000_000_000_000n);
+    expect(priced.getMaxBorrowAmount(0n, 1_000n)).toBe(0n);
+    // Ten collaterals outgrow the market: the idle wad of supply caps the bound.
+    expect(priced.getMaxBorrowAmount(10n * MathLib.WAD, 1_000n)).toBe(MathLib.WAD);
+  });
+
+  test("should price the borrow bound's round-trip on the accrued market", () => {
+    const accrued = priced.accrueInterest(1_000n + SECONDS_PER_YEAR);
+
+    // Recompute on the accrued totals — borrow shares are accrual-invariant.
+    const expected = MorphoBlueMath.toAssetsDown(
+      MorphoBlueMath.toSharesDown(
+        800_000_000_000_000_000n,
+        accrued.market.totalBorrowAssets,
+        accrued.market.totalBorrowShares,
+      ),
+      accrued.market.totalBorrowAssets,
+      accrued.market.totalBorrowShares,
+    );
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, 1_000n + SECONDS_PER_YEAR)).toBe(expected);
+    // The accrued venue answers the same at its own `lastUpdate` default.
+    expect(accrued.getMaxBorrowAmount(MathLib.WAD)).toBe(expected);
+  });
+
+  test("should return undefined for a borrow bound without a price", () => {
+    expect(venue.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBeUndefined();
+  });
+
+  test("should bound the borrow capacity by the market's idle supply", () => {
+    // 2 supplied against 1 borrowed: exactly the wad the borrow guard admits.
+    expect(venue.getMaxBorrowCapacity(1_000n)).toBe(MathLib.WAD);
+    // Interest credits both sides, so the idle supply — and the capacity — hold steady.
+    expect(venue.getMaxBorrowCapacity(1_000n + SECONDS_PER_YEAR)).toBe(MathLib.WAD);
+  });
+
+  test("should lower the borrow capacity to a target utilization", () => {
+    // 75% of the 2-wad supply is 1.5: half a wad above the current borrow.
+    expect(venue.getMaxBorrowCapacity(1_000n, 750_000_000_000_000_000n)).toBe(MathLib.WAD / 2n);
+    // A target below the current utilization floors at zero.
+    expect(venue.getMaxBorrowCapacity(1_000n, 250_000_000_000_000_000n)).toBe(0n);
+  });
+
+  test("should report unlimited supply capacity", () => {
+    expect(venue.getMaxSupplyCapacity()).toBe(MathLib.MAX_UINT_256);
+  });
 });

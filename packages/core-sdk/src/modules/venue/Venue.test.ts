@@ -29,6 +29,18 @@ class TestVenue extends Venue {
     return this.debtIndex;
   }
 
+  public getMaxBorrowAmount(): bigint | undefined {
+    return undefined;
+  }
+
+  public getMaxBorrowCapacity(): bigint | undefined {
+    return undefined;
+  }
+
+  public getMaxSupplyCapacity(): bigint | undefined {
+    return undefined;
+  }
+
   public supplyCollateral(amount: bigint) {
     return new TestVenue({ ...this, collateral: this.collateral + amount });
   }

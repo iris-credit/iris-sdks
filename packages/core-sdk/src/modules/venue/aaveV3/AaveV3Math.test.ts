@@ -18,7 +18,7 @@ describe("AaveV3Math", () => {
       expect(AaveV3Math.getVTokenBalance(3n, MathLib.RAY + MathLib.RAY / 2n)).toBe(5n);
     });
 
-    test("should recover the scaled balance from an observed balance", () => {
+    test("should recover the scaled balance from a fetched balance", () => {
       const index = MathLib.RAY + MathLib.RAY / 2n;
 
       expect(AaveV3Math.getATokenScaledBalance(AaveV3Math.getATokenBalance(3n, index), index)).toBe(
@@ -27,6 +27,22 @@ describe("AaveV3Math", () => {
       expect(AaveV3Math.getVTokenScaledBalance(AaveV3Math.getVTokenBalance(3n, index), index)).toBe(
         3n,
       );
+    });
+
+    test("should round the scaled amount an aToken supply mints down", () => {
+      // 3 / 1.5 = 2 exactly; a wei more of index still mints 2 scaled.
+      expect(AaveV3Math.getATokenMintScaledAmount(3n, MathLib.RAY + MathLib.RAY / 2n)).toBe(2n);
+      expect(AaveV3Math.getATokenMintScaledAmount(3n, MathLib.RAY + MathLib.RAY / 2n + 1n)).toBe(
+        1n,
+      );
+    });
+  });
+
+  describe("percentMul", () => {
+    test("should round half up", () => {
+      // 3 × 50% = 1.5: rounds half up where a floor would return 1.
+      expect(AaveV3Math.percentMul(3n, 5_000n)).toBe(2n);
+      expect(AaveV3Math.percentMul(2n, 5_000n)).toBe(1n);
     });
   });
 

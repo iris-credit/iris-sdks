@@ -1,7 +1,12 @@
-import { encodeAbiParameters, keccak256 } from "viem";
-import { getBlock, readContract } from "viem/actions";
+import { encodeAbiParameters, erc20Abi, keccak256 } from "viem";
+import { getBlock, readContract, simulateContract } from "viem/actions";
 import { describe, expect } from "vitest";
-import { aaveV3PoolAbi } from "../src/abis/aaveV3.js";
+import {
+  aaveV3ATokenAbi,
+  aaveV3OracleAbi,
+  aaveV3PoolAbi,
+  aaveV3VariableDebtTokenAbi,
+} from "../src/abis/aaveV3.js";
 import {
   adaptiveCurveIrmAbi,
   morphoBlueAbi,
@@ -14,14 +19,24 @@ import {
   ChainId,
   MathLib,
   MorphoBlueVenue,
+  ReserveConfigurationLib,
   UnsupportedVenueAdapterError,
   fetchVenue,
+  getAToken,
   getChainAddresses,
+  getVToken,
 } from "../src/index.js";
 import { test } from "./setup.js";
 
-const { morphoBlue, morphoBlueAdapter, adaptiveCurveIrm, aaveV3Adapter, aaveV3Pool, tokens } =
-  getChainAddresses(ChainId.EthMainnet);
+const {
+  morphoBlue,
+  morphoBlueAdapter,
+  adaptiveCurveIrm,
+  aaveV3Adapter,
+  aaveV3Pool,
+  aaveV3Oracle,
+  tokens,
+} = getChainAddresses(ChainId.EthMainnet);
 
 /** The cbBTC/USDC market Iris whitelists on mainnet. */
 const marketParams = {
@@ -185,8 +200,9 @@ describe("venue parity (mainnet fork)", () => {
       expect(venue.lltv).toBeGreaterThan(0n);
       expect(venue.price).toBeGreaterThan(0n);
 
-      const { collateralReserve, debtReserve } = venue as AaveV3Venue;
-      const [collateralPool, debtPool] = await Promise.all([
+      const aave = venue as AaveV3Venue;
+      const { collateralReserve, debtReserve } = aave;
+      const [collateralPool, debtPool, collateralPrice, debtPrice] = await Promise.all([
         readContract(client, {
           address: aaveV3Pool,
           abi: aaveV3PoolAbi,
@@ -199,18 +215,115 @@ describe("venue parity (mainnet fork)", () => {
           functionName: "getReserveData",
           args: [tokens.USDC],
         }),
+        readContract(client, {
+          address: aaveV3Oracle,
+          abi: aaveV3OracleAbi,
+          functionName: "getAssetPrice",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: aaveV3Oracle,
+          abi: aaveV3OracleAbi,
+          functionName: "getAssetPrice",
+          args: [tokens.USDC],
+        }),
+      ]);
+      const [
+        collateralScaledSupply,
+        collateralScaledDebt,
+        debtATokenScaledSupply,
+        debtScaledDebt,
+        debtHeldLiquidity,
+        debtVirtualLiquidity,
+      ] = await Promise.all([
+        readContract(client, {
+          address: collateralPool.aTokenAddress,
+          abi: aaveV3ATokenAbi,
+          functionName: "scaledTotalSupply",
+        }),
+        readContract(client, {
+          address: collateralPool.variableDebtTokenAddress,
+          abi: aaveV3VariableDebtTokenAbi,
+          functionName: "scaledTotalSupply",
+        }),
+        readContract(client, {
+          address: debtPool.aTokenAddress,
+          abi: aaveV3ATokenAbi,
+          functionName: "scaledTotalSupply",
+        }),
+        readContract(client, {
+          address: debtPool.variableDebtTokenAddress,
+          abi: aaveV3VariableDebtTokenAbi,
+          functionName: "scaledTotalSupply",
+        }),
+        readContract(client, {
+          address: tokens.USDC,
+          abi: erc20Abi,
+          functionName: "balanceOf",
+          args: [debtPool.aTokenAddress],
+        }),
+        readContract(client, {
+          address: aaveV3Pool,
+          abi: aaveV3PoolAbi,
+          functionName: "getVirtualUnderlyingBalance",
+          args: [tokens.USDC],
+        }),
       ]);
 
       expect(collateralReserve).toStrictEqual({
-        index: collateralPool.liquidityIndex,
-        rate: collateralPool.currentLiquidityRate,
+        configuration: collateralPool.configuration.data,
+        liquidityIndex: collateralPool.liquidityIndex,
+        currentLiquidityRate: collateralPool.currentLiquidityRate,
+        variableBorrowIndex: collateralPool.variableBorrowIndex,
+        currentVariableBorrowRate: collateralPool.currentVariableBorrowRate,
         lastUpdateTimestamp: BigInt(collateralPool.lastUpdateTimestamp),
+        accruedToTreasury: collateralPool.accruedToTreasury,
       });
       expect(debtReserve).toStrictEqual({
-        index: debtPool.variableBorrowIndex,
-        rate: debtPool.currentVariableBorrowRate,
+        configuration: debtPool.configuration.data,
+        liquidityIndex: debtPool.liquidityIndex,
+        currentLiquidityRate: debtPool.currentLiquidityRate,
+        variableBorrowIndex: debtPool.variableBorrowIndex,
+        currentVariableBorrowRate: debtPool.currentVariableBorrowRate,
         lastUpdateTimestamp: BigInt(debtPool.lastUpdateTimestamp),
+        accruedToTreasury: debtPool.accruedToTreasury,
       });
+      expect(aave.collateralData).toStrictEqual({
+        price: collateralPrice,
+        aTokenScaledTotalSupply: collateralScaledSupply,
+        vTokenScaledTotalSupply: collateralScaledDebt,
+      });
+      expect(aave.debtData).toStrictEqual({
+        price: debtPrice,
+        aTokenScaledTotalSupply: debtATokenScaledSupply,
+        vTokenScaledTotalSupply: debtScaledDebt,
+        underlyingBalance: debtHeldLiquidity,
+        virtualUnderlyingBalance: debtVirtualLiquidity,
+      });
+      expect(ReserveConfigurationLib.getDecimals(collateralPool.configuration.data)).toBe(18n);
+      expect(ReserveConfigurationLib.getDecimals(debtPool.configuration.data)).toBe(6n);
+    },
+  );
+
+  test(
+    "aave: pinned reserve tokens match the pool's onchain reserve tokens",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      const { DAI, USDC, USDT, WBTC, cbBTC, WETH, wstETH } = tokens;
+
+      await Promise.all(
+        [DAI, USDC, USDT, WBTC, cbBTC, WETH, wstETH].map(async (token) => {
+          const reserve = await readContract(client, {
+            address: aaveV3Pool,
+            abi: aaveV3PoolAbi,
+            functionName: "getReserveData",
+            args: [token],
+          });
+
+          expect(getAToken(token, ChainId.EthMainnet)).toBe(reserve.aTokenAddress);
+          expect(getVToken(token, ChainId.EthMainnet)).toBe(reserve.variableDebtTokenAddress);
+        }),
+      );
     },
   );
 
@@ -267,14 +380,22 @@ describe("venue parity (mainnet fork)", () => {
           lastUpdate: block.timestamp,
         },
         {
-          index: collateralReserve.liquidityIndex,
-          rate: collateralReserve.currentLiquidityRate,
+          configuration: collateralReserve.configuration.data,
+          liquidityIndex: collateralReserve.liquidityIndex,
+          currentLiquidityRate: collateralReserve.currentLiquidityRate,
+          variableBorrowIndex: collateralReserve.variableBorrowIndex,
+          currentVariableBorrowRate: collateralReserve.currentVariableBorrowRate,
           lastUpdateTimestamp: BigInt(collateralReserve.lastUpdateTimestamp),
+          accruedToTreasury: collateralReserve.accruedToTreasury,
         },
         {
-          index: debtReserve.variableBorrowIndex,
-          rate: debtReserve.currentVariableBorrowRate,
+          configuration: debtReserve.configuration.data,
+          liquidityIndex: debtReserve.liquidityIndex,
+          currentLiquidityRate: debtReserve.currentLiquidityRate,
+          variableBorrowIndex: debtReserve.variableBorrowIndex,
+          currentVariableBorrowRate: debtReserve.currentVariableBorrowRate,
           lastUpdateTimestamp: BigInt(debtReserve.lastUpdateTimestamp),
+          accruedToTreasury: debtReserve.accruedToTreasury,
         },
       );
 
@@ -287,6 +408,298 @@ describe("venue parity (mainnet fork)", () => {
       const accrued = venue.accrueInterest(block.timestamp);
       expect(accrued.collateralIndex).toBe(collateralIndex);
       expect(accrued.debtIndex).toBe(debtIndex);
+    },
+  );
+
+  test(
+    "aave: getMaxBorrowAmount matches the onchain borrow bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const collateral = MathLib.WAD; // 1 WETH into USDC debt.
+      const timestamp = await client.timestamp();
+
+      const venue = await fetchVenue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 0n,
+          data: "0x",
+          collateralToken: tokens.WETH,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
+      await client.deal({
+        erc20: tokens.WETH,
+        account: client.account.address,
+        amount: collateral,
+      });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [aaveV3Pool, collateral] });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 2n });
+      await client.writeContract({
+        address: aaveV3Pool,
+        abi: aaveV3PoolAbi,
+        functionName: "supply",
+        args: [tokens.WETH, collateral, client.account.address, 0],
+      });
+
+      const maxBorrow = venue.getMaxBorrowAmount(collateral, timestamp + 3n) ?? 0n;
+      expect(maxBorrow).toBeGreaterThan(0n);
+
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
+      await client.writeContract({
+        address: aaveV3Pool,
+        abi: aaveV3PoolAbi,
+        functionName: "borrow",
+        args: [tokens.USDC, maxBorrow, 2n, 0, client.account.address],
+      });
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(maxBorrow);
+
+      // One more wei on top of the maxed position does not fit.
+      await expect(
+        simulateContract(client, {
+          address: aaveV3Pool,
+          abi: aaveV3PoolAbi,
+          functionName: "borrow",
+          args: [tokens.USDC, 1n, 2n, 0, client.account.address],
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test(
+    "morpho: getMaxBorrowAmount matches the onchain borrow bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const collateral = 5_000_000n; // 0.05 cbBTC into USDC debt.
+      const timestamp = await client.timestamp();
+
+      const venue = await fetchVenue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 1n,
+          data,
+          collateralToken: tokens.cbBTC,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
+      await client.deal({
+        erc20: tokens.cbBTC,
+        account: client.account.address,
+        amount: collateral,
+      });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.cbBTC, args: [morphoBlue, collateral] });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 2n });
+      await client.writeContract({
+        address: morphoBlue,
+        abi: morphoBlueAbi,
+        functionName: "supplyCollateral",
+        args: [marketParams, collateral, client.account.address, "0x"],
+      });
+
+      const maxBorrow = venue.getMaxBorrowAmount(collateral, timestamp + 3n) ?? 0n;
+      expect(maxBorrow).toBeGreaterThan(0n);
+
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
+      await client.writeContract({
+        address: morphoBlue,
+        abi: morphoBlueAbi,
+        functionName: "borrow",
+        args: [marketParams, maxBorrow, 0n, client.account.address, client.account.address],
+      });
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(maxBorrow);
+
+      // One more wei on top of the maxed position does not fit.
+      await expect(
+        simulateContract(client, {
+          address: morphoBlue,
+          abi: morphoBlueAbi,
+          functionName: "borrow",
+          args: [marketParams, 1n, 0n, client.account.address, client.account.address],
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test(
+    "aave: getMaxSupplyCapacity matches the onchain supply bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const timestamp = await client.timestamp();
+
+      const venue = await fetchVenue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 0n,
+          data: "0x",
+          collateralToken: tokens.WETH,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      const capacity = venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n;
+      expect(capacity).toBeGreaterThan(0n);
+      expect(capacity).toBeLessThan(MathLib.MAX_UINT_256);
+
+      // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
+      await client.deal({
+        erc20: tokens.WETH,
+        account: client.account.address,
+        amount: capacity + 2n,
+      });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [aaveV3Pool, capacity + 2n] });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 2n });
+      await client.writeContract({
+        address: aaveV3Pool,
+        abi: aaveV3PoolAbi,
+        functionName: "supply",
+        args: [tokens.WETH, capacity, client.account.address, 0],
+      });
+      expect(await client.balanceOf({ erc20: tokens.WETH })).toBe(2n);
+
+      // The smallest further supply the scaled floor keeps (2 wei at an index above RAY)
+      // exceeds the exhausted cap.
+      await expect(
+        simulateContract(client, {
+          address: aaveV3Pool,
+          abi: aaveV3PoolAbi,
+          functionName: "supply",
+          args: [tokens.WETH, 2n, client.account.address, 0],
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test(
+    "aave: getMaxBorrowCapacity matches the onchain borrow bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const timestamp = await client.timestamp();
+
+      const venue = await fetchVenue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 0n,
+          data: "0x",
+          collateralToken: tokens.WETH,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      const capacity = venue.getMaxBorrowCapacity(timestamp + 3n) ?? 0n;
+      expect(capacity).toBeGreaterThan(0n);
+      // Enough collateral that the capacity is the binding term of the borrow bound.
+      const collateral = MathLib.min(
+        venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n,
+        200_000n * MathLib.WAD,
+      );
+      expect(venue.getMaxBorrowAmount(collateral, timestamp + 3n)).toBe(capacity);
+
+      // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
+      await client.deal({
+        erc20: tokens.WETH,
+        account: client.account.address,
+        amount: collateral,
+      });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [aaveV3Pool, collateral] });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 2n });
+      await client.writeContract({
+        address: aaveV3Pool,
+        abi: aaveV3PoolAbi,
+        functionName: "supply",
+        args: [tokens.WETH, collateral, client.account.address, 0],
+      });
+
+      // The reserve lends out exactly its capacity...
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
+      await client.writeContract({
+        address: aaveV3Pool,
+        abi: aaveV3PoolAbi,
+        functionName: "borrow",
+        args: [tokens.USDC, capacity, 2n, 0, client.account.address],
+      });
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(capacity);
+
+      // ...and not a wei more.
+      await expect(
+        simulateContract(client, {
+          address: aaveV3Pool,
+          abi: aaveV3PoolAbi,
+          functionName: "borrow",
+          args: [tokens.USDC, 1n, 2n, 0, client.account.address],
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  test(
+    "morpho: getMaxBorrowCapacity matches the onchain borrow bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const timestamp = await client.timestamp();
+
+      const venue = await fetchVenue(
+        {
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 1n,
+          data,
+          collateralToken: tokens.cbBTC,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      const capacity = venue.getMaxBorrowCapacity(timestamp + 3n) ?? 0n;
+      expect(capacity).toBeGreaterThan(0n);
+      // Enough collateral that the capacity is the binding term of the borrow bound.
+      const collateral = 10_000n * 10n ** 8n;
+      expect(venue.getMaxBorrowAmount(collateral, timestamp + 3n)).toBe(capacity);
+
+      // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
+      await client.deal({
+        erc20: tokens.cbBTC,
+        account: client.account.address,
+        amount: collateral,
+      });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.cbBTC, args: [morphoBlue, collateral] });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 2n });
+      await client.writeContract({
+        address: morphoBlue,
+        abi: morphoBlueAbi,
+        functionName: "supplyCollateral",
+        args: [marketParams, collateral, client.account.address, "0x"],
+      });
+
+      // The market lends out exactly its idle supply...
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
+      await client.writeContract({
+        address: morphoBlue,
+        abi: morphoBlueAbi,
+        functionName: "borrow",
+        args: [marketParams, capacity, 0n, client.account.address, client.account.address],
+      });
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(capacity);
+
+      // ...and not a wei more.
+      await expect(
+        simulateContract(client, {
+          address: morphoBlue,
+          abi: morphoBlueAbi,
+          functionName: "borrow",
+          args: [marketParams, 1n, 0n, client.account.address, client.account.address],
+        }),
+      ).rejects.toThrow();
     },
   );
 });
