@@ -101,6 +101,17 @@ export class AaveV3Venue extends Venue {
   }
 
   /**
+   * The collateral reserve's max LTV (scaled by WAD).
+   */
+  get ltv() {
+    return MathLib.mulDivDown(
+      ReserveConfigurationLib.getLtv(this.collateralReserve.configuration),
+      MathLib.WAD,
+      AaveV3Math.PERCENTAGE_FACTOR,
+    );
+  }
+
+  /**
    * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY): the debt
    * reserve's `currentVariableBorrowRate` compounded per second over a year, as the Aave
    * app quotes it (`variableBorrowAPY`; scaled by WAD). The rate itself only moves on

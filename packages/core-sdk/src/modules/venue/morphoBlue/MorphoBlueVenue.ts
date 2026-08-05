@@ -69,6 +69,13 @@ export class MorphoBlueVenue extends Venue {
   }
 
   /**
+   * The maximum borrow LTV: the market's LLTV itself (scaled by WAD).
+   */
+  get ltv() {
+    return this.lltv;
+  }
+
+  /**
    * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY) (see
    * `getBorrowApy`).
    */

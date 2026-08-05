@@ -160,6 +160,11 @@ export abstract class Venue implements IVenue {
   }
 
   /**
+   * The venue's maximum borrow LTV (scaled by WAD).
+   */
+  public abstract get ltv(): bigint;
+
+  /**
    * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY), as the
    * venue itself quotes it (scaled by WAD: 1e18 is 100%, so 4% reads
    * 4_0000000000000000n).

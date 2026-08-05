@@ -207,6 +207,10 @@ describe("AaveV3Venue", () => {
     },
   );
 
+  test("should expose the collateral reserve's max LTV scaled to WAD", () => {
+    expect(configured.ltv).toBe((8n * MathLib.WAD) / 10n);
+  });
+
   test("should bound a borrow by the collateral reserve's max LTV", () => {
     // 1 collateral × 2000 × 80% = 1600 debt units, unrounded at RAY indices.
     expect(configured.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(1_600_000_000n);
