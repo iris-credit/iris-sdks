@@ -1,1 +1,3 @@
-* @u-zzam @madiha-right
+# Only Version PRs ("chore: version packages") touch CHANGELOGs, so this
+# auto-requests review on releases without pinging owners on every PR.
+/packages/*/CHANGELOG.md @u-zzam @madiha-right
