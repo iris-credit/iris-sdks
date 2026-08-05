@@ -1,7 +1,6 @@
 import type { BigIntish } from "../../../types.js";
 import type { IVenue } from "../Venue.js";
 
-import { Time } from "@iris-credit/iris-ts";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { VenueName } from "../../../registries.js";
@@ -86,9 +85,11 @@ export class MorphoBlueVenue extends Venue {
    * zero-rate accrual.
    *
    * @param timestamp - The timestamp to project the rate's adaptation to (in seconds).
-   *   Must be at or after the market's last update. Defaults to `Time.timestamp()` (now).
+   *   Must be at or after the market's last update. Defaults to `lastUpdate` — the venue
+   *   snapshot's timestamp, so a market untouched since before the fetch answers the rate
+   *   the venue would charge at the fetch block (as `accrueInterest` accrues by default).
    */
-  public getBorrowApy(timestamp: BigIntish = Time.timestamp()): bigint {
+  public getBorrowApy(timestamp: BigIntish = this.lastUpdate): bigint {
     timestamp = BigInt(timestamp);
 
     const elapsed = timestamp - this.market.lastUpdate;

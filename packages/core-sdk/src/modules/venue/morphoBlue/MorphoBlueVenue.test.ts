@@ -1,4 +1,4 @@
-import { describe, expect, test, vi } from "vitest";
+import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
@@ -70,14 +70,20 @@ describe("MorphoBlueVenue", () => {
     expect(() => venue.getBorrowApy(500n)).toThrow(IrisCoreErrors.InvalidVenueInterestAccrual);
   });
 
-  test("should read the clock for the borrow APY getter", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(1_000_000);
-    try {
-      expect(venue.borrowApy).toBe(venue.getBorrowApy(1_000n));
-    } finally {
-      vi.useRealTimers();
-    }
+  test("should default the borrow APY to the venue's snapshot time", () => {
+    expect(venue.borrowApy).toBe(venue.getBorrowApy(1_000n));
+
+    // A market untouched since before the fetch: the default projects the drift up to
+    // the venue's snapshot, not the market's older last update.
+    const stale = new MorphoBlueVenue(
+      { ...view, lastUpdate: 1_000n + SECONDS_PER_YEAR },
+      market,
+      position,
+      rateAtTarget,
+    );
+    expect(stale.borrowApy).toBe(stale.getBorrowApy(1_000n + SECONDS_PER_YEAR));
+    // Below-target utilization: the projected rate decayed over the stale window.
+    expect(stale.borrowApy).toBeLessThan(venue.borrowApy);
   });
 
   test("should answer a zero borrow APY without a rate model (non-canonical IRM)", () => {
