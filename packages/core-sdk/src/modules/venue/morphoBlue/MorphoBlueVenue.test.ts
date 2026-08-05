@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
@@ -42,6 +42,46 @@ describe("MorphoBlueVenue", () => {
 
   test("should carry its venue name", () => {
     expect(venue.name).toBe(VenueName.MorphoBlue);
+  });
+
+  test("should compound the IRM's rate at the market's utilization into the borrow APY", () => {
+    // At target utilization the curve is flat: ~4% per year compounds to e^0.04 - 1.
+    const atTarget = new MorphoBlueVenue(
+      view,
+      { ...market, totalSupplyAssets: MathLib.WAD * 10n, totalBorrowAssets: MathLib.WAD * 9n },
+      position,
+      rateAtTarget,
+    );
+    expect(atTarget.getBorrowApy(1_000n)).toBeCloseTo(0.04081077418, 10);
+
+    // At full utilization the curve tops out at `CURVE_STEEPNESS` times the target rate.
+    const full = new MorphoBlueVenue(
+      view,
+      { ...market, totalSupplyAssets: MathLib.WAD, totalBorrowAssets: MathLib.WAD },
+      position,
+      rateAtTarget,
+    );
+    expect(full.getBorrowApy(1_000n)).toBeCloseTo(0.17351087094, 10);
+  });
+
+  test("should project the rate's adaptation to the given timestamp", () => {
+    // Below-target utilization: the adaptive rate decays over the window.
+    expect(venue.getBorrowApy(1_000n + SECONDS_PER_YEAR)).toBeLessThan(venue.getBorrowApy(1_000n));
+    expect(() => venue.getBorrowApy(500n)).toThrow(IrisCoreErrors.InvalidVenueInterestAccrual);
+  });
+
+  test("should read the clock for the borrow APY getter", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    try {
+      expect(venue.borrowApy).toBe(venue.getBorrowApy(1_000n));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test("should answer a zero borrow APY without a rate model (non-canonical IRM)", () => {
+    expect(new MorphoBlueVenue(view, market, position).borrowApy).toBe(0);
   });
 
   test("should pin the collateral index and keep the debt index at the last update", () => {

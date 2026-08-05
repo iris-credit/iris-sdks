@@ -12,6 +12,10 @@ class TestVenue extends Venue {
   // Arbitrary: the stub models no venue-specific behavior.
   public readonly name = VenueName.AaveV3;
 
+  public get borrowApy(): number {
+    return 0;
+  }
+
   public accrueInterest() {
     return this;
   }

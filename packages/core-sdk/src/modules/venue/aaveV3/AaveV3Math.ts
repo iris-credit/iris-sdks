@@ -1,5 +1,6 @@
 import type { BigIntish } from "../../../types.js";
 
+import { formatUnits } from "viem";
 import { SECONDS_PER_YEAR } from "../../../constants.js";
 import { MathLib } from "../../../math/index.js";
 
@@ -30,6 +31,35 @@ export namespace AaveV3Math {
     b = BigInt(b);
 
     return (a * b + MathLib.RAY / 2n) / MathLib.RAY;
+  };
+
+  /**
+   * Raises a RAY-scaled base to an integer power by squaring over {@link rayMul}, matching
+   * `@aave/math-utils`' `rayPow` — the exact per-second compounding the Aave app displays,
+   * where the protocol contracts settle for {@link getCompoundedInterest}'s approximation.
+   *
+   * @param base The RAY-scaled base.
+   * @param exponent The integer exponent.
+   * @returns `base ^ exponent` (scaled by RAY).
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const cube = AaveV3Math.rayPow(2n * MathLib.RAY, 3n);
+   * // cube === 8n * MathLib.RAY
+   * ```
+   */
+  export const rayPow = (base: BigIntish, exponent: BigIntish) => {
+    let x = BigInt(base);
+    let n = BigInt(exponent);
+    let z = n % 2n === 0n ? MathLib.RAY : x;
+
+    for (n /= 2n; n !== 0n; n /= 2n) {
+      x = rayMul(x, x);
+      if (n % 2n !== 0n) z = rayMul(z, x);
+    }
+
+    return z;
   };
 
   /**
@@ -189,4 +219,27 @@ export namespace AaveV3Math {
 
     return MathLib.RAY + x + rayMul(x, x / 2n + rayMul(x, x / 6n));
   };
+
+  /**
+   * Returns the annual rate compounded per second over a year via the exact {@link rayPow}
+   * — the APY the Aave app displays (`@aave/math-utils`' `calculateCompoundedRate`,
+   * normalized from RAY), where the protocol contracts settle for
+   * {@link getCompoundedInterest}'s approximation.
+   *
+   * @param rate The annual rate to compound per second (scaled by RAY).
+   * @returns The annual percentage yield as a JavaScript number — a decimal fraction where
+   *   1 is 100% (4% returns 0.04).
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const apy = AaveV3Math.rateToApy(MathLib.RAY / 5n); // 20% annual rate
+   * // apy ≈ 0.2214 — 22.14%, where 1 is 100%
+   * ```
+   */
+  export const rateToApy = (rate: BigIntish) =>
+    +formatUnits(
+      rayPow(BigInt(rate) / SECONDS_PER_YEAR + MathLib.RAY, SECONDS_PER_YEAR) - MathLib.RAY,
+      27,
+    );
 }

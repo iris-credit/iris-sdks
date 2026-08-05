@@ -160,6 +160,13 @@ export abstract class Venue implements IVenue {
   }
 
   /**
+   * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY), as the
+   * venue itself quotes it — a decimal fraction, not WAD-scaled: 1 is 100%, so 4% reads
+   * 0.04.
+   */
+  public abstract get borrowApy(): number;
+
+  /**
    * Returns a new venue accrued up to the given timestamp: the indices projected with the
    * venue's own rate model, the pod's assets grown with them, and the rate model advanced
    * alongside. A timestamp equal to `lastUpdate` returns an unchanged copy.

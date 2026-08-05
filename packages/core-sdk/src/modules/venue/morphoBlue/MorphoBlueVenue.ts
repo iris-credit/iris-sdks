@@ -1,6 +1,7 @@
 import type { BigIntish } from "../../../types.js";
 import type { IVenue } from "../Venue.js";
 
+import { Time } from "@iris-credit/iris-ts";
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { VenueName } from "../../../registries.js";
@@ -66,6 +67,48 @@ export class MorphoBlueVenue extends Venue {
     return this.market.totalSupplyAssets > 0n
       ? MathLib.wDivDown(this.market.totalBorrowAssets, this.market.totalSupplyAssets)
       : 0n;
+  }
+
+  /**
+   * The venue's current, instantaneous borrow-side Annual Percentage Yield (APY) (see
+   * `getBorrowApy`).
+   */
+  get borrowApy() {
+    return this.getBorrowApy();
+  }
+
+  /**
+   * Returns the venue's instantaneous borrow-side Annual Percentage Yield (APY) at the
+   * given timestamp, if the market state remains untouched until then: the Adaptive Curve
+   * IRM's rate at the market's utilization, compounded continuously — a decimal fraction
+   * as Morpho quotes it (1 is 100%, so 4% reads 0.04). Markets without
+   * {@link rateAtTarget} (not on the canonical IRM) answer 0, matching their zero-rate
+   * accrual.
+   *
+   * @param timestamp - The timestamp to project the rate's adaptation to (in seconds).
+   *   Must be at or after the market's last update. Defaults to `Time.timestamp()` (now).
+   */
+  public getBorrowApy(timestamp: BigIntish = Time.timestamp()): number {
+    timestamp = BigInt(timestamp);
+
+    const elapsed = timestamp - this.market.lastUpdate;
+    if (elapsed < 0n) {
+      throw new IrisCoreErrors.InvalidVenueInterestAccrual(
+        "debt",
+        timestamp,
+        this.market.lastUpdate,
+      );
+    }
+
+    if (this.rateAtTarget == null) return 0;
+
+    const { endBorrowRate } = AdaptiveCurveIrmLib.getBorrowRate(
+      this.utilization,
+      this.rateAtTarget,
+      elapsed,
+    );
+
+    return MorphoBlueMath.rateToApy(endBorrowRate);
   }
 
   /**
