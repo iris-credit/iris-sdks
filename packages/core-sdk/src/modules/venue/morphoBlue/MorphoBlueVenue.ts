@@ -80,15 +80,15 @@ export class MorphoBlueVenue extends Venue {
   /**
    * Returns the venue's instantaneous borrow-side Annual Percentage Yield (APY) at the
    * given timestamp, if the market state remains untouched until then: the Adaptive Curve
-   * IRM's rate at the market's utilization, compounded continuously — a decimal fraction
-   * as Morpho quotes it (1 is 100%, so 4% reads 0.04). Markets without
-   * {@link rateAtTarget} (not on the canonical IRM) answer 0, matching their zero-rate
-   * accrual.
+   * IRM's rate at the market's utilization, compounded continuously — scaled by WAD, as
+   * Morpho quotes it (see `MorphoBlueMath.rateToApy` for the precision bound). Markets
+   * without {@link rateAtTarget} (not on the canonical IRM) answer 0n, matching their
+   * zero-rate accrual.
    *
    * @param timestamp - The timestamp to project the rate's adaptation to (in seconds).
    *   Must be at or after the market's last update. Defaults to `Time.timestamp()` (now).
    */
-  public getBorrowApy(timestamp: BigIntish = Time.timestamp()): number {
+  public getBorrowApy(timestamp: BigIntish = Time.timestamp()): bigint {
     timestamp = BigInt(timestamp);
 
     const elapsed = timestamp - this.market.lastUpdate;
@@ -100,7 +100,7 @@ export class MorphoBlueVenue extends Venue {
       );
     }
 
-    if (this.rateAtTarget == null) return 0;
+    if (this.rateAtTarget == null) return 0n;
 
     const { endBorrowRate } = AdaptiveCurveIrmLib.getBorrowRate(
       this.utilization,

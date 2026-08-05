@@ -52,7 +52,7 @@ describe("MorphoBlueVenue", () => {
       position,
       rateAtTarget,
     );
-    expect(atTarget.getBorrowApy(1_000n)).toBeCloseTo(0.04081077418, 10);
+    expect(atTarget.getBorrowApy(1_000n)).toBe(40_810_774_180_881_016n);
 
     // At full utilization the curve tops out at `CURVE_STEEPNESS` times the target rate.
     const full = new MorphoBlueVenue(
@@ -61,7 +61,7 @@ describe("MorphoBlueVenue", () => {
       position,
       rateAtTarget,
     );
-    expect(full.getBorrowApy(1_000n)).toBeCloseTo(0.17351087094, 10);
+    expect(full.getBorrowApy(1_000n)).toBe(173_510_870_939_912_896n);
   });
 
   test("should project the rate's adaptation to the given timestamp", () => {
@@ -81,7 +81,7 @@ describe("MorphoBlueVenue", () => {
   });
 
   test("should answer a zero borrow APY without a rate model (non-canonical IRM)", () => {
-    expect(new MorphoBlueVenue(view, market, position).borrowApy).toBe(0);
+    expect(new MorphoBlueVenue(view, market, position).borrowApy).toBe(0n);
   });
 
   test("should pin the collateral index and keep the debt index at the last update", () => {

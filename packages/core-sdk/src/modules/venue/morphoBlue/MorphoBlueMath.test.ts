@@ -16,9 +16,9 @@ describe("MorphoBlueMath", () => {
 
   describe("rateToApy", () => {
     test("should compound the per-second rate continuously over a year", () => {
-      expect(MorphoBlueMath.rateToApy(0n)).toBe(0);
+      expect(MorphoBlueMath.rateToApy(0n)).toBe(0n);
       // ~4% per year, per-second WAD rate: compounds to e^0.04 - 1.
-      expect(MorphoBlueMath.rateToApy(1_268_391_679n)).toBeCloseTo(0.04081077418, 10);
+      expect(MorphoBlueMath.rateToApy(1_268_391_679n)).toBe(40_810_774_180_881_016n);
     });
   });
 

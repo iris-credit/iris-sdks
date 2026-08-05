@@ -1,6 +1,5 @@
 import type { BigIntish } from "../../../types.js";
 
-import { formatUnits } from "viem";
 import { SECONDS_PER_YEAR } from "../../../constants.js";
 import { MathLib } from "../../../math/index.js";
 
@@ -60,6 +59,26 @@ export namespace AaveV3Math {
     }
 
     return z;
+  };
+
+  /**
+   * Rescales a RAY value to WAD, rounding half up on the dropped digits, matching Aave's
+   * `WadRayMath.rayToWad`.
+   *
+   * @param value The RAY-scaled value.
+   * @returns The WAD-scaled value (rounded half up).
+   * @example
+   * ```ts
+   * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
+   *
+   * const wad = AaveV3Math.rayToWad(MathLib.RAY / 5n);
+   * // wad === MathLib.WAD / 5n
+   * ```
+   */
+  export const rayToWad = (value: BigIntish) => {
+    const ratio = MathLib.RAY / MathLib.WAD;
+
+    return (BigInt(value) + ratio / 2n) / ratio;
   };
 
   /**
@@ -223,23 +242,19 @@ export namespace AaveV3Math {
   /**
    * Returns the annual rate compounded per second over a year via the exact {@link rayPow}
    * — the APY the Aave app displays (`@aave/math-utils`' `calculateCompoundedRate`,
-   * normalized from RAY), where the protocol contracts settle for
+   * rescaled by {@link rayToWad}), where the protocol contracts settle for
    * {@link getCompoundedInterest}'s approximation.
    *
    * @param rate The annual rate to compound per second (scaled by RAY).
-   * @returns The annual percentage yield as a JavaScript number — a decimal fraction where
-   *   1 is 100% (4% returns 0.04).
+   * @returns The annual percentage yield (scaled by WAD).
    * @example
    * ```ts
    * import { AaveV3Math, MathLib } from "@iris-credit/core-sdk";
    *
    * const apy = AaveV3Math.rateToApy(MathLib.RAY / 5n); // 20% annual rate
-   * // apy ≈ 0.2214 — 22.14%, where 1 is 100%
+   * // apy === 221_402_757_385_561_290n (~22.14%)
    * ```
    */
   export const rateToApy = (rate: BigIntish) =>
-    +formatUnits(
-      rayPow(BigInt(rate) / SECONDS_PER_YEAR + MathLib.RAY, SECONDS_PER_YEAR) - MathLib.RAY,
-      27,
-    );
+    rayToWad(rayPow(BigInt(rate) / SECONDS_PER_YEAR + MathLib.RAY, SECONDS_PER_YEAR) - MathLib.RAY);
 }
