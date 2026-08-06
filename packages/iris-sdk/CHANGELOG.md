@@ -1,5 +1,17 @@
 # @iris-credit/iris-sdk
 
+## 0.2.0
+
+### Minor Changes
+
+- [#99](https://github.com/iris-credit/iris-sdks/pull/99) [`719d1f8`](https://github.com/iris-credit/iris-sdks/commit/719d1f84bb1399e6da221d51a8a379e59361c0d3) Thanks [@u-zzam](https://github.com/u-zzam)! - Validate the quote's health in the take flow: `take` now requires a pre-fetched `venueData` and rejects a quote whose debt exceeds the venue's max borrow for its collateral, capped by the venue LLTV minus `DEFAULT_LLTV_BUFFER` (`VenueMismatchError` / `IrisCoreErrors.UnknownVenuePrice` / `UnhealthyDebtError`). On Morpho Blue the max borrow LTV is the LLTV itself, so an uncapped take could open one accrual away from venue liquidation. Breaking: `getVenueData` now takes the venue-identifying fields directly — `{ pod?, venueId, collateralToken, debtToken, data }`, `pod` defaulting to the pod-less zero-address view, the shape a solver-signed `Quote` satisfies directly — replacing the `{ loanData, venueId, data }` form.
+
+### Patch Changes
+
+- Updated dependencies [[`bd09373`](https://github.com/iris-credit/iris-sdks/commit/bd0937332eb36f0e4aa9cd46570ab8d2471a0292), [`5fced83`](https://github.com/iris-credit/iris-sdks/commit/5fced835747c19d4367b8855afc9aa9616935fbd)]:
+  - @iris-credit/iris-ts@0.1.1
+  - @iris-credit/core-sdk@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes
