@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hex } from "viem";
 
 /**
  * Typed errors thrown while encoding supported Bundler3 actions.
@@ -233,6 +233,19 @@ export class NativeAmountExceedsCollateralError extends Error {
 }
 
 /**
+ * Thrown when a quote's debt exceeds the venue's safe max borrow against its collateral — the
+ * venue's own borrow limit, capped by the venue LLTV minus the buffer so the loan does not open
+ * one accrual away from venue liquidation.
+ */
+export class UnhealthyDebtError extends Error {
+  constructor(params: { readonly debt: bigint; readonly maxDebt: bigint }) {
+    super(
+      `Quote debt ${params.debt} exceeds the venue's safe max borrow ${params.maxDebt} for the quote's collateral. Request a quote with less debt or more collateral.`,
+    );
+  }
+}
+
+/**
  * Thrown when a collateral withdrawal exceeds the position's withdrawable collateral — the lower
  * of the ceilings Iris and its venue enforce, measured against the buffered venue LLTV.
  */
@@ -327,6 +340,15 @@ export class NotAllowedVenueError extends Error {
   constructor(venueId: bigint, venueBitmap: bigint) {
     super(
       `Venue ${venueId} is not set in the quote's venue bitmap ${venueBitmap}. Take a venue the solver enabled.`,
+    );
+  }
+}
+
+/** Thrown when the pre-fetched venue data is a view of a different venue than the quote opens. */
+export class VenueMismatchError extends Error {
+  constructor(quote: { venueId: bigint; data: Hex }, venue: { id: bigint; data: Hex }) {
+    super(
+      `Venue data is a view of venue ${venue.id} with market data "${venue.data}", but the quote opens venue ${quote.venueId} with market data "${quote.data}". Fetch it with getVenueData({ quote }).`,
     );
   }
 }

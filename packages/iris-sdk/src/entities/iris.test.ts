@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import type { Quote } from "@iris-credit/core-sdk";
+import type { IVenue, Quote } from "@iris-credit/core-sdk";
 import type { MockClientHandle } from "@iris-credit/test/mock";
 import type { SolverPermit2 } from "../types/index.js";
 
@@ -10,11 +10,15 @@ import {
   BP,
   getChainAddresses,
   irisAbi,
+  IrisCoreErrors,
+  MathLib,
   MAX_DURATION,
   MAX_FIXED_RATE,
   MAX_OVERDUE_PERIOD,
   MAX_OVERDUE_RATE,
   MIN_DURATION,
+  MorphoBlueVenue,
+  ORACLE_PRICE_SCALE,
   permit2Abi,
 } from "@iris-credit/core-sdk";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
@@ -41,6 +45,8 @@ import {
   SolverPermit2AmountBelowBondError,
   SolverPermit2AssetMismatchError,
   SolverPermit2ExpiredError,
+  UnhealthyDebtError,
+  VenueMismatchError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -106,11 +112,43 @@ describe("Iris.take", () => {
     }
   };
 
+  /** A view of the quote's venue with ample liquidity, so a valid quote passes its health check. */
+  const buildVenueData = (
+    overrides: Partial<IVenue> = {},
+    market: { totalSupplyAssets?: bigint } = {},
+  ) =>
+    new MorphoBlueVenue(
+      {
+        id: 0n,
+        data: "0x",
+        pod: zeroAddress,
+        collateral: 0n,
+        debt: 0n,
+        collateralIndex: MathLib.RAY,
+        debtIndex: MathLib.RAY,
+        lltv: 800_000_000_000_000_000n,
+        price: ORACLE_PRICE_SCALE,
+        lastUpdate: 1_900_000_000n,
+        ...overrides,
+      },
+      {
+        totalSupplyAssets: market.totalSupplyAssets ?? 10n * MathLib.WAD,
+        totalBorrowAssets: 0n,
+        totalBorrowShares: 0n,
+        lastUpdate: 1_900_000_000n,
+      },
+      { borrowShares: 0n, collateral: 0n },
+    );
+
   /** The take arguments a valid quote produces, so each test overrides only what it exercises. */
-  const takeParams = (quote: Quote, overrides: { nativeAmount?: bigint } = {}) => ({
+  const takeParams = (
+    quote: Quote,
+    overrides: { venueData?: MorphoBlueVenue; nativeAmount?: bigint } = {},
+  ) => ({
     userAddress: quote.borrower,
     quote,
     quoteSignature,
+    venueData: buildVenueData(),
     ...overrides,
   });
 
@@ -229,6 +267,60 @@ describe("Iris.take", () => {
       expect(() => makeIris().take(takeParams(buildQuote({ venueId, venueBitmap })))).toThrow(
         NotAllowedVenueError,
       );
+    });
+
+    test("error: VenueMismatchError when venueData views a different venue than the quote opens", () => {
+      const quote = buildQuote();
+
+      expect(() =>
+        makeIris().take(takeParams(quote, { venueData: buildVenueData({ id: 1n }) })),
+      ).toThrow(VenueMismatchError);
+      expect(() =>
+        makeIris().take(takeParams(quote, { venueData: buildVenueData({ data: "0xdead" }) })),
+      ).toThrow(VenueMismatchError);
+      // Hex casing is not identity: the same market data in another case still matches.
+      expect(() =>
+        makeIris().take(
+          takeParams(buildQuote({ data: "0xAB" }), {
+            venueData: buildVenueData({ data: "0xab" }),
+          }),
+        ),
+      ).not.toThrow();
+    });
+
+    test("error: UnknownVenuePrice when the venue price is unknown", () => {
+      const quote = buildQuote();
+
+      expect(() =>
+        makeIris().take(takeParams(quote, { venueData: buildVenueData({ price: undefined }) })),
+      ).toThrow(IrisCoreErrors.UnknownVenuePrice);
+    });
+
+    // lltv 80% on collateral priced 1:1 — `DEFAULT_LLTV_BUFFER` caps the safe debt at 79.5%.
+    const bufferedMaxDebt = 795_000_000_000_000_000n;
+
+    test("error: UnhealthyDebtError when the debt exceeds the buffered venue max borrow", () => {
+      const quote = buildQuote({ debt: bufferedMaxDebt + 1n });
+
+      expect(() => makeIris().take(takeParams(quote))).toThrow(UnhealthyDebtError);
+    });
+
+    test("behavior: accepts a debt sitting exactly on the buffered venue max borrow", () => {
+      const quote = buildQuote({ debt: bufferedMaxDebt });
+
+      expect(() => makeIris().take(takeParams(quote))).not.toThrow();
+    });
+
+    test("error: UnhealthyDebtError when the venue's own borrow limit binds below the buffered LLTV", () => {
+      const quote = buildQuote({ debt: MathLib.WAD / 2n + 1n });
+
+      expect(() =>
+        makeIris().take(
+          takeParams(quote, {
+            venueData: buildVenueData({}, { totalSupplyAssets: MathLib.WAD / 2n }),
+          }),
+        ),
+      ).toThrow(UnhealthyDebtError);
     });
 
     test("error: SolverPermit2AssetMismatchError", () => {

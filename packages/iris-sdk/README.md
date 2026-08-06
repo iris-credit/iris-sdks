@@ -144,13 +144,16 @@ const tx = buildTx(signatures);
 
 ### Take
 
-Opens a loan from a solver-signed quote. The quote, its signature and (for solvers without a standing allowance) the `solverPermit2` payload are delivered through the RFQ; validation is local-only — the pure subset of `Iris.take`'s requires — since the RFQ already validated the quote and the contract re-verifies everything at execution.
+Opens a loan from a solver-signed quote. The quote, its signature and (for solvers without a standing allowance) the `solverPermit2` payload are delivered through the RFQ; validation is local-only — the pure subset of `Iris.take`'s requires — since the RFQ already validated the quote and the contract re-verifies everything at execution. On top of that, the quote is measured against the pre-fetched `venueData` (`getVenueData({ quote })`): the debt must fit the venue's max borrow for the collateral, capped by the venue LLTV minus a 0.5% buffer (`DEFAULT_LLTV_BUFFER`) so the loan does not open one accrual away from venue liquidation — on Morpho Blue the max borrow LTV _is_ the LLTV.
 
 ```typescript
+const venueData = await iris.getVenueData({ quote });
+
 const { buildTx, getRequirements } = iris.take({
   userAddress: borrower, // must be quote.borrower.
   quote,
   quoteSignature,
+  venueData,
   solverPermit2, // optional — delivered with the quote.
 });
 
@@ -163,10 +166,13 @@ const tx = buildTx(signatures);
 For quotes whose collateral token is the chain's wNative, part (or all) of the collateral can be paid natively and wrapped in-bundle; the ERC-20 pull covers the remainder and the transaction's `value` carries the native amount:
 
 ```typescript
+const venueData = await iris.getVenueData({ quote });
+
 const { buildTx, getRequirements } = iris.take({
   userAddress: borrower,
   quote,
   quoteSignature,
+  venueData,
   nativeAmount: 1000000000000000000n, // 1 ETH of the collateral, wrapped to WETH in-bundle.
 });
 ```

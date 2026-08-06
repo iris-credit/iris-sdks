@@ -56,10 +56,12 @@ function createIrisNamespace(
  *   .extend(irisViemExtension({ supportSignature: true }));
  *
  * const iris = client.iris.core(1);
+ * const venueData = await iris.getVenueData({ quote });
  * const { buildTx, getRequirements } = iris.take({
  *   userAddress: user,
  *   quote,
  *   quoteSignature,
+ *   venueData,
  * });
  * const requirements = await getRequirements();
  * // Send the approval / authorization transactions, and sign the signable requirements:
