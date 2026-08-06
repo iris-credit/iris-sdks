@@ -12,7 +12,7 @@ The SDK is a TypeScript abstraction layer over the Iris protocol. Its job is to 
 - **Predictable developer experience.** Every flow returns a `{ buildTx, getRequirements }` pair (when tokens flow in) or `{ buildTx }` (when they only flow out). The interface is identical across flows.
 - **Immutability.** Every returned `Transaction` is deep-frozen via `@iris-credit/iris-ts`'s `deepFreeze`. Once built, a transaction object cannot be mutated.
 - **No `any`.** Strict TypeScript throughout, with discriminated unions for action types and a dedicated error class for every failure mode.
-- **Mirror the contract, don't re-verify the world.** Flows validate the pure subset of what `Iris.sol` would reject — deadlines, bounds, roles, bitmap membership — as typed errors. Guarantees the RFQ or the contract already verifies (solver signature, enabled configuration, bond requirement) are not re-read at build time.
+- **Mirror the contract, don't re-verify the world.** Flows validate the pure subset of what `Iris.sol` would reject — deadlines, bounds, roles, bitmap membership — as typed errors. Guarantees the RFQ or the contract already verifies (solver signature, enabled configuration, bond requirement) are not re-read at build time. The one stricter-than-contract check: `take` caps the quote's debt at the venue's max borrow for its collateral, measured against the venue LLTV minus `DEFAULT_LLTV_BUFFER` — on Morpho Blue the max borrow LTV _is_ the LLTV, so an uncapped take could open one accrual away from venue liquidation.
 
 The SDK intentionally does **not** simulate or execute transactions. It produces the calldata; the consuming application decides when and how to send it (and can preview it with `@iris-credit/evm-simulation`).
 
@@ -34,7 +34,7 @@ Each layer has a single responsibility and a strict boundary:
 | Layer      | Responsibility                                                                                                                                                 | What it must NOT do                           |
 | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | **Client** | Wrap a viem `Client`, normalize SDK options (`supportSignature`), produce the chain-scoped `Iris` entity                                                        | Call actions directly, hold mutable state     |
-| **Entity** | Fetch on-chain data (`getLoanData` / `getPositionData` / `getVenueData` / `getClaimableData`), validate flows against it, compute derived values (funding upper bounds, buffered withdraw ceilings), delegate to actions | Encode calldata, know about bundler internals |
+| **Entity** | Fetch on-chain data (`getLoanData` / `getPositionData` / `getVenueData` / `getClaimableData`), validate flows against it, compute derived values (funding upper bounds, buffered LLTV ceilings), delegate to actions | Encode calldata, know about bundler internals |
 | **Action** | Validate inputs, encode calldata, deep-freeze the result, return a `Transaction<TAction>`                                                                       | Fetch data, hold state, mutate anything       |
 
 **Calls flow strictly downward**: Client → Entity → Action. An action never calls an entity; an entity never instantiates a client.

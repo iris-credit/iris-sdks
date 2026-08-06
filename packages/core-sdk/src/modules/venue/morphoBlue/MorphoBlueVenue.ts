@@ -1,5 +1,5 @@
 import type { BigIntish } from "../../../types.js";
-import type { IVenue } from "../Venue.js";
+import type { IVenue, MaxBorrowOptions } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
@@ -266,13 +266,23 @@ export class MorphoBlueVenue extends Venue {
   }
 
   /**
-   * Returns the maximum borrow amount against the given collateral, bounded by `getMaxBorrowCapacity`.
+   * Returns the maximum borrow amount against the given collateral, measured at `maxLtv` and
+   * bounded by `getMaxBorrowCapacity`. `maxLtv` (scaled by WAD) defaults to — and is capped
+   * by — the venue's max borrow LTV, so a caller can tighten the limit but never exceed the
+   * venue's own.
    */
-  public getMaxBorrowAmount(collateral: bigint, timestamp?: BigIntish) {
+  public getMaxBorrowAmount(
+    collateral: bigint,
+    { maxLtv = this.ltv, timestamp }: MaxBorrowOptions = {},
+  ) {
     const collateralValue = PositionUtils.getCollateralValue({ collateral }, { price: this.price });
     if (collateralValue == null) return;
 
-    const maxBorrow = MathLib.mulDivDown(collateralValue, this.lltv, MathLib.WAD);
+    const maxBorrow = MathLib.mulDivDown(
+      collateralValue,
+      MathLib.min(maxLtv, this.ltv),
+      MathLib.WAD,
+    );
     const { totalBorrowAssets, totalBorrowShares } = this.accrueInterest(timestamp).market;
 
     // Account for Morpho's share/asset rounding: a borrow of `assets` is checked as

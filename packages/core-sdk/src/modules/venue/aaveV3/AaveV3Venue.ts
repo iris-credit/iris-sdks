@@ -1,5 +1,5 @@
 import type { BigIntish } from "../../../types.js";
-import type { IVenue } from "../Venue.js";
+import type { IVenue, MaxBorrowOptions } from "../Venue.js";
 
 import { IrisCoreErrors } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
@@ -271,15 +271,21 @@ export class AaveV3Venue extends Venue {
   }
 
   /**
-   * Returns the maximum borrow amount against the given collateral, bounded by `getMaxBorrowCapacity`.
+   * Returns the maximum borrow amount against the given collateral, measured at `maxLtv` and
+   * bounded by `getMaxBorrowCapacity`. `maxLtv` (scaled by WAD) defaults to — and is capped
+   * by — the venue's max borrow LTV, so a caller can tighten the limit but never exceed the
+   * venue's own.
    */
-  public getMaxBorrowAmount(collateral: bigint, timestamp: BigIntish = this.lastUpdate) {
+  public getMaxBorrowAmount(
+    collateral: bigint,
+    { maxLtv = this.ltv, timestamp = this.lastUpdate }: MaxBorrowOptions = {},
+  ) {
     const { collateralData, debtData } = this;
     if (collateralData == null || debtData == null) return;
 
     const { configuration } = this.collateralReserve;
-    const ltv = ReserveConfigurationLib.getLtv(configuration);
-    if (collateral === 0n || ltv === 0n) return 0n;
+    const effectiveLtv = MathLib.min(maxLtv, this.ltv);
+    if (collateral === 0n || effectiveLtv === 0n) return 0n;
 
     // Account for Aave's two floor roundings: supply amount to aToken shares, then
     // shares to balance.
@@ -293,7 +299,7 @@ export class AaveV3Venue extends Venue {
       collateralData.price,
       10n ** ReserveConfigurationLib.getDecimals(configuration),
     );
-    const maxDebtBase = MathLib.mulDivDown(collateralBase, ltv, AaveV3Math.PERCENTAGE_FACTOR);
+    const maxDebtBase = MathLib.mulDivDown(collateralBase, effectiveLtv, MathLib.WAD);
     const maxActualDebt = MathLib.mulDivDown(
       maxDebtBase,
       10n ** ReserveConfigurationLib.getDecimals(this.debtReserve.configuration),

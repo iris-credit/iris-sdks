@@ -21,6 +21,12 @@ export interface IVenue {
   lastUpdate: bigint;
 }
 
+/** Options for max borrow capacity calculations. */
+export interface MaxBorrowOptions {
+  maxLtv?: bigint;
+  timestamp?: BigIntish;
+}
+
 /**
  * Represents a venue's view of a pod: the pair-level observations (indices, price, LLTV)
  * and the pod's assets on the venue.
@@ -215,9 +221,15 @@ export abstract class Venue implements IVenue {
   public abstract getMaxBorrowCapacity(timestamp?: BigIntish): bigint | undefined;
 
   /**
-   * Returns the maximum borrow amount against the given collateral, bounded by `getMaxBorrowCapacity`.
+   * Returns the maximum borrow amount against the given collateral, measured at `maxLtv` and
+   * bounded by `getMaxBorrowCapacity`. `maxLtv` (scaled by WAD) defaults to — and is capped
+   * by — the venue's max borrow LTV, so a caller can tighten the limit but never exceed the
+   * venue's own.
    */
-  public abstract getMaxBorrowAmount(collateral: bigint, timestamp?: BigIntish): bigint | undefined;
+  public abstract getMaxBorrowAmount(
+    collateral: bigint,
+    options?: MaxBorrowOptions,
+  ): bigint | undefined;
 
   /**
    * Returns a new venue accrued to the given timestamp with the collateral supplied on

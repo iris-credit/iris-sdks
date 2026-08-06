@@ -46,7 +46,7 @@ import {
   MIN_DURATION,
   PositionUtils,
 } from "@iris-credit/core-sdk";
-import { Time } from "@iris-credit/iris-ts";
+import { isHexEqual, Time } from "@iris-credit/iris-ts";
 import { irisClaim } from "../actions/iris/claim.js";
 import { irisEscape } from "../actions/iris/escape.js";
 import { irisRefinance } from "../actions/iris/refinance.js";
@@ -82,6 +82,8 @@ import {
   SolverPermit2ExpiredError,
   UnhealthyBondError,
   UnhealthyCollateralError,
+  UnhealthyDebtError,
+  VenueMismatchError,
   ZeroAddressError,
 } from "../types/index.js";
 
@@ -112,14 +114,22 @@ export interface IrisActions {
    * Fetches a venue's live view of the pod — its assets, indices, LLTV and price.
    *
    * Reads the venue as it stands for the pod, so a venue the pod has not entered comes back
-   * holding nothing: the shape `refinance` expects of its target venue.
+   * holding nothing: the shape `refinance` expects of its target venue. `pod` defaults to the
+   * zero address — the pod-less empty view, the shape `take` expects of its `venueData`; a
+   * solver-signed `Quote` carries every other field, so it satisfies `params` directly.
    *
-   * @param params - Venue identification parameters.
+   * @param params - The venue-identifying fields, as `fetchVenue` takes them.
    * @param parameters - Optional fetch parameters (block number, state overrides).
    * @returns The hydrated `Venue`, the `newVenue` the refinance flow takes.
    */
   getVenueData: (
-    params: { loanData: Loan; venueId: BigIntish; data: Hex },
+    params: {
+      pod?: Address;
+      venueId: BigIntish;
+      collateralToken: Address;
+      debtToken: Address;
+      data: Hex;
+    },
     parameters?: FetchParameters,
   ) => Promise<Venue>;
 
@@ -142,7 +152,9 @@ export interface IrisActions {
    *
    * Validation is local-only — the pure subset of `Iris.take`'s requires (deadline, non-zero
    * addresses and amounts, rate / duration bounds, BP-multiple rates, venue bitmap,
-   * `solverPermit2` consistency, and native-amount bounds). On-chain guarantees the RFQ already validated at quote time (solver
+   * `solverPermit2` consistency, and native-amount bounds) plus the quote's health on the
+   * pre-fetched `venueData`, measured against the venue LLTV minus `DEFAULT_LLTV_BUFFER` so the
+   * loan does not open one accrual away from venue liquidation. On-chain guarantees the RFQ already validated at quote time (solver
    * signature, enabled configuration, bond requirement) are not re-read here; the contract
    * re-verifies everything at execution.
    *
@@ -165,6 +177,7 @@ export interface IrisActions {
     userAddress: Address;
     quote: Quote;
     quoteSignature: Hex;
+    venueData: Venue;
     solverPermit2?: SolverPermit2;
     nativeAmount?: bigint;
   }) => {
@@ -470,11 +483,16 @@ export class Iris implements IrisActions {
    * Fetches a venue's live view of the pod — its assets, indices, LLTV and price.
    *
    * Reads the venue as it stands for the pod, so a venue the pod has not entered comes back
-   * holding nothing: the shape {@link Iris.refinance} expects of its target venue.
+   * holding nothing: the shape {@link Iris.refinance} expects of its target venue. `pod`
+   * defaults to the zero address — the pod-less empty view, the shape {@link Iris.take}
+   * expects of its `venueData`; a solver-signed `Quote` carries every other field, so it
+   * satisfies `params` directly.
    *
-   * @param params.loanData - Pre-fetched loan for the pod, from {@link Iris.getLoanData} or an
-   *   `AccrualPosition.loan`; supplies the pod and the loan's tokens.
+   * @param params.pod - The pod to read the venue's view of. Defaults to the zero address, a
+   *   view of no pod.
    * @param params.venueId - The id of the venue to read.
+   * @param params.collateralToken - The loan's collateral token.
+   * @param params.debtToken - The loan's debt token.
    * @param params.data - The venue's market data.
    * @param parameters - Optional fetch parameters (block number, state overrides).
    * @returns The hydrated `Venue`.
@@ -484,12 +502,22 @@ export class Iris implements IrisActions {
    *   offline rate model.
    */
   async getVenueData(
-    { loanData, venueId, data }: { loanData: Loan; venueId: BigIntish; data: Hex },
+    {
+      pod = zeroAddress,
+      venueId,
+      collateralToken,
+      debtToken,
+      data,
+    }: {
+      pod?: Address;
+      venueId: BigIntish;
+      collateralToken: Address;
+      debtToken: Address;
+      data: Hex;
+    },
     parameters?: FetchParameters,
   ) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
-
-    const { pod, collateralToken, debtToken } = loanData;
 
     return fetchVenue({ pod, venueId, data, collateralToken, debtToken }, this.client.viemClient, {
       ...parameters,
@@ -524,14 +552,20 @@ export class Iris implements IrisActions {
    * Validates the quote's local shape — deadline not expired, non-zero addresses and amounts,
    * `fixedRate` / `duration` / `overdueRate` / `overduePeriod` within the protocol bounds
    * mirrored from `ConstantsLib` (rates must also be whole multiples of BP), `venueId` enabled
-   * in `venueBitmap`, and the `solverPermit2` payload consistent with the quote's bond. No
-   * on-chain state is read here: quotes arrive RFQ-validated, the contract re-verifies
-   * everything at execution, and the only reads happen lazily in `getRequirements`.
+   * in `venueBitmap`, and the `solverPermit2` payload consistent with the quote's bond — and
+   * measures the quote against the pre-fetched `venueData`: its debt must fit the venue's max
+   * borrow for its collateral, capped by the venue LLTV minus `DEFAULT_LLTV_BUFFER` so the loan
+   * does not open one accrual away from venue liquidation. No on-chain state is read here:
+   * quotes arrive RFQ-validated, the contract re-verifies everything at execution, and the only
+   * reads happen lazily in `getRequirements`.
    *
    * @param params.userAddress - Account funding the collateral (the bundle initiator); must equal
    *   `quote.borrower`.
    * @param params.quote - The solver-signed quote to take.
    * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
+   * @param params.venueData - Pre-fetched view of the quote's venue, from
+   *   {@link Iris.getVenueData} — a solver-signed `Quote` satisfies its params directly;
+   *   supplies the price, LLTV and borrow limits the health check measures against.
    * @param params.solverPermit2 - Optional solver-signed Permit2 bond funding payload delivered
    *   with the quote.
    * @param params.nativeAmount - Optional collateral portion paid natively and wrapped
@@ -549,6 +583,12 @@ export class Iris implements IrisActions {
    * @throws {QuoteOutOfBoundsError} when a rate / duration / overdue field is out of bounds.
    * @throws {NotMultipleOfBpError} when `fixedRate` or `overdueRate` is not a multiple of BP.
    * @throws {NotAllowedVenueError} when `quote.venueId` is not set in `quote.venueBitmap`.
+   * @throws {VenueMismatchError} when `venueData` is a view of a different venue than the quote
+   *   opens.
+   * @throws {IrisCoreErrors.UnknownVenuePrice} when the venue price is unknown, which leaves the
+   *   venue's max borrow underivable.
+   * @throws {UnhealthyDebtError} when the quote's debt exceeds the venue's safe max borrow for
+   *   its collateral.
    * @throws {SolverPermit2AssetMismatchError} when `solverPermit2` is signed for a token other
    *   than `quote.debtToken`.
    * @throws {SolverPermit2AmountBelowBondError} when `solverPermit2` is signed for less than
@@ -559,12 +599,14 @@ export class Iris implements IrisActions {
     userAddress,
     quote,
     quoteSignature,
+    venueData,
     solverPermit2,
     nativeAmount = 0n,
   }: {
     userAddress: Address;
     quote: Quote;
     quoteSignature: Hex;
+    venueData: Venue;
     solverPermit2?: SolverPermit2;
     nativeAmount?: bigint;
   }) {
@@ -619,6 +661,16 @@ export class Iris implements IrisActions {
     if (quote.venueId >= 256n || (quote.venueBitmap & (1n << quote.venueId)) === 0n) {
       throw new NotAllowedVenueError(quote.venueId, quote.venueBitmap);
     }
+
+    if (venueData.id !== quote.venueId || !isHexEqual(venueData.data, quote.data)) {
+      throw new VenueMismatchError(quote, venueData);
+    }
+
+    const maxDebt = venueData.getMaxBorrowAmount(quote.collateral, {
+      maxLtv: MathLib.zeroFloorSub(venueData.lltv, DEFAULT_LLTV_BUFFER),
+    });
+    if (maxDebt == null) throw new IrisCoreErrors.UnknownVenuePrice(venueData.pod, venueData.id);
+    if (quote.debt > maxDebt) throw new UnhealthyDebtError({ debt: quote.debt, maxDebt });
 
     if (solverPermit2) {
       const { details, sigDeadline } = solverPermit2.permitSingle;
