@@ -114,16 +114,22 @@ export interface IrisActions {
    * Fetches a venue's live view of the pod — its assets, indices, LLTV and price.
    *
    * Reads the venue as it stands for the pod, so a venue the pod has not entered comes back
-   * holding nothing: the shape `refinance` expects of its target venue. Passing a `quote`
-   * instead reads the quote's venue for the pod-less zero address — the same empty view, the
-   * shape `take` expects of its `venueData`.
+   * holding nothing: the shape `refinance` expects of its target venue. `pod` defaults to the
+   * zero address — the pod-less empty view, the shape `take` expects of its `venueData`; a
+   * solver-signed `Quote` carries every other field, so it satisfies `params` directly.
    *
-   * @param params - Venue identification parameters, or the quote to read the venue of.
+   * @param params - The venue-identifying fields, as `fetchVenue` takes them.
    * @param parameters - Optional fetch parameters (block number, state overrides).
    * @returns The hydrated `Venue`, the `newVenue` the refinance flow takes.
    */
   getVenueData: (
-    params: { loanData: Loan; venueId: BigIntish; data: Hex } | { quote: Quote },
+    params: {
+      pod?: Address;
+      venueId: BigIntish;
+      collateralToken: Address;
+      debtToken: Address;
+      data: Hex;
+    },
     parameters?: FetchParameters,
   ) => Promise<Venue>;
 
@@ -477,16 +483,17 @@ export class Iris implements IrisActions {
    * Fetches a venue's live view of the pod — its assets, indices, LLTV and price.
    *
    * Reads the venue as it stands for the pod, so a venue the pod has not entered comes back
-   * holding nothing: the shape {@link Iris.refinance} expects of its target venue. Passing a
-   * `quote` instead reads the quote's venue for the pod-less zero address — the same empty
-   * view, the shape {@link Iris.take} expects of its `venueData`.
+   * holding nothing: the shape {@link Iris.refinance} expects of its target venue. `pod`
+   * defaults to the zero address — the pod-less empty view, the shape {@link Iris.take}
+   * expects of its `venueData`; a solver-signed `Quote` carries every other field, so it
+   * satisfies `params` directly.
    *
-   * @param params.loanData - Pre-fetched loan for the pod, from {@link Iris.getLoanData} or an
-   *   `AccrualPosition.loan`; supplies the pod and the loan's tokens.
+   * @param params.pod - The pod to read the venue's view of. Defaults to the zero address, a
+   *   view of no pod.
    * @param params.venueId - The id of the venue to read.
+   * @param params.collateralToken - The loan's collateral token.
+   * @param params.debtToken - The loan's debt token.
    * @param params.data - The venue's market data.
-   * @param params.quote - The quote to read the venue of instead; supplies the venue id, market
-   *   data and tokens.
    * @param parameters - Optional fetch parameters (block number, state overrides).
    * @returns The hydrated `Venue`.
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
@@ -495,27 +502,22 @@ export class Iris implements IrisActions {
    *   offline rate model.
    */
   async getVenueData(
-    params: { loanData: Loan; venueId: BigIntish; data: Hex } | { quote: Quote },
+    {
+      pod = zeroAddress,
+      venueId,
+      collateralToken,
+      debtToken,
+      data,
+    }: {
+      pod?: Address;
+      venueId: BigIntish;
+      collateralToken: Address;
+      debtToken: Address;
+      data: Hex;
+    },
     parameters?: FetchParameters,
   ) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
-
-    const { pod, venueId, data, collateralToken, debtToken } =
-      "quote" in params
-        ? {
-            pod: zeroAddress,
-            venueId: params.quote.venueId,
-            data: params.quote.data,
-            collateralToken: params.quote.collateralToken,
-            debtToken: params.quote.debtToken,
-          }
-        : {
-            pod: params.loanData.pod,
-            venueId: params.venueId,
-            data: params.data,
-            collateralToken: params.loanData.collateralToken,
-            debtToken: params.loanData.debtToken,
-          };
 
     return fetchVenue({ pod, venueId, data, collateralToken, debtToken }, this.client.viemClient, {
       ...parameters,
@@ -562,8 +564,8 @@ export class Iris implements IrisActions {
    * @param params.quote - The solver-signed quote to take.
    * @param params.quoteSignature - The solver's EIP-712 signature over the quote.
    * @param params.venueData - Pre-fetched view of the quote's venue, from
-   *   {@link Iris.getVenueData} with `{ quote }`; supplies the price, LLTV and borrow limits
-   *   the health check measures against.
+   *   {@link Iris.getVenueData} — a solver-signed `Quote` satisfies its params directly;
+   *   supplies the price, LLTV and borrow limits the health check measures against.
    * @param params.solverPermit2 - Optional solver-signed Permit2 bond funding payload delivered
    *   with the quote.
    * @param params.nativeAmount - Optional collateral portion paid natively and wrapped

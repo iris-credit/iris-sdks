@@ -56,7 +56,7 @@ function createIrisNamespace(
  *   .extend(irisViemExtension({ supportSignature: true }));
  *
  * const iris = client.iris.core(1);
- * const venueData = await iris.getVenueData({ quote });
+ * const venueData = await iris.getVenueData(quote);
  * const { buildTx, getRequirements } = iris.take({
  *   userAddress: user,
  *   quote,

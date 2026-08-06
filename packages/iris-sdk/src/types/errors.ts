@@ -348,7 +348,7 @@ export class NotAllowedVenueError extends Error {
 export class VenueMismatchError extends Error {
   constructor(quote: { venueId: bigint; data: Hex }, venue: { id: bigint; data: Hex }) {
     super(
-      `Venue data is a view of venue ${venue.id} with market data "${venue.data}", but the quote opens venue ${quote.venueId} with market data "${quote.data}". Fetch it with getVenueData({ quote }).`,
+      `Venue data is a view of venue ${venue.id} with market data "${venue.data}", but the quote opens venue ${quote.venueId} with market data "${quote.data}". Fetch it with getVenueData(quote).`,
     );
   }
 }
