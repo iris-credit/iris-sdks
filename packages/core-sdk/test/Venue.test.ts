@@ -445,7 +445,7 @@ describe("venue parity (mainnet fork)", () => {
         args: [tokens.WETH, collateral, client.account.address, 0],
       });
 
-      const maxBorrow = venue.getMaxBorrowAmount(collateral, timestamp + 3n) ?? 0n;
+      const maxBorrow = venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 3n }) ?? 0n;
       expect(maxBorrow).toBeGreaterThan(0n);
 
       await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
@@ -503,7 +503,7 @@ describe("venue parity (mainnet fork)", () => {
         args: [marketParams, collateral, client.account.address, "0x"],
       });
 
-      const maxBorrow = venue.getMaxBorrowAmount(collateral, timestamp + 3n) ?? 0n;
+      const maxBorrow = venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 3n }) ?? 0n;
       expect(maxBorrow).toBeGreaterThan(0n);
 
       await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
@@ -602,7 +602,7 @@ describe("venue parity (mainnet fork)", () => {
         venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n,
         200_000n * MathLib.WAD,
       );
-      expect(venue.getMaxBorrowAmount(collateral, timestamp + 3n)).toBe(capacity);
+      expect(venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 3n })).toBe(capacity);
 
       // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
       await client.deal({
@@ -663,7 +663,7 @@ describe("venue parity (mainnet fork)", () => {
       expect(capacity).toBeGreaterThan(0n);
       // Enough collateral that the capacity is the binding term of the borrow bound.
       const collateral = 10_000n * 10n ** 8n;
-      expect(venue.getMaxBorrowAmount(collateral, timestamp + 3n)).toBe(capacity);
+      expect(venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 3n })).toBe(capacity);
 
       // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
       await client.deal({

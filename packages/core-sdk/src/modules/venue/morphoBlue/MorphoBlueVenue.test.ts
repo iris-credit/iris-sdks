@@ -364,10 +364,20 @@ describe("MorphoBlueVenue", () => {
 
   test("should bound a borrow by the LLTV through the shares round-trip", () => {
     // 1 collateral at a 1:1 price and an 80% LLTV — the round-trip keeps it whole here.
-    expect(priced.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(800_000_000_000_000_000n);
-    expect(priced.getMaxBorrowAmount(0n, 1_000n)).toBe(0n);
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBe(800_000_000_000_000_000n);
+    expect(priced.getMaxBorrowAmount(0n, { timestamp: 1_000n })).toBe(0n);
     // Ten collaterals outgrow the market: the idle wad of supply caps the bound.
-    expect(priced.getMaxBorrowAmount(10n * MathLib.WAD, 1_000n)).toBe(MathLib.WAD);
+    expect(priced.getMaxBorrowAmount(10n * MathLib.WAD, { timestamp: 1_000n })).toBe(MathLib.WAD);
+  });
+
+  test("should measure the borrow bound at a tighter LTV, capped by the venue's own", () => {
+    expect(
+      priced.getMaxBorrowAmount(MathLib.WAD, { maxLtv: 750_000_000_000_000_000n, timestamp: 1_000n }),
+    ).toBe(750_000_000_000_000_000n);
+    // Asking above the venue's max borrow LTV clamps back to it.
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, { maxLtv: MathLib.WAD, timestamp: 1_000n })).toBe(
+      800_000_000_000_000_000n,
+    );
   });
 
   test("should price the borrow bound's round-trip on the accrued market", () => {
@@ -383,13 +393,13 @@ describe("MorphoBlueVenue", () => {
       accrued.market.totalBorrowAssets,
       accrued.market.totalBorrowShares,
     );
-    expect(priced.getMaxBorrowAmount(MathLib.WAD, 1_000n + SECONDS_PER_YEAR)).toBe(expected);
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n + SECONDS_PER_YEAR })).toBe(expected);
     // The accrued venue answers the same at its own `lastUpdate` default.
     expect(accrued.getMaxBorrowAmount(MathLib.WAD)).toBe(expected);
   });
 
   test("should return undefined for a borrow bound without a price", () => {
-    expect(venue.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBeUndefined();
+    expect(venue.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBeUndefined();
   });
 
   test("should bound the borrow capacity by the market's idle supply", () => {

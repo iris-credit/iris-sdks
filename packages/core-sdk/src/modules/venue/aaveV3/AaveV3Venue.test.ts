@@ -213,19 +213,35 @@ describe("AaveV3Venue", () => {
 
   test("should bound a borrow by the collateral reserve's max LTV", () => {
     // 1 collateral × 2000 × 80% = 1600 debt units, unrounded at RAY indices.
-    expect(configured.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(1_600_000_000n);
+    expect(configured.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBe(1_600_000_000n);
+  });
+
+  test("should measure the borrow bound at a tighter LTV, capped by the reserve's own", () => {
+    // 1 collateral × 2000 × 40% = 800 debt units; a 90% ask clamps back to the 80% max.
+    expect(
+      configured.getMaxBorrowAmount(MathLib.WAD, {
+        maxLtv: (4n * MathLib.WAD) / 10n,
+        timestamp: 1_000n,
+      }),
+    ).toBe(800_000_000n);
+    expect(
+      configured.getMaxBorrowAmount(MathLib.WAD, {
+        maxLtv: (9n * MathLib.WAD) / 10n,
+        timestamp: 1_000n,
+      }),
+    ).toBe(1_600_000_000n);
   });
 
   test("should run the borrow bound through the venue's token scaling", () => {
     // One year in (liquidity 1.1 RAY, borrow ~1.2213 RAY): the floored aToken read-back
     // prices to 1599999999 debt units; the vToken round-trip sheds one more wei.
-    expect(configured.getMaxBorrowAmount(MathLib.WAD, 1_000n + SECONDS_PER_YEAR)).toBe(
+    expect(configured.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n + SECONDS_PER_YEAR })).toBe(
       1_599_999_998n,
     );
   });
 
   test("should return zero for a borrow on zero collateral or a zero max LTV", () => {
-    expect(configured.getMaxBorrowAmount(0n, 1_000n)).toBe(0n);
+    expect(configured.getMaxBorrowAmount(0n, { timestamp: 1_000n })).toBe(0n);
     expect(
       new AaveV3Venue(
         view,
@@ -233,12 +249,12 @@ describe("AaveV3Venue", () => {
         configured.debtReserve,
         configured.collateralData,
         configured.debtData,
-      ).getMaxBorrowAmount(MathLib.WAD, 1_000n),
+      ).getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n }),
     ).toBe(0n);
   });
 
   test("should return undefined for a borrow bound without the data", () => {
-    expect(venue.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBeUndefined();
+    expect(venue.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBeUndefined();
   });
 
   test("should cap the borrow bound by the borrow capacity", () => {
@@ -251,7 +267,7 @@ describe("AaveV3Venue", () => {
       openForBorrow.debtData,
     );
 
-    expect(capped.getMaxBorrowAmount(MathLib.WAD, 1_000n)).toBe(500_000_000n);
+    expect(capped.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBe(500_000_000n);
   });
 
   // A USDC-shaped debt reserve open for borrowing under a 2000 cap: 3.4 virtual of 3.5
