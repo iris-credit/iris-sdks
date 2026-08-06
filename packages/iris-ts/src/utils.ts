@@ -4,6 +4,9 @@ import { Time } from "./time/index.js";
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as const;
 
+export const isHexEqual = (left: string, right: string) =>
+  left.toLowerCase() === right.toLowerCase();
+
 export const isNotNull = <T>(v: T | null): v is T => v !== null;
 export const isNotUndefined = <T>(v: T | undefined): v is T => v !== undefined;
 
