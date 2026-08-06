@@ -1,5 +1,13 @@
 # @iris-credit/evm-simulation
 
+## 0.1.1
+
+### Patch Changes
+
+- Updated dependencies [[`bd09373`](https://github.com/iris-credit/iris-sdks/commit/bd0937332eb36f0e4aa9cd46570ab8d2471a0292), [`5fced83`](https://github.com/iris-credit/iris-sdks/commit/5fced835747c19d4367b8855afc9aa9616935fbd)]:
+  - @iris-credit/iris-ts@0.1.1
+  - @iris-credit/core-sdk@0.2.0
+
 ## 0.1.0
 
 ### Minor Changes

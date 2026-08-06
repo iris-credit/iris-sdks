@@ -1,5 +1,16 @@
 # @iris-credit/core-sdk
 
+## 0.2.0
+
+### Minor Changes
+
+- [#99](https://github.com/iris-credit/iris-sdks/pull/99) [`5fced83`](https://github.com/iris-credit/iris-sdks/commit/5fced835747c19d4367b8855afc9aa9616935fbd) Thanks [@u-zzam](https://github.com/u-zzam)! - `Venue.getMaxBorrowAmount` takes a `MaxBorrowOptions` object — `(collateral, { maxLtv?, timestamp? }?)` — with a new optional `maxLtv` (scaled by WAD) to measure the bound at, defaulting to — and capped by — the venue's max borrow LTV, so a caller can tighten the limit (e.g. the take flow's buffered venue LLTV) but never exceed the venue's own. Breaking: `timestamp` moved from the second positional parameter into the options object.
+
+### Patch Changes
+
+- Updated dependencies [[`bd09373`](https://github.com/iris-credit/iris-sdks/commit/bd0937332eb36f0e4aa9cd46570ab8d2471a0292)]:
+  - @iris-credit/iris-ts@0.1.1
+
 ## 0.1.4
 
 ### Patch Changes
