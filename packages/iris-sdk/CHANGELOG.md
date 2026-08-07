@@ -1,5 +1,11 @@
 # @iris-credit/iris-sdk
 
+## 0.2.1
+
+### Patch Changes
+
+- [#101](https://github.com/iris-credit/iris-sdks/pull/101) [`ffc47db`](https://github.com/iris-credit/iris-sdks/commit/ffc47dba6ef52f6e72f6f501adcde991e4f49613) Thanks [@u-zzam](https://github.com/u-zzam)! - Include the new venue's `lastUpdate` in the refinance flow's accrual floor: the migration replay accrues the target venue too, so fetching it from a chain whose clock leads the local one by more than the 2h buffer (e.g. a time-warped devnet fork) no longer throws `InvalidInterestAccrual` before the tx is built.
+
 ## 0.2.0
 
 ### Minor Changes
