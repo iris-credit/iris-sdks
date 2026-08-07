@@ -7,6 +7,7 @@ import { decodeFunctionData, erc20Abi, zeroAddress } from "viem";
 import { mainnet } from "viem/chains";
 import { beforeEach, describe, expect, test } from "vitest";
 import {
+  AccrualPosition,
   BP,
   getChainAddresses,
   irisAbi,
@@ -22,7 +23,16 @@ import {
   permit2Abi,
 } from "@iris-credit/core-sdk";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
-import { CHAIN_ID, DEBT_TOKEN, ROGUE, SIGNATURE } from "../../test/fixtures/iris.js";
+import {
+  BORROWER,
+  CHAIN_ID,
+  COLLATERAL_TOKEN,
+  DEBT_TOKEN,
+  POD,
+  ROGUE,
+  SIGNATURE,
+  SOLVER,
+} from "../../test/fixtures/iris.js";
 import {
   authorizationSignature,
   decodeBundle,
@@ -502,5 +512,116 @@ describe("Iris.take", () => {
         quote.solver,
       );
     });
+  });
+});
+
+describe("Iris.refinance", () => {
+  let handle: MockClientHandle;
+
+  const makeIris = () => handle.client.extend(irisViemExtension()).iris.core(CHAIN_ID);
+
+  beforeEach(() => {
+    handle = createMockClient(mainnet);
+  });
+
+  /** Last accrual on the loan's side: the position and the venue it currently sits on. */
+  const LAST_UPDATE = 1_990_000_000n;
+  /** The target venue's chain timestamp — ahead of `LAST_UPDATE` and the test-run clock by over 2h. */
+  const NEW_VENUE_LAST_UPDATE = 2_000_000_000n;
+
+  const LLTV = 800_000_000_000_000_000n;
+
+  const loan = {
+    pod: POD,
+    borrower: BORROWER,
+    solver: SOLVER,
+    collateralToken: COLLATERAL_TOKEN,
+    debtToken: DEBT_TOKEN,
+    venueBitmap: 0b11n,
+    maturity: 2_100_000_000n,
+    overduePeriod: 3_600n,
+    fixedRate: 100_000_000_000_000_000n,
+    overdueRate: 200_000_000_000_000_000n,
+    bondLltv: 500_000_000_000_000_000n,
+    fee: 200_000_000_000_000_000n,
+  } as const;
+
+  // Share scale picked so the pod's debt and the debt index price out exactly at WAD / RAY.
+  const venue = new MorphoBlueVenue(
+    {
+      id: 0n,
+      data: "0x",
+      pod: POD,
+      collateral: 2n * MathLib.WAD,
+      debt: MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: LLTV,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: LAST_UPDATE,
+    },
+    {
+      totalSupplyAssets: 2n * MathLib.WAD,
+      totalBorrowAssets: MathLib.WAD,
+      totalBorrowShares: 10n ** 24n,
+      lastUpdate: LAST_UPDATE,
+    },
+    { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
+  );
+
+  // The migration target as fetched for the pod: no assets on it yet, ample liquidity.
+  const newVenue = new MorphoBlueVenue(
+    {
+      id: 1n,
+      data: "0x",
+      pod: POD,
+      collateral: 0n,
+      debt: 0n,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: LLTV,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: NEW_VENUE_LAST_UPDATE,
+    },
+    {
+      totalSupplyAssets: 10n * MathLib.WAD,
+      totalBorrowAssets: 0n,
+      totalBorrowShares: 0n,
+      lastUpdate: NEW_VENUE_LAST_UPDATE,
+    },
+    { borrowShares: 0n, collateral: 0n },
+  );
+
+  const positionData = () =>
+    new AccrualPosition(
+      {
+        pod: POD,
+        collateral: 2n * MathLib.WAD,
+        debt: MathLib.WAD,
+        bond: 100_000_000_000_000_000n,
+        bondRequirement: 1n,
+        collateralIndex: MathLib.RAY,
+        debtIndex: MathLib.RAY,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        surplus: 0n,
+        lastUpdate: LAST_UPDATE,
+        venueId: 0n,
+        data: "0x",
+      },
+      loan,
+      venue,
+    );
+
+  // The migration replay accrues the target venue too: fetched from a chain whose clock leads
+  // the local one by more than the 2h buffer, its `lastUpdate` must be in the accrual floor or
+  // the flow throws `InvalidInterestAccrual` before ever building a tx.
+  test("behavior: builds when the new venue's lastUpdate leads the local clock", () => {
+    const tx = makeIris()
+      .refinance({ userAddress: SOLVER, positionData: positionData(), newVenue })
+      .buildTx();
+
+    expect(tx.to).toBe(bundler3);
+    expect(tx.action.type).toBe("irisRefinance");
   });
 });
