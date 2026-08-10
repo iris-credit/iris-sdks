@@ -3,6 +3,7 @@ export * from "./claim.js";
 export * from "./escape.js";
 export * from "./refinance.js";
 export * from "./repay.js";
+export * from "./repayEscape.js";
 export * from "./supplyBond.js";
 export * from "./supplyCollateral.js";
 export * from "./take.js";

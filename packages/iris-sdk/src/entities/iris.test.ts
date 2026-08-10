@@ -44,6 +44,7 @@ import {
   ChainIdMismatchError,
   isRequirementApproval,
   isRequirementIrisAuthorization,
+  LoanResolvedError,
   NativeAmountExceedsCollateralError,
   NativeAmountOnNonWNativeAssetError,
   NegativeInputError,
@@ -623,5 +624,130 @@ describe("Iris.refinance", () => {
 
     expect(tx.to).toBe(bundler3);
     expect(tx.action.type).toBe("irisRefinance");
+  });
+});
+
+describe("Iris.repayEscape", () => {
+  let handle: MockClientHandle;
+
+  const makeIris = () => handle.client.extend(irisViemExtension()).iris.core(CHAIN_ID);
+
+  beforeEach(() => {
+    handle = createMockClient(mainnet);
+  });
+
+  const LAST_UPDATE = 1_990_000_000n;
+  const LLTV = 800_000_000_000_000_000n;
+
+  const loan = {
+    pod: POD,
+    borrower: BORROWER,
+    solver: SOLVER,
+    collateralToken: COLLATERAL_TOKEN,
+    debtToken: DEBT_TOKEN,
+    venueBitmap: 0b11n,
+    maturity: 2_100_000_000n,
+    overduePeriod: 3_600n,
+    fixedRate: 100_000_000_000_000_000n,
+    overdueRate: 200_000_000_000_000_000n,
+    bondLltv: 500_000_000_000_000_000n,
+    fee: 200_000_000_000_000_000n,
+  } as const;
+
+  const venue = new MorphoBlueVenue(
+    {
+      id: 0n,
+      data: "0x",
+      pod: POD,
+      collateral: 2n * MathLib.WAD,
+      debt: MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: LLTV,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: LAST_UPDATE,
+    },
+    {
+      totalSupplyAssets: 2n * MathLib.WAD,
+      totalBorrowAssets: MathLib.WAD,
+      totalBorrowShares: 10n ** 24n,
+      lastUpdate: LAST_UPDATE,
+    },
+    { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
+  );
+
+  const positionData = (overrides: { bondRequirement?: bigint; debt?: bigint } = {}) =>
+    new AccrualPosition(
+      {
+        pod: POD,
+        collateral: 2n * MathLib.WAD,
+        debt: overrides.debt ?? MathLib.WAD,
+        bond: 100_000_000_000_000_000n,
+        bondRequirement: overrides.bondRequirement ?? 1n,
+        collateralIndex: MathLib.RAY,
+        debtIndex: MathLib.RAY,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        surplus: 0n,
+        lastUpdate: LAST_UPDATE,
+        venueId: 0n,
+        data: "0x",
+      },
+      loan,
+      venue,
+    );
+
+  test("default: builds the repay + escape bundle for the borrower", () => {
+    const tx = makeIris()
+      .repayEscape({ userAddress: BORROWER, positionData: positionData() })
+      .buildTx();
+
+    expect(tx.to).toBe(bundler3);
+    expect(tx.action.type).toBe("irisRepayEscape");
+    expect(tx.action.args.receiver).toBe(BORROWER);
+    // The funding is sized above the fetched debt: repay prices the loan at execution.
+    expect(tx.action.args.transferAmount).toBeGreaterThan(MathLib.WAD);
+    expect(decodeBundle(tx.data).map((call) => call.to)).toContain(generalAdapter1);
+  });
+
+  // `GeneralAdapter1.irisEscape` pins the borrower, unlike the permissionless `repay`.
+  test("error: AddressMismatchError when userAddress is not the borrower", () => {
+    expect(() =>
+      makeIris().repayEscape({ userAddress: ROGUE, positionData: positionData() }),
+    ).toThrow(AddressMismatchError);
+  });
+
+  test("error: LoanResolvedError when the loan carries nothing to repay", () => {
+    expect(() =>
+      makeIris().repayEscape({
+        userAddress: BORROWER,
+        positionData: positionData({ bondRequirement: 0n, debt: 0n }),
+      }),
+    ).toThrow(LoanResolvedError);
+  });
+
+  // The escape leg runs on the borrower's Iris authorization, which `repay` alone never needs.
+  test("getRequirements: resolves the Iris authorization alongside the debt-token approval", async () => {
+    mockRead(handle, {
+      address: DEBT_TOKEN,
+      abi: erc20Abi,
+      functionName: "allowance",
+      result: 0n,
+    });
+    mockRead(handle, {
+      address: iris,
+      abi: irisAbi,
+      functionName: "isAuthorized",
+      result: false,
+    });
+
+    const requirements = await makeIris()
+      .repayEscape({ userAddress: BORROWER, positionData: positionData() })
+      .getRequirements();
+
+    expect(requirements.map((requirement) => requirement.action.type)).toEqual([
+      "erc20Approval",
+      "irisAuthorization",
+    ]);
   });
 });

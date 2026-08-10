@@ -30,6 +30,11 @@ export interface IrisRepayAction extends BaseAction<
   { pod: Address; token: Address; transferAmount: bigint; receiver: Address; nativeAmount?: bigint }
 > {}
 
+export interface IrisRepayEscapeAction extends BaseAction<
+  "irisRepayEscape",
+  { pod: Address; token: Address; transferAmount: bigint; receiver: Address; nativeAmount?: bigint }
+> {}
+
 export interface IrisSupplyCollateralAction extends BaseAction<
   "irisSupplyCollateral",
   { pod: Address; token: Address; amount: bigint; nativeAmount?: bigint }
@@ -85,6 +90,7 @@ export type TransactionAction =
   | ERC20ApprovalAction
   | IrisTakeAction
   | IrisRepayAction
+  | IrisRepayEscapeAction
   | IrisSupplyCollateralAction
   | IrisWithdrawCollateralAction
   | IrisSupplyBondAction
