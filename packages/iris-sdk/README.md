@@ -296,16 +296,16 @@ const tx = buildTx(signatures);
 Moves the loan's position to another venue enabled in the loan's `venueBitmap`. The migration is replayed locally against `positionData` and `newVenue` to reject what the contract rejects; the bundle then funds the debt the pod owes its current venue (projected two hours forward — Iris clears it out of `GeneralAdapter1`'s balance before the new venue is entered, so the funding cannot come from the refinance itself), and the new venue's borrow proceeds plus the swept residual return to `userAddress`, leaving it whole.
 
 ```typescript
-import { ChainId, getChainRegistry } from "@iris-credit/core-sdk";
+import { ChainId, getChainRegistry, getMarketData } from "@iris-credit/core-sdk";
 
-const { venues, marketDatas } = getChainRegistry(ChainId.EthMainnet);
+const { venues } = getChainRegistry(ChainId.EthMainnet);
 
 const positionData = await iris.getPositionData(pod);
 const newVenue = await iris.getVenueData({
   ...positionData.loan,
   venueId: venues.morphoBlue,
-  // The target venue's market data payload — cbBTC/USDC, keyed by its Morpho market id.
-  data: marketDatas["0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64"].data,
+  // The target venue's market data payload, looked up by its Morpho market id.
+  data: getMarketData(ChainId.EthMainnet, marketId).data,
 });
 
 const { buildTx, getRequirements } = iris.refinance({
