@@ -6,13 +6,13 @@ import type {
   Transaction,
 } from "../../../types/index.js";
 
-import { erc20Abi, isAddressEqual } from "viem";
+import { erc20Abi, getAddress, isAddressEqual } from "viem";
 import { readContract } from "viem/actions";
 import {
   erc2612Abi,
   getChainAddresses,
-  getPermitDomainVersion,
   permit2Abi,
+  SIMPLE_PERMIT_TOKENS,
 } from "@iris-credit/core-sdk";
 import { isDefined } from "@iris-credit/iris-ts";
 import { ChainIdMismatchError } from "../../../types/index.js";
@@ -128,7 +128,11 @@ export const getGeneralAdapterRequirements = async (
     const isDai = isAddressEqual(address, tokens.DAI);
 
     // Unverified tokens route to Permit2.
-    if (useSimplePermit && !isDai && isDefined(getPermitDomainVersion(address, chainId))) {
+    if (
+      useSimplePermit &&
+      !isDai &&
+      isDefined(SIMPLE_PERMIT_TOKENS[chainId]?.[getAddress(address)])
+    ) {
       const erc2612Nonce = await readContract(viemClient, {
         abi: erc2612Abi,
         address,

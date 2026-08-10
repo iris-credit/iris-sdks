@@ -4,7 +4,6 @@ import type { Token } from "../modules/token/Token.js";
 import { getAddress } from "viem";
 import { CHAIN_ADDRESSES } from "../addresses.js";
 import { ChainId } from "../chain.js";
-import { UnsupportedChainIdError } from "../errors.js";
 
 /** Message fields for ERC-2612 permit typed data. */
 export interface PermitArgs {
@@ -26,7 +25,9 @@ export type PermitDomainVersion = "1" | "2";
  * freezes its domain separator at initialization, so on a fork it still verifies against
  * chain id 1.
  */
-export const SIMPLE_PERMIT_TOKENS = {
+export const SIMPLE_PERMIT_TOKENS: Partial<
+  Record<number, Partial<Record<Address, PermitDomainVersion>>>
+> = {
   [ChainId.EthMainnet]: {
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDC]: "2", // FiatTokenV2_2
     [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.cbBTC]: "2", // FiatTokenV2_1
@@ -38,34 +39,7 @@ export const SIMPLE_PERMIT_TOKENS = {
     [CHAIN_ADDRESSES[ChainId.VNet].tokens.stETH]: "2", // Lido V2 StETHPermit
     [CHAIN_ADDRESSES[ChainId.VNet].tokens.wstETH]: "1",
   },
-} as const satisfies Record<ChainId, Readonly<Record<Address, PermitDomainVersion>>>;
-
-/**
- * Returns the verified simple-permit tokens of a chain, mapped to their domain versions.
- *
- * @param chainId - The chain the permit targets.
- * @returns The chain's entry in {@link SIMPLE_PERMIT_TOKENS}.
- */
-export const getSimplePermitTokens = (
-  chainId: ChainId,
-): Readonly<Record<Address, PermitDomainVersion>> => {
-  const simplePermitTokens = SIMPLE_PERMIT_TOKENS[chainId];
-  if (simplePermitTokens == null) throw new UnsupportedChainIdError(chainId);
-
-  return simplePermitTokens;
 };
-
-/**
- * Reads the verified permit domain version of a token.
- *
- * @param token - Token address, in any casing.
- * @param chainId - The chain the permit targets.
- * @returns The version to sign, or `undefined` when the token is not verified on that chain.
- */
-export const getPermitDomainVersion = (
-  token: Address,
-  chainId: ChainId,
-): PermitDomainVersion | undefined => getSimplePermitTokens(chainId)[getAddress(token)];
 
 const permitTypes = {
   Permit: [
@@ -112,7 +86,7 @@ export const getPermitTypedData = (
   return {
     domain: {
       name: erc20.name,
-      version: getPermitDomainVersion(erc20.address, chainId) ?? "1",
+      version: SIMPLE_PERMIT_TOKENS[chainId]?.[getAddress(erc20.address)] ?? "1",
       chainId,
       verifyingContract: erc20.address,
     },
