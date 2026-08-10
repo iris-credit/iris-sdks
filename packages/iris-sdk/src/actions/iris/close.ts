@@ -4,7 +4,7 @@ import type { Action } from "../../bundler/type.js";
 import type {
   AuthorizationRequirementSignature,
   DepositAmountArgs,
-  IrisRepayEscapeAction,
+  IrisCloseAction,
   PermitRequirementSignature,
   Transaction,
 } from "../../types/index.js";
@@ -17,8 +17,8 @@ import { NegativeInputError, NonPositiveInputError, ZeroAddressError } from "../
 import { getIrisAuthorizationAction } from "../signatures/getIrisAuthorizationAction.js";
 import { buildAssetFundingActions } from "./buildAssetFundingActions.js";
 
-/** Parameters for {@link irisRepayEscape}. */
-export interface IrisRepayEscapeParams {
+/** Parameters for {@link irisClose}. */
+export interface IrisCloseParams {
   /** The chain the bundle targets. */
   readonly chainId: ChainId;
   readonly args: DepositAmountArgs & {
@@ -39,7 +39,7 @@ export interface IrisRepayEscapeParams {
 }
 
 /**
- * Prepares a repay transaction closing an Iris loan and recovering its collateral in one bundle.
+ * Prepares a close transaction resolving an Iris loan and recovering its collateral in one bundle.
  *
  * Routed through bundler3 via `GeneralAdapter1`, composing the bundle in on-chain execution order:
  *
@@ -70,7 +70,7 @@ export interface IrisRepayEscapeParams {
  *   consume is swept back as wNative, not unwrapped.
  * @param params.args.requirementSignature - Optional pre-signed permit/permit2 approval.
  * @param params.args.authorizationSignature - Optional signed Iris authorization for the borrower.
- * @returns A deep-frozen `Transaction<IrisRepayEscapeAction>` with `to`, `value`, `data`, and the
+ * @returns A deep-frozen `Transaction<IrisCloseAction>` with `to`, `value`, `data`, and the
  *   typed `action` discriminator.
  * @throws {ZeroAddressError} when `receiver` is the zero address.
  * @throws {NegativeInputError} when `amount` or `nativeAmount` is negative.
@@ -85,9 +85,9 @@ export interface IrisRepayEscapeParams {
  *   is provided and the signed amount differs from `amount`.
  * @example
  * ```ts
- * import { irisRepayEscape } from "@iris-credit/iris-sdk";
+ * import { irisClose } from "@iris-credit/iris-sdk";
  *
- * const tx = irisRepayEscape({
+ * const tx = irisClose({
  *   chainId: 1,
  *   args: {
  *     pod, // the loan's pod
@@ -96,10 +96,10 @@ export interface IrisRepayEscapeParams {
  *     receiver: borrower, // takes the collateral and what the repayment did not consume
  *   },
  * });
- * // tx satisfies Readonly<Transaction<IrisRepayEscapeAction>>
+ * // tx satisfies Readonly<Transaction<IrisCloseAction>>
  * ```
  */
-export const irisRepayEscape = ({
+export const irisClose = ({
   chainId,
   args: {
     pod,
@@ -110,7 +110,7 @@ export const irisRepayEscape = ({
     requirementSignature,
     authorizationSignature,
   },
-}: IrisRepayEscapeParams): Readonly<Transaction<IrisRepayEscapeAction>> => {
+}: IrisCloseParams): Readonly<Transaction<IrisCloseAction>> => {
   if (isAddressEqual(receiver, zeroAddress)) throw new ZeroAddressError("receiver");
 
   if (amount < 0n) throw new NegativeInputError("amount", amount);
@@ -161,7 +161,7 @@ export const irisRepayEscape = ({
   return deepFreeze({
     ...tx,
     action: {
-      type: "irisRepayEscape",
+      type: "irisClose",
       args: { pod, token, transferAmount, receiver, nativeAmount },
     },
   });

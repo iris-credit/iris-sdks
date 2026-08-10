@@ -627,7 +627,7 @@ describe("Iris.refinance", () => {
   });
 });
 
-describe("Iris.repayEscape", () => {
+describe("Iris.close", () => {
   let handle: MockClientHandle;
 
   const makeIris = () => handle.client.extend(irisViemExtension()).iris.core(CHAIN_ID);
@@ -698,12 +698,10 @@ describe("Iris.repayEscape", () => {
     );
 
   test("default: builds the repay + escape bundle for the borrower", () => {
-    const tx = makeIris()
-      .repayEscape({ userAddress: BORROWER, positionData: positionData() })
-      .buildTx();
+    const tx = makeIris().close({ userAddress: BORROWER, positionData: positionData() }).buildTx();
 
     expect(tx.to).toBe(bundler3);
-    expect(tx.action.type).toBe("irisRepayEscape");
+    expect(tx.action.type).toBe("irisClose");
     expect(tx.action.args.receiver).toBe(BORROWER);
     // The funding is sized above the fetched debt: repay prices the loan at execution.
     expect(tx.action.args.transferAmount).toBeGreaterThan(MathLib.WAD);
@@ -712,14 +710,14 @@ describe("Iris.repayEscape", () => {
 
   // `GeneralAdapter1.irisEscape` pins the borrower, unlike the permissionless `repay`.
   test("error: AddressMismatchError when userAddress is not the borrower", () => {
-    expect(() =>
-      makeIris().repayEscape({ userAddress: ROGUE, positionData: positionData() }),
-    ).toThrow(AddressMismatchError);
+    expect(() => makeIris().close({ userAddress: ROGUE, positionData: positionData() })).toThrow(
+      AddressMismatchError,
+    );
   });
 
   test("error: LoanResolvedError when the loan carries nothing to repay", () => {
     expect(() =>
-      makeIris().repayEscape({
+      makeIris().close({
         userAddress: BORROWER,
         positionData: positionData({ bondRequirement: 0n, debt: 0n }),
       }),
@@ -742,7 +740,7 @@ describe("Iris.repayEscape", () => {
     });
 
     const requirements = await makeIris()
-      .repayEscape({ userAddress: BORROWER, positionData: positionData() })
+      .close({ userAddress: BORROWER, positionData: positionData() })
       .getRequirements();
 
     expect(requirements.map((requirement) => requirement.action.type)).toEqual([

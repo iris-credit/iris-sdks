@@ -5,7 +5,7 @@ import { CHAIN_ID, DEBT_TOKEN, POD, RECEIVER } from "../../../test/fixtures/iris
 import { authorizationSignature, callNames, decodeBundle } from "../../../test/helpers/iris.js";
 import { generalAdapter1 as generalAdapter1Abi } from "../../abis/index.js";
 import { NegativeInputError, NonPositiveInputError, ZeroAddressError } from "../../types/index.js";
-import { irisRepayEscape } from "./repayEscape.js";
+import { irisClose } from "./close.js";
 
 const {
   iris,
@@ -13,16 +13,16 @@ const {
   bundler3: { bundler3 },
 } = getChainAddresses(CHAIN_ID);
 
-describe("irisRepayEscape", () => {
+describe("irisClose", () => {
   test("default: funds the repayment, repays, exits the venue, then skims", () => {
-    const tx = irisRepayEscape({
+    const tx = irisClose({
       chainId: CHAIN_ID,
       args: { pod: POD, token: DEBT_TOKEN, receiver: RECEIVER, amount: 1_000n },
     });
 
     expect(tx.to).toBe(bundler3);
     expect(tx.value).toBe(0n);
-    expect(tx.action.type).toBe("irisRepayEscape");
+    expect(tx.action.type).toBe("irisClose");
     expect(tx.action.args).toEqual({
       pod: POD,
       token: DEBT_TOKEN,
@@ -52,7 +52,7 @@ describe("irisRepayEscape", () => {
   });
 
   test("behavior: wraps a native funding before the repay", () => {
-    const tx = irisRepayEscape({
+    const tx = irisClose({
       chainId: CHAIN_ID,
       args: { pod: POD, token: wNative, receiver: RECEIVER, nativeAmount: 1_000n },
     });
@@ -70,7 +70,7 @@ describe("irisRepayEscape", () => {
   });
 
   test("behavior: prepends setAuthorizationWithSig when an authorization signature is provided", () => {
-    const tx = irisRepayEscape({
+    const tx = irisClose({
       chainId: CHAIN_ID,
       args: {
         pod: POD,
@@ -95,7 +95,7 @@ describe("irisRepayEscape", () => {
 
   test("error: ZeroAddressError when the receiver is the zero address", () => {
     expect(() =>
-      irisRepayEscape({
+      irisClose({
         chainId: CHAIN_ID,
         args: { pod: POD, token: DEBT_TOKEN, receiver: zeroAddress, amount: 1_000n },
       }),
@@ -104,7 +104,7 @@ describe("irisRepayEscape", () => {
 
   test("error: NegativeInputError when amount is negative", () => {
     expect(() =>
-      irisRepayEscape({
+      irisClose({
         chainId: CHAIN_ID,
         args: { pod: POD, token: DEBT_TOKEN, receiver: RECEIVER, amount: -1n },
       }),
@@ -113,7 +113,7 @@ describe("irisRepayEscape", () => {
 
   test("error: NegativeInputError when nativeAmount is negative", () => {
     expect(() =>
-      irisRepayEscape({
+      irisClose({
         chainId: CHAIN_ID,
         args: { pod: POD, token: wNative, receiver: RECEIVER, nativeAmount: -1n },
       }),
@@ -122,7 +122,7 @@ describe("irisRepayEscape", () => {
 
   test("error: NonPositiveInputError when nothing funds the repayment", () => {
     expect(() =>
-      irisRepayEscape({
+      irisClose({
         chainId: CHAIN_ID,
         args: { pod: POD, token: DEBT_TOKEN, receiver: RECEIVER, amount: 0n },
       }),
@@ -130,7 +130,7 @@ describe("irisRepayEscape", () => {
   });
 
   test("behavior: returns a deep-frozen transaction object", () => {
-    const tx = irisRepayEscape({
+    const tx = irisClose({
       chainId: CHAIN_ID,
       args: { pod: POD, token: DEBT_TOKEN, receiver: RECEIVER, amount: 1_000n },
     });

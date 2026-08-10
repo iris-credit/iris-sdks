@@ -18,7 +18,7 @@ import type {
   IrisEscapeAction,
   IrisRefinanceAction,
   IrisRepayAction,
-  IrisRepayEscapeAction,
+  IrisCloseAction,
   IrisSupplyBondAction,
   IrisSupplyCollateralAction,
   IrisTakeAction,
@@ -49,10 +49,10 @@ import {
 } from "@iris-credit/core-sdk";
 import { isHexEqual, Time } from "@iris-credit/iris-ts";
 import { irisClaim } from "../actions/iris/claim.js";
+import { irisClose } from "../actions/iris/close.js";
 import { irisEscape } from "../actions/iris/escape.js";
 import { irisRefinance } from "../actions/iris/refinance.js";
 import { irisRepay } from "../actions/iris/repay.js";
-import { irisRepayEscape } from "../actions/iris/repayEscape.js";
 import { irisSupplyBond } from "../actions/iris/supplyBond.js";
 import { irisSupplyCollateral } from "../actions/iris/supplyCollateral.js";
 import { irisTake } from "../actions/iris/take.js";
@@ -229,7 +229,7 @@ export interface IrisActions {
   };
 
   /**
-   * Prepares a repay transaction closing an existing Iris loan and recovering its collateral.
+   * Prepares a close transaction resolving an existing Iris loan and recovering its collateral.
    *
    * Sizes the funding from the pre-fetched `positionData` as {@link IrisActions.repay} does, then
    * exits the venue position in the same bundle — `Iris.repay` resolves the loan but leaves the
@@ -243,14 +243,14 @@ export interface IrisActions {
    * @param params - Repay-escape parameters.
    * @returns Object with `buildTx` and `getRequirements`.
    */
-  repayEscape: (params: {
+  close: (params: {
     userAddress: Address;
     positionData: AccrualPosition;
     nativeAmount?: bigint;
   }) => {
     buildTx: (
       signatures?: readonly RequirementSignature[],
-    ) => Readonly<Transaction<IrisRepayEscapeAction>>;
+    ) => Readonly<Transaction<IrisCloseAction>>;
     getRequirements: (params?: {
       useSimplePermit?: boolean;
     }) => Promise<
@@ -858,7 +858,7 @@ export class Iris implements IrisActions {
   }
 
   /**
-   * Prepares a repay transaction closing an existing Iris loan and recovering its collateral.
+   * Prepares a close transaction resolving an existing Iris loan and recovering its collateral.
    *
    * Sizes the funding exactly as {@link Iris.repay} does — projected two hours forward, leftover
    * swept back to `userAddress` — then exits the venue position in the same bundle, so the
@@ -890,7 +890,7 @@ export class Iris implements IrisActions {
    * @throws {IrisCoreErrors.UnknownVenuePrice} from `AccrualPosition.repay` when the venue price
    *   is unknown, which leaves the amount owed underivable.
    */
-  repayEscape({
+  close({
     userAddress,
     positionData,
     nativeAmount = 0n,
@@ -951,7 +951,7 @@ export class Iris implements IrisActions {
           authorization: true,
         });
 
-        return irisRepayEscape({
+        return irisClose({
           chainId: this.chainId,
           args: {
             pod,
