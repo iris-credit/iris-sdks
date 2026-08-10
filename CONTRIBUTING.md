@@ -173,7 +173,12 @@ Update `CHAIN_REGISTRIES` in `packages/core-sdk/src/registries.ts`. This records
   blms: { blm: CHAIN_ADDRESSES[ChainId.YourNewChain].blm },
   venues: { aaveV3: 0n },
   marketDatas: {
-    aaveV3: { venue: "aaveV3", data: "0x" },
+    // Entries key by their enabled hash — `keccak256(data)`; for the ignored Aave v3
+    // payload that is `keccak256("0x")`.
+    "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470": {
+      venue: "aaveV3",
+      data: "0x",
+    },
   },
 },
 ```

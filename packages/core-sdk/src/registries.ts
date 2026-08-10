@@ -1,8 +1,9 @@
 import type { Address, Hex } from "viem";
 
+import { entries, isHexEqual } from "@iris-credit/iris-ts";
 import { CHAIN_ADDRESSES } from "./addresses.js";
 import { ChainId } from "./chain.js";
-import { UnsupportedChainIdError } from "./errors.js";
+import { UnknownDataHashError, UnsupportedChainIdError } from "./errors.js";
 
 /* Per-chain registry of values enabled on the Iris contract (as opposed to `CHAIN_ADDRESSES`,
  * which records what is deployed — e.g. `whitelistBlm` is deployed but not enabled).
@@ -130,4 +131,17 @@ export const getChainRegistry = <T extends ChainId>(chainId: T): (typeof CHAIN_R
   if (chainRegistry == null) throw new UnsupportedChainIdError(chainId);
 
   return chainRegistry;
+};
+
+/** Returns the enabled market data payload recorded for `dataHash` — `keccak256(data)`, e.g. a
+ * quote's enabled hash or a Morpho market id — matching case-insensitively via `isHexEqual`.
+ * Throws `UnknownDataHashError` when the chain's registry does not record it (e.g. a payload
+ * enabled after the SDK release). Complements direct `marketDatas` indexing, whose keys are
+ * exact literals and so reject hashes only known at runtime. */
+export const getMarketData = (chainId: ChainId, dataHash: Hex): MarketData => {
+  const { marketDatas }: ChainRegistryBase = getChainRegistry(chainId);
+  const marketData = entries(marketDatas).find(([hash]) => isHexEqual(hash, dataHash))?.[1];
+  if (marketData == null) throw new UnknownDataHashError(dataHash, chainId);
+
+  return marketData;
 };

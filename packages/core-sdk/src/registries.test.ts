@@ -2,9 +2,9 @@ import { getAddress, keccak256 } from "viem";
 import { describe, expect, test } from "vitest";
 import { ChainId } from "./chain.js";
 import { BP } from "./constants.js";
-import { UnsupportedChainIdError } from "./errors.js";
+import { UnknownDataHashError, UnsupportedChainIdError } from "./errors.js";
 import { MathLib } from "./math/index.js";
-import { CHAIN_REGISTRIES, getChainRegistry } from "./registries.js";
+import { CHAIN_REGISTRIES, getChainRegistry, getMarketData } from "./registries.js";
 
 const registries = Object.entries(CHAIN_REGISTRIES) as [
   string,
@@ -61,5 +61,26 @@ describe("getChainRegistry", () => {
 
   test("should throw for an unsupported chain id", () => {
     expect(() => getChainRegistry(999 as ChainId)).toThrow(UnsupportedChainIdError);
+  });
+});
+
+describe("getMarketData", () => {
+  test("should index an enabled payload by a runtime hash", () => {
+    expect(getMarketData(ChainId.EthMainnet, keccak256("0x"))).toEqual({
+      venue: "aaveV3",
+      data: "0x",
+    });
+  });
+
+  test("should ignore the case of the looked-up hash", () => {
+    expect(
+      getMarketData(ChainId.EthMainnet, `0x${keccak256("0x").slice(2).toUpperCase()}`),
+    ).toEqual({ venue: "aaveV3", data: "0x" });
+  });
+
+  test("should throw for a hash that is not enabled", () => {
+    expect(() => getMarketData(ChainId.EthMainnet, keccak256("0xdeadbeef"))).toThrow(
+      UnknownDataHashError,
+    );
   });
 });

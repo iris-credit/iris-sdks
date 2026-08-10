@@ -28,6 +28,16 @@ export class UnsupportedAaveV3TokenError extends Error {
   }
 }
 
+/** Error thrown when a data hash has no market data payload recorded in the SDK registry. */
+export class UnknownDataHashError extends Error {
+  constructor(
+    public readonly dataHash: Hex,
+    public readonly chainId: ChainId,
+  ) {
+    super(`unknown data hash ${dataHash} on chain ${chainId}`);
+  }
+}
+
 export namespace IrisCoreErrors {
   /** Error thrown when position accrual is requested before `lastUpdate`. */
   export class InvalidInterestAccrual extends Error {
