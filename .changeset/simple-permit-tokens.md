@@ -1,5 +1,5 @@
 ---
-"@iris-credit/core-sdk": minor
+"@iris-credit/core-sdk": patch
 "@iris-credit/iris-sdk": patch
 ---
 
