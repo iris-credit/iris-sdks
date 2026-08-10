@@ -65,26 +65,26 @@ yarn add @iris-credit/iris-sdk viem
 
 All flows live on the chain-scoped entity returned by `client.iris.core(chainId)`:
 
-| Action               | Route                     | Why                                                                                                                                                                                                                             |
-| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Action               | Route                     | Why                                                                                                                                                                                                                                                                                                                              |
+| -------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `take`               | Bundler (general adapter) | Opens a loan from a solver-signed quote: submits the solver's Permit2 bond funding (`approve2Iris`), folds in the borrower's Iris authorization (`setAuthorizationWithSig`), funds the collateral, then `irisTake`. The bond is pulled by Iris from the solver directly, never from the adapter. Supports native token wrapping. |
-| `repay`              | Bundler (general adapter) | Iris repays in full at a price that accrues per second, so the bundle funds an upper bound (the position projected two hours forward) and sweeps the residual back. Permissionless — anyone can close the loan.                    |
-| `supplyCollateral`   | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyCollateral`. Permissionless top-up. Supports native token wrapping.                                                                                                                              |
-| `withdrawCollateral` | Direct Iris call          | No bundler overhead. Validates the withdrawal against both Iris's ceiling and the venue's own (which Iris's does not imply), measured against the buffered venue LLTV. Borrower only.                                             |
-| `supplyBond`         | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the loan's debt token — the asset the bond is denominated in. Permissionless top-up. Supports native token wrapping.                                                                    |
-| `withdrawBond`       | Direct Iris call          | No bundler overhead. Validates post-withdrawal bond health against the buffered bond LLTV. Solver only.                                                                                                                           |
-| `claim`              | Direct Iris call          | No bundler overhead. Validates the claim against the claimable balance — `Iris.claim` has no max-sweep sentinel, so `amount` defaults to the whole balance.                                                                       |
-| `escape`             | Bundler (general adapter) | Exits a resolved loan's venue position: funds the venue debt (projected two hours forward), settles it, withdraws the venue collateral — yield included — and sweeps the residual back. Borrower only.                             |
-| `refinance`          | Bundler (general adapter) | Moves the position to another venue: funds the current venue debt (projected two hours forward), replays the migration locally to reject what the contract rejects, and returns the new venue's borrow proceeds. Solver only.      |
+| `repay`              | Bundler (general adapter) | Iris repays in full at a price that accrues per second, so the bundle funds an upper bound (the position projected two hours forward) and sweeps the residual back. Permissionless — anyone can close the loan.                                                                                                                  |
+| `supplyCollateral`   | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyCollateral`. Permissionless top-up. Supports native token wrapping.                                                                                                                                                                                                                             |
+| `withdrawCollateral` | Direct Iris call          | No bundler overhead. Validates the withdrawal against both Iris's ceiling and the venue's own (which Iris's does not imply), measured against the buffered venue LLTV. Borrower only.                                                                                                                                            |
+| `supplyBond`         | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the loan's debt token — the asset the bond is denominated in. Permissionless top-up. Supports native token wrapping.                                                                                                                                                                   |
+| `withdrawBond`       | Direct Iris call          | No bundler overhead. Validates post-withdrawal bond health against the buffered bond LLTV. Solver only.                                                                                                                                                                                                                          |
+| `claim`              | Direct Iris call          | No bundler overhead. Validates the claim against the claimable balance — `Iris.claim` has no max-sweep sentinel, so `amount` defaults to the whole balance.                                                                                                                                                                      |
+| `escape`             | Bundler (general adapter) | Exits a resolved loan's venue position: funds the venue debt (projected two hours forward), settles it, withdraws the venue collateral — yield included — and sweeps the residual back. Borrower only.                                                                                                                           |
+| `refinance`          | Bundler (general adapter) | Moves the position to another venue: funds the current venue debt (projected two hours forward), replays the migration locally to reject what the contract rejects, and returns the new venue's borrow proceeds. Solver only.                                                                                                    |
 
 Solver-side (maker-flow) helpers are standalone functions:
 
-| Helper                  | Why                                                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `getSolverRequirements` | Resolves the one-time approvals a solver must send before quoting, for either bond funding mode.                                                            |
-| `signResponse`          | The per-quote hot path: signs the quote and (in the Permit2 mode) the bond funding payload in one call — everything an RFQ webhook response carries.         |
-| `signQuote`             | Signs a quote verbatim as the solver — the EIP-712 signature `Iris.take` verifies on-chain.                                                                 |
-| `signSolverPermit2`     | Signs the per-quote Permit2 payload funding the bond pull, spender pinned to the Iris core.                                                                 |
+| Helper                  | Why                                                                                                                                                  |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `getSolverRequirements` | Resolves the one-time approvals a solver must send before quoting, for either bond funding mode.                                                     |
+| `signResponse`          | The per-quote hot path: signs the quote and (in the Permit2 mode) the bond funding payload in one call — everything an RFQ webhook response carries. |
+| `signQuote`             | Signs a quote verbatim as the solver — the EIP-712 signature `Iris.take` verifies on-chain.                                                          |
+| `signSolverPermit2`     | Signs the per-quote Permit2 payload funding the bond pull, spender pinned to the Iris core.                                                          |
 
 ### Reads
 
@@ -117,9 +117,7 @@ Usage pattern:
 ```typescript
 import { isRequirementSignature } from "@iris-credit/iris-sdk";
 
-const { buildTx, getRequirements } = iris.take({
-  /* ... */
-});
+const { buildTx, getRequirements } = iris.take({/* ... */});
 
 const requirements = await getRequirements();
 // → [{ to, value, data, action }, { sign: async () => {...}, action }]
@@ -298,15 +296,16 @@ const tx = buildTx(signatures);
 Moves the loan's position to another venue enabled in the loan's `venueBitmap`. The migration is replayed locally against `positionData` and `newVenue` to reject what the contract rejects; the bundle then funds the debt the pod owes its current venue (projected two hours forward — Iris clears it out of `GeneralAdapter1`'s balance before the new venue is entered, so the funding cannot come from the refinance itself), and the new venue's borrow proceeds plus the swept residual return to `userAddress`, leaving it whole.
 
 ```typescript
-import { ChainId, getChainRegistry } from "@iris-credit/core-sdk";
+import { ChainId, getChainRegistry, getMarketData } from "@iris-credit/core-sdk";
 
-const { venues, marketDatas } = getChainRegistry(ChainId.EthMainnet);
+const { venues } = getChainRegistry(ChainId.EthMainnet);
 
 const positionData = await iris.getPositionData(pod);
 const newVenue = await iris.getVenueData({
   ...positionData.loan,
   venueId: venues.morphoBlue,
-  data: marketDatas["morphoBlue:cbBTC/USDC"].data, // the target venue's market data payload.
+  // The target venue's market data payload, looked up by its Morpho market id.
+  data: getMarketData(ChainId.EthMainnet, marketId).data,
 });
 
 const { buildTx, getRequirements } = iris.refinance({
