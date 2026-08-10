@@ -25,7 +25,7 @@
 
 > **The abstraction layer that simplifies the Iris protocol**
 
-Build ready-to-send transactions for every Iris flow — `take`, `repay`, collateral and bond management, `claim`, `escape` and `refinance` — plus the solver-side signing helpers an RFQ quote response is made of.
+Build ready-to-send transactions for every Iris flow — `take`, `repay`, `close`, collateral and bond management, `claim`, `escape` and `refinance` — plus the solver-side signing helpers an RFQ quote response is made of.
 
 Everything hangs off one chain-scoped entity, created from an extended viem client:
 
@@ -69,6 +69,7 @@ All flows live on the chain-scoped entity returned by `client.iris.core(chainId)
 | -------------------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `take`               | Bundler (general adapter) | Opens a loan from a solver-signed quote: submits the solver's Permit2 bond funding (`approve2Iris`), folds in the borrower's Iris authorization (`setAuthorizationWithSig`), funds the collateral, then `irisTake`. The bond is pulled by Iris from the solver directly, never from the adapter. Supports native token wrapping. |
 | `repay`              | Bundler (general adapter) | Iris repays in full at a price that accrues per second, so the bundle funds an upper bound (the position projected two hours forward) and sweeps the residual back. Permissionless — anyone can close the loan.                                                                                                                  |
+| `close`              | Bundler (general adapter) | `repay` then `escape` in one bundle: settles the loan and exits the venue position it leaves funded, returning collateral — yield included — and the swept residual to the borrower. Borrower only.                                                                                                                              |
 | `supplyCollateral`   | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyCollateral`. Permissionless top-up. Supports native token wrapping.                                                                                                                                                                                                                             |
 | `withdrawCollateral` | Direct Iris call          | No bundler overhead. Validates the withdrawal against both Iris's ceiling and the venue's own (which Iris's does not imply), measured against the buffered venue LLTV. Borrower only.                                                                                                                                            |
 | `supplyBond`         | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the loan's debt token — the asset the bond is denominated in. Permissionless top-up. Supports native token wrapping.                                                                                                                                                                   |
@@ -103,14 +104,14 @@ const newVenue = await iris.getVenueData({ ...loanData, venueId, data }); // a v
 
 Every flow that moves tokens into the protocol returns two things:
 
-- `buildTx(signatures?)` — builds the final `Transaction` object (`to`, `value`, `data`, plus a typed `action` discriminator), synchronously. Takes the collected signature results the flow consumes: permit / Permit2 and, on `take` / `escape` / `refinance`, the Iris authorization.
+- `buildTx(signatures?)` — builds the final `Transaction` object (`to`, `value`, `data`, plus a typed `action` discriminator), synchronously. Takes the collected signature results the flow consumes: permit / Permit2 and, on `take` / `close` / `escape` / `refinance`, the Iris authorization.
 - `getRequirements()` — returns the list of on-chain prerequisites that must be satisfied first.
 
 Typical requirements:
 
 - **ERC-20 approval** — the user must approve `GeneralAdapter1` (or, in the Permit2 flow, the Permit2 contract) to pull tokens. Returned as a standard `approve` transaction the consumer sends first.
 - **Permit / Permit2 signature** — off-chain approvals that go into `buildTx` in the `signatures` array, avoiding the extra approval transaction. Enabled via `irisViemExtension({ supportSignature: true })`; pass `useSimplePermit: true` to `getRequirements` to prefer an EIP-2612 permit when the token supports it.
-- **Iris authorization** — bundled paths that operate on a user's loan require that user to authorize `GeneralAdapter1` on Iris: `take` and `escape` need the borrower's authorization, `refinance` the solver's. Returned as a `setAuthorization` transaction — or, with `supportSignature`, as a signable requirement folded into the bundle via `setAuthorizationWithSig` — and omitted when the authorization is already in place.
+- **Iris authorization** — bundled paths that operate on a user's loan require that user to authorize `GeneralAdapter1` on Iris: `take`, `close` and `escape` need the borrower's authorization, `refinance` the solver's. Returned as a `setAuthorization` transaction — or, with `supportSignature`, as a signable requirement folded into the bundle via `setAuthorizationWithSig` — and omitted when the authorization is already in place.
 
 Usage pattern:
 
@@ -138,7 +139,7 @@ const tx = buildTx(signatures);
 
 ### Integration invariant — builder = signer
 
-**`userAddress` MUST equal the account that ends up signing / executing the transaction.** Action-layer transaction builders do not validate this at build time, so callers MUST keep `userAddress` aligned with the signing account themselves. The entity enforces it wherever the contract pins a role: `take` and `escape` require `userAddress` to be the borrower (whose Iris authorization the bundle runs on), `withdrawCollateral` the borrower, and `withdrawBond` / `refinance` the loan's solver. The signature requirements (`encodeErc20Permit` / `encodeErc20Permit2Approve` / `encodeIrisSignatureAuthorization`) take a `WalletClient` and enforce the invariant at `sign()` time via `validateUserAddress`, rejecting any `sign(client, userAddress)` where `client.account.address !== userAddress` with `MissingClientPropertyError` / `AddressMismatchError`.
+**`userAddress` MUST equal the account that ends up signing / executing the transaction.** Action-layer transaction builders do not validate this at build time, so callers MUST keep `userAddress` aligned with the signing account themselves. The entity enforces it wherever the contract pins a role: `take`, `close` and `escape` require `userAddress` to be the borrower (whose Iris authorization the bundle runs on), `withdrawCollateral` the borrower, and `withdrawBond` / `refinance` the loan's solver. The signature requirements (`encodeErc20Permit` / `encodeErc20Permit2Approve` / `encodeIrisSignatureAuthorization`) take a `WalletClient` and enforce the invariant at `sign()` time via `validateUserAddress`, rejecting any `sign(client, userAddress)` where `client.account.address !== userAddress` with `MissingClientPropertyError` / `AddressMismatchError`.
 
 ### Take
 
@@ -175,7 +176,7 @@ const { buildTx, getRequirements } = iris.take({
 });
 ```
 
-The same `nativeAmount` parameter funds the debt token on `repay` / `escape` / `refinance` and the deposit on `supplyCollateral` / `supplyBond`, always requiring the funded asset to be the chain's wNative.
+The same `nativeAmount` parameter funds the debt token on `repay` / `close` / `escape` / `refinance` and the deposit on `supplyCollateral` / `supplyBond`, always requiring the funded asset to be the chain's wNative.
 
 ### Repay
 
@@ -193,7 +194,23 @@ const requirements = await getRequirements();
 const tx = buildTx([permitSignature]);
 ```
 
-Repay resolves the loan but leaves the collateral with the position — withdraw it separately.
+Repay resolves the loan but leaves the collateral with the position — recover it with `escape`, or do both in one bundle with `close`.
+
+### Close
+
+Resolves the loan and exits its venue position in one bundle — `repay` then `escape` — so the collateral repay leaves behind comes back atomically, yield included. The repayment leg funds the position projected two hours forward and sweeps the residual back, exactly as `repay` sizes it; the projection doubles as the validity window — rebuild after two hours rather than sending a stale one. The exit rides on `Iris.escape` rather than `withdrawCollateral`: escape sends the venue balance as it stands at execution, where an exact amount a rebase invalidated would revert or strand dust. Unlike the permissionless `repay`, close is borrower-only — `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator, and the escape leg runs on their Iris authorization. A loan already **resolved** leaves nothing to repay and throws `LoanResolvedError` — reach for `escape` on its own to recover the collateral.
+
+```typescript
+const positionData = await iris.getPositionData(pod);
+
+const { buildTx, getRequirements } = iris.close({
+  userAddress: borrower, // must be the loan's borrower — receives the collateral and the sweep.
+  positionData,
+});
+
+const requirements = await getRequirements();
+const tx = buildTx(signatures);
+```
 
 ### Supply Collateral
 
@@ -369,6 +386,7 @@ graph LR
     subgraph Bundled flows
         IE --> T[take]
         IE --> R[repay]
+        IE --> CL[close]
         IE --> SC[supplyCollateral]
         IE --> SB[supplyBond]
         IE --> E[escape]
@@ -376,6 +394,7 @@ graph LR
 
         T -->|approve2Iris? + authorization? + funding + irisTake| B[Bundler3]
         R -->|funding + irisRepay + sweep| B
+        CL -->|authorization? + funding + irisRepay + irisEscape + sweep| B
         SC -->|funding + irisSupplyCollateral| B
         SB -->|funding + irisSupplyBond| B
         E -->|authorization? + funding + irisEscape + sweep| B
