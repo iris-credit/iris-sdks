@@ -48,7 +48,7 @@ Iris is fixed-rate, fixed-term lending overlaid on variable-rate venues. The SDK
 - **Take.** A borrower and a solver agree terms off-chain as an EIP-712 signed `Quote`, delivered through the RFQ. `take` opens the loan: the borrower's collateral enters a single-use **pod** on the quoted venue, the debt is borrowed against it, and the solver posts a **bond** in the debt token covering the spread between the fixed rate the borrower pays and the floating rate the venue charges.
 - **Servicing.** While the loan is open, collateral and bond can be topped up permissionlessly (`supplyCollateral`, `supplyBond` — anyone can fund them), and withdrawn by their owners (`withdrawCollateral` by the borrower, `withdrawBond` by the solver) down to health ceilings Iris re-checks on-chain.
 - **Resolution.** `repay` closes the loan — always in full, priced at execution as the legs accrue per second, permissionless. Past `maturity + overduePeriod` the loan is instead liquidatable. Either way the loan becomes **resolved**: settlement credits the solver's net and surplus, and the protocol's fees, to claimable balances drawn down with `claim`.
-- **After resolution.** The pod may still hold a venue position (repay leaves the collateral with it). `escape` exits it: the borrower settles any remaining venue debt and withdraws the venue collateral, yield included.
+- **After resolution.** The pod may still hold a venue position (repay leaves the collateral with it). `escape` exits it: the borrower settles any remaining venue debt and withdraws the venue collateral, yield included. `close` fuses the two legs into one bundle.
 - **Refinance.** At any time while open, the solver can move the position to another venue enabled in the loan's `venueBitmap` — `refinance` clears the current venue's debt and re-enters the new one atomically.
 
 Two facts shape the SDK's flows:
@@ -62,7 +62,7 @@ This is the most important routing decision in the SDK.
 
 ### Flows that move tokens in: always through the bundler
 
-`take`, `repay`, `supplyCollateral`, `supplyBond`, `escape` and `refinance` are routed through **Bundler3** via its **general adapter** (`GeneralAdapter1`). The bundle atomically:
+`take`, `repay`, `close`, `supplyCollateral`, `supplyBond`, `escape` and `refinance` are routed through **Bundler3** via its **general adapter** (`GeneralAdapter1`). The bundle atomically:
 
 1. _(If a signed Iris authorization is provided)_ Submits it via `irisSetAuthorizationWithSig`, granting the general adapter operator rights for the flow's pinned role in the same transaction.
 2. _(If `nativeAmount` is provided)_ Transfers native token to the general adapter via `nativeTransfer`, then wraps it to wNative via `wrapNative`; the transaction's `value` carries it. Only valid when the funded asset is the chain's wNative.
@@ -72,7 +72,7 @@ This is the most important routing decision in the SDK.
 
 **Why the bundler is mandatory here:** Iris pulls funding from `msg.sender`'s side atomically with the call, so the funding transfer and the Iris call must share a transaction; the bundle is also what lets a permit, a Permit2 approval, or an Iris authorization signature ride along instead of costing a standalone transaction. On `take`, it additionally submits the solver's Permit2 bond payload (`approve2Iris`) so the bond pull — which Iris takes from the solver directly, never from the adapter — succeeds through the Permit2 fallback.
 
-**The funding upper-bound + sweep pattern:** Iris prices accruing pulls at execution. Funding the amount owed at fetch time would under-fund the pull and revert, so `repay`, `escape` and `refinance` size the funding from the position projected **two hours** past now, and a final sweep returns whatever the pull left behind. The projection doubles as the transaction's validity window — rebuild after two hours rather than sending a stale one.
+**The funding upper-bound + sweep pattern:** Iris prices accruing pulls at execution. Funding the amount owed at fetch time would under-fund the pull and revert, so `repay`, `close`, `escape` and `refinance` size the funding from the position projected **two hours** past now, and a final sweep returns whatever the pull left behind. The projection doubles as the transaction's validity window — rebuild after two hours rather than sending a stale one.
 
 **Security invariant:** Never bypass the general adapter for funded flows.
 
@@ -92,6 +92,7 @@ The withdrawals are validated locally against the ceiling Iris re-checks on-chai
 | -------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | `take`               | Bundler3 (general adapter) | Atomic authorization + collateral funding + `irisTake`; submits the solver's Permit2 bond payload (`approve2Iris`). |
 | `repay`              | Bundler3 (general adapter) | Full repay priced at execution: fund a 2h upper bound, sweep the residual back. Permissionless.                  |
+| `close`              | Bundler3 (general adapter) | `repay` then `escape` in one bundle: Iris's repay leaves the collateral on the venue. Borrower only.             |
 | `supplyCollateral`   | Bundler3 (general adapter) | `erc20TransferFrom` + `irisSupplyCollateral`. Optional native wrapping. Permissionless.                          |
 | `supplyBond`         | Bundler3 (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the debt token. Optional native wrapping. Permissionless.              |
 | `escape`             | Bundler3 (general adapter) | Funds residual venue debt (2h upper bound), settles, withdraws venue collateral + yield. Borrower only.          |

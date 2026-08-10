@@ -1,5 +1,6 @@
 export * from "./buildAssetFundingActions.js";
 export * from "./claim.js";
+export * from "./close.js";
 export * from "./escape.js";
 export * from "./refinance.js";
 export * from "./repay.js";
