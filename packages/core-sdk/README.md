@@ -107,12 +107,7 @@ loan.isVenueAllowed(1n); // true.
 Leverage the [`Venue`](./src/modules/venue/Venue.ts) implementations to manipulate the venue backing a loan. Each one carries the venue's own rate model, so its indices can be projected offline:
 
 ```typescript
-import {
-  ChainId,
-  MathLib,
-  MorphoBlueVenue,
-  getChainRegistry,
-} from "@iris-credit/core-sdk";
+import { ChainId, MathLib, MorphoBlueVenue, getChainRegistry } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
 
 const { venues, marketDatas } = getChainRegistry(ChainId.EthMainnet);
@@ -120,7 +115,8 @@ const { venues, marketDatas } = getChainRegistry(ChainId.EthMainnet);
 const venue = new MorphoBlueVenue(
   {
     id: venues.morphoBlue, // 1n
-    data: marketDatas["morphoBlue:cbBTC/USDC"].data, // abi.encode(MarketParams).
+    // The cbBTC/USDC abi.encode(MarketParams) payload, keyed by its Morpho market id.
+    data: marketDatas["0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64"].data,
     pod: "0x1111111111111111111111111111111111111111",
     collateral: 1_00000000n, // 1 cbBTC.
     debt: 50_000_000000n, // 50k USDC.
@@ -319,7 +315,7 @@ const signature = await walletClient.signTypedData(getQuoteTypedData(ChainId.Eth
 Two static, per-chain sources, both narrowed to the exact chain by their getter:
 
 - [`CHAIN_ADDRESSES`](./src/addresses.ts) — what is **deployed**: Iris core contracts, bundler adapters, venue adapters and common tokens
-- [`CHAIN_REGISTRIES`](./src/registries.ts) — what is **enabled** on the Iris contract: BLMs, venue ids, accepted bond LLTVs, and the market data payloads (recorded as preimages, since the contract only stores `keccak256(data)`)
+- [`CHAIN_REGISTRIES`](./src/registries.ts) — what is **enabled** on the Iris contract: BLMs, venue ids, accepted bond LLTVs, and the market data payloads (recorded as preimages keyed by their enabled `keccak256(data)` hash — the Morpho market id for Morpho Blue payloads — since the contract only stores the hash)
 
 ```typescript
 import { ChainId, getChainAddresses, getChainRegistry } from "@iris-credit/core-sdk";
@@ -329,7 +325,8 @@ const { venues, bondLltvs, marketDatas } = getChainRegistry(ChainId.EthMainnet);
 
 venues.morphoBlue; // 1n
 bondLltvs; // [90_0000000000000000n] (90%).
-marketDatas["morphoBlue:cbBTC/USDC"].data; // The enabled abi.encode(MarketParams) payload.
+// The enabled cbBTC/USDC abi.encode(MarketParams) payload, keyed by its Morpho market id.
+marketDatas["0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64"].data;
 ```
 
 Enablement is append-only onchain, so registry entries can only ever be stale-incomplete — never stale-wrong. Solvers can therefore quote from the registry offline, while the fetchers re-verify mutable state (BLM params, whitelist entries, fee) at runtime.

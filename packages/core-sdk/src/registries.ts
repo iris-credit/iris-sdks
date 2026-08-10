@@ -34,23 +34,9 @@ export interface MarketData {
   readonly data: Hex;
 }
 
-// Morpho Blue venue payloads are `abi.encode(MarketParams)` — `keccak256(data)` is the Morpho
-// market id. All three below use the adaptive curve IRM and an 86% lltv.
-
-// Morpho market 0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49.
-const MORPHO_WBTC_USDC_DATA: Hex =
-  "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000dddd770badd886df3864029e4b377b5f6a2b6b83000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000";
-
-// Morpho market 0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64.
-const MORPHO_CBBTC_USDC_DATA: Hex =
-  "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbb7c0000ab88b473b1f5afd9ef808440eed33bf000000000000000000000000a6d6950c9f177f1de7f7757fb33539e3ec60182a000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000";
-
-// Morpho market 0xe7e9694b754c4d4f7e21faf7223f6fa71abaeb10296a4c43a54a7977149687d2.
-const MORPHO_WSTETH_USDT_DATA: Hex =
-  "0x000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec70000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca000000000000000000000000095db30fab9a3754e42423000df27732cb2396992000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000";
-
-// Fields guaranteed on every supported chain. Names key the records so consumers pick venues,
-// BLMs, and market payloads by name; ids and payloads stay chain-specific (venue ids are not
+// Fields guaranteed on every supported chain. Names key the venue and BLM records so consumers
+// pick them by name; market payloads key by their enabled hash, so a hash observed onchain
+// indexes its preimage directly. Ids and payloads stay chain-specific (venue ids are not
 // guaranteed consistent across chains).
 interface ChainRegistryBase {
   /** Block at which Iris was deployed; lower bound for config event scans. */
@@ -61,8 +47,9 @@ interface ChainRegistryBase {
   readonly blms: Readonly<Record<string, Address>>;
   /** Registered venue ids by name (`venueId < 128`); each chain registers its own subset. */
   readonly venues: Readonly<Partial<Record<VenueName, bigint>>>;
-  /** Enabled market data payloads by label. */
-  readonly marketDatas: Readonly<Record<string, MarketData>>;
+  /** Enabled market data payloads by enabled hash — `keccak256(data)`; Morpho Blue payloads
+   * are `abi.encode(MarketParams)`, making each hash the Morpho market id. */
+  readonly marketDatas: Readonly<Record<Hex, MarketData>>;
 }
 
 // Enforces the base shape on every chain while preserving each chain's exact entries (via the
@@ -81,10 +68,25 @@ export const CHAIN_REGISTRIES = defineChainRegistries({
     venues: { aaveV3: 0n, morphoBlue: 1n },
     marketDatas: {
       // The Aave v3 adapter ignores the payload; the enabled hash is `keccak256("0x")`.
-      aaveV3: { venue: "aaveV3", data: "0x" },
-      "morphoBlue:WBTC/USDC": { venue: "morphoBlue", data: MORPHO_WBTC_USDC_DATA },
-      "morphoBlue:cbBTC/USDC": { venue: "morphoBlue", data: MORPHO_CBBTC_USDC_DATA },
-      "morphoBlue:wstETH/USDT": { venue: "morphoBlue", data: MORPHO_WSTETH_USDT_DATA },
+      "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470": {
+        venue: "aaveV3",
+        data: "0x",
+      },
+      // WBTC/USDC (adaptive curve IRM, 86% lltv).
+      "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49": {
+        venue: "morphoBlue",
+        data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000dddd770badd886df3864029e4b377b5f6a2b6b83000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
+      },
+      // cbBTC/USDC (adaptive curve IRM, 86% lltv).
+      "0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64": {
+        venue: "morphoBlue",
+        data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbb7c0000ab88b473b1f5afd9ef808440eed33bf000000000000000000000000a6d6950c9f177f1de7f7757fb33539e3ec60182a000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
+      },
+      // wstETH/USDT (adaptive curve IRM, 86% lltv).
+      "0xe7e9694b754c4d4f7e21faf7223f6fa71abaeb10296a4c43a54a7977149687d2": {
+        venue: "morphoBlue",
+        data: "0x000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec70000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca000000000000000000000000095db30fab9a3754e42423000df27732cb2396992000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
+      },
     },
   },
   // Fork of mainnet, but with its own Iris deployment: the enabled configuration is set
@@ -96,10 +98,25 @@ export const CHAIN_REGISTRIES = defineChainRegistries({
     blms: { blm: CHAIN_ADDRESSES[ChainId.VNet].blm },
     venues: { aaveV3: 0n, morphoBlue: 1n },
     marketDatas: {
-      aaveV3: { venue: "aaveV3", data: "0x" },
-      "morphoBlue:WBTC/USDC": { venue: "morphoBlue", data: MORPHO_WBTC_USDC_DATA },
-      "morphoBlue:cbBTC/USDC": { venue: "morphoBlue", data: MORPHO_CBBTC_USDC_DATA },
-      "morphoBlue:wstETH/USDT": { venue: "morphoBlue", data: MORPHO_WSTETH_USDT_DATA },
+      "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470": {
+        venue: "aaveV3",
+        data: "0x",
+      },
+      // WBTC/USDC (adaptive curve IRM, 86% lltv).
+      "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49": {
+        venue: "morphoBlue",
+        data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000dddd770badd886df3864029e4b377b5f6a2b6b83000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
+      },
+      // cbBTC/USDC (adaptive curve IRM, 86% lltv).
+      "0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64": {
+        venue: "morphoBlue",
+        data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbb7c0000ab88b473b1f5afd9ef808440eed33bf000000000000000000000000a6d6950c9f177f1de7f7757fb33539e3ec60182a000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
+      },
+      // wstETH/USDT (adaptive curve IRM, 86% lltv).
+      "0xe7e9694b754c4d4f7e21faf7223f6fa71abaeb10296a4c43a54a7977149687d2": {
+        venue: "morphoBlue",
+        data: "0x000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec70000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca000000000000000000000000095db30fab9a3754e42423000df27732cb2396992000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
+      },
     },
   },
 });
