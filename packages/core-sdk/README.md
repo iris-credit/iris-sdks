@@ -327,15 +327,13 @@ Two static, per-chain sources, both narrowed to the exact chain by their getter:
 import { ChainId, getChainAddresses, getChainRegistry, getMarketData } from "@iris-credit/core-sdk";
 
 const { iris, blm, morphoBlueAdapter, tokens } = getChainAddresses(ChainId.EthMainnet);
-const { venues, bondLltvs, marketDatas } = getChainRegistry(ChainId.EthMainnet);
+const { venues, bondLltvs } = getChainRegistry(ChainId.EthMainnet);
 
 venues.morphoBlue; // 1n
 bondLltvs; // [90_0000000000000000n] (90%).
-// The enabled cbBTC/USDC abi.encode(MarketParams) payload, keyed by its Morpho market id.
-marketDatas["0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64"].data;
-// Typed lookup for a hash only known at runtime — a Morpho market id, or `keccak256(quote.data)`;
-// throws `UnknownDataHashError` when not recorded.
-getMarketData(ChainId.EthMainnet, marketId);
+// The enabled abi.encode(MarketParams) payload for a Morpho market id (or any enabled
+// `keccak256(data)` hash); throws `UnknownDataHashError` when not recorded.
+getMarketData(ChainId.EthMainnet, marketId).data;
 ```
 
 Enablement is append-only onchain, so registry entries can only ever be stale-incomplete — never stale-wrong. Solvers can therefore quote from the registry offline, while the fetchers re-verify mutable state (BLM params, whitelist entries, fee) at runtime.
