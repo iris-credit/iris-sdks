@@ -1,5 +1,11 @@
 # @iris-credit/iris-sdk
 
+## 0.3.0
+
+### Minor Changes
+
+- [#103](https://github.com/iris-credit/iris-sdks/pull/103) [`0d7e728`](https://github.com/iris-credit/iris-sdks/commit/0d7e728e44496b82d6e8d1ac0c018856cc3100e6) Thanks [@u-zzam](https://github.com/u-zzam)! - Add the `close` flow and the `irisClose` action: repay an Iris loan and recover its collateral in one bundle. `Iris.repay` resolves the loan but leaves the collateral on the venue, so the bundle repays first — clearing the bond requirement `Iris.escape` checks — then exits the venue position to the receiver. The exit runs on `escape` rather than `withdrawCollateral` so it takes the venue balance as it stands at execution, instead of an amount a rebase can invalidate. Unlike the permissionless `repay`, `userAddress` must be the loan's borrower: `GeneralAdapter1.irisEscape` pins them as the bundle initiator.
+
 ## 0.2.1
 
 ### Patch Changes
