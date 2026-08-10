@@ -1318,38 +1318,39 @@ export class Iris implements IrisActions {
   }) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
-    const { pod, lastUpdate, bondRequirement, loan, venue } = positionData;
+    const { pod, lastUpdate, bondRequirement, venue } = positionData;
+    const { borrower, debtToken } = positionData.loan;
 
     // `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator.
-    validateUserAddress(userAddress, loan.borrower);
+    validateUserAddress(userAddress, borrower);
 
     if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
     if (bondRequirement !== 0n) throw new LoanNotResolvedError(pod);
 
     if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
-    if (nativeAmount > 0n) validateNativeAsset(this.chainId, loan.debtToken);
+    if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
 
     // Forward-accrue the venue debt: Iris pulls it as it stands at execution, so the fetched
     // amount underfunds the bundle. The residual is skimmed back by the escape action.
     const accrualTimestamp = MathLib.max(Time.timestamp(), venue.lastUpdate) + Time.s.from.h(2n);
     const venueDebt = venue.getAccrualDebt(accrualTimestamp);
     // Native funds the debt first; the ERC-20 pulled is the remainder.
-    const amount = MathLib.zeroFloorSub(venueDebt, nativeAmount);
+    const erc20Amount = MathLib.zeroFloorSub(venueDebt, nativeAmount);
 
     return {
       getRequirements: async (params?: { useSimplePermit?: boolean }) => {
         const [erc20Requirements, authorizationRequirement] = await Promise.all([
           getGeneralAdapterRequirements(this.client.viemClient, {
-            address: loan.debtToken,
+            address: debtToken,
             chainId: this.chainId,
             supportSignature: this.client.options.supportSignature,
             useSimplePermit: params?.useSimplePermit,
-            args: { amount, from: userAddress },
+            args: { amount: erc20Amount, from: userAddress },
           }),
           getIrisAuthorizationRequirement({
             viemClient: this.client.viemClient,
             chainId: this.chainId,
-            userAddress: loan.borrower,
+            userAddress: borrower,
             supportSignature: this.client.options.supportSignature,
           }),
         ]);
@@ -1370,9 +1371,9 @@ export class Iris implements IrisActions {
           chainId: this.chainId,
           args: {
             pod,
-            token: loan.debtToken,
+            token: debtToken,
             receiver: userAddress,
-            amount,
+            amount: erc20Amount,
             nativeAmount,
             requirementSignature: permit,
             authorizationSignature: authorization,
@@ -1446,7 +1447,7 @@ export class Iris implements IrisActions {
     positionData.refinance(newVenue, accrualTimestamp);
     const venueDebt = venue.getAccrualDebt(accrualTimestamp);
     // Native funds the pull first; the ERC-20 pulled is the remainder.
-    const amount = MathLib.zeroFloorSub(venueDebt, nativeAmount);
+    const erc20Amount = MathLib.zeroFloorSub(venueDebt, nativeAmount);
 
     return {
       getRequirements: async (params?: { useSimplePermit?: boolean }) => {
@@ -1455,7 +1456,7 @@ export class Iris implements IrisActions {
             address: debtToken,
             chainId: this.chainId,
             supportSignature: this.client.options.supportSignature,
-            args: { amount, from: userAddress },
+            args: { amount: erc20Amount, from: userAddress },
             useSimplePermit: params?.useSimplePermit,
           }),
           getIrisAuthorizationRequirement({
@@ -1484,7 +1485,7 @@ export class Iris implements IrisActions {
             pod,
             token: debtToken,
             receiver: userAddress,
-            amount,
+            amount: erc20Amount,
             nativeAmount,
             newVenueId: newVenue.id,
             data: newVenue.data,
