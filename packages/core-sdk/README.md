@@ -316,6 +316,8 @@ const signature = await walletClient.signTypedData(getQuoteTypedData(ChainId.Eth
 - `getPermit2PermitTypedData(args, chainId)`: a [Permit2](./src/signatures/permit2.ts) allowance (`PermitSingle`)
 - `getPermit2TransferFromTypedData(args, chainId)`: a [Permit2](./src/signatures/permit2.ts) signature transfer (`PermitTransferFrom`)
 
+ERC-2612 domains are curated per chain: [`SIMPLE_PERMIT_TOKENS`](./src/signatures/permit.ts) records the tokens whose permit is verified against the live deployment and the EIP-712 domain `version` each one signs. `getPermitTypedData` takes its `version` from there, falling back to the `"1"` most ERC-2612 tokens sign.
+
 ### Addresses & registries
 
 Two static, per-chain sources, both narrowed to the exact chain by their getter:

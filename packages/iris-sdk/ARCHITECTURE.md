@@ -165,7 +165,8 @@ getGeneralAdapterRequirements(viemClient, params)
 │
 └─ supportSignature: true
      │
-     ├─ useSimplePermit: true AND token is not DAI AND ERC-2612 nonce probe succeeds
+     ├─ useSimplePermit: true AND token verified in SIMPLE_PERMIT_TOKENS (never DAI)
+     │  AND ERC-2612 nonce probe succeeds
      │    └─► getGeneralAdapterRequirementsPermit()
      │         Returns: Requirement[] with sign() → permit
      │         • Always exact-amount, never skipped: an ERC-2612 permit overwrites
@@ -181,7 +182,7 @@ getGeneralAdapterRequirements(viemClient, params)
                   (the tuple's nonce is read, the amount is never skipped).
 ```
 
-The simple-permit probe is intentionally shallow — it reads `nonces(owner)` and treats success as ERC-2612 support. `useSimplePermit` left unset (or `false`) is the escape hatch for tokens that expose `nonces` but are incompatible; DAI's non-standard permit is a built-in case of that and always falls through to Permit2.
+The simple-permit gate has two halves: the token must be verified in core-sdk's `SIMPLE_PERMIT_TOKENS` — the per-chain allowlist recording the EIP-712 domain `version` each one signs, checked against the live `DOMAIN_SEPARATOR()` — and it must expose a readable `nonces(owner)`. An unverified token routes to Permit2 without even the probe, since signing a guessed domain reverts at execution. `useSimplePermit` left unset (or `false`) is the escape hatch for tokens that pass both checks but are still incompatible; DAI's non-standard permit is a built-in case of that and always falls through to Permit2.
 
 ### The Iris authorization requirement
 

@@ -110,7 +110,7 @@ Every flow that moves tokens into the protocol returns two things:
 Typical requirements:
 
 - **ERC-20 approval** — the user must approve `GeneralAdapter1` (or, in the Permit2 flow, the Permit2 contract) to pull tokens. Returned as a standard `approve` transaction the consumer sends first.
-- **Permit / Permit2 signature** — off-chain approvals that go into `buildTx` in the `signatures` array, avoiding the extra approval transaction. Enabled via `irisViemExtension({ supportSignature: true })`; pass `useSimplePermit: true` to `getRequirements` to prefer an EIP-2612 permit when the token supports it.
+- **Permit / Permit2 signature** — off-chain approvals that go into `buildTx` in the `signatures` array, avoiding the extra approval transaction. Enabled via `irisViemExtension({ supportSignature: true })`; pass `useSimplePermit: true` to `getRequirements` to prefer an EIP-2612 permit for tokens verified in core-sdk's `SIMPLE_PERMIT_TOKENS` allowlist (unverified tokens fall through to Permit2).
 - **Iris authorization** — bundled paths that operate on a user's loan require that user to authorize `GeneralAdapter1` on Iris: `take`, `close` and `escape` need the borrower's authorization, `refinance` the solver's. Returned as a `setAuthorization` transaction — or, with `supportSignature`, as a signable requirement folded into the bundle via `setAuthorizationWithSig` — and omitted when the authorization is already in place.
 
 Usage pattern:
