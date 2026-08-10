@@ -1,21 +1,19 @@
 import { getAddress, keccak256 } from "viem";
 import { describe, expect, test } from "vitest";
+import { entries } from "@iris-credit/iris-ts";
 import { ChainId } from "./chain.js";
 import { BP } from "./constants.js";
 import { UnknownDataHashError, UnsupportedChainIdError } from "./errors.js";
 import { MathLib } from "./math/index.js";
 import { CHAIN_REGISTRIES, getChainRegistry, getMarketData } from "./registries.js";
 
-const registries = Object.entries(CHAIN_REGISTRIES) as [
-  string,
-  ReturnType<typeof getChainRegistry>,
-][];
+const registries = entries(CHAIN_REGISTRIES);
 
 describe("CHAIN_REGISTRIES", () => {
   test.each(registries)(
     "should key market data preimages by their enabled hash on chain %s",
     (_, registry) => {
-      for (const [hash, { data }] of Object.entries(registry.marketDatas))
+      for (const [hash, { data }] of entries(registry.marketDatas))
         expect(keccak256(data)).toBe(hash);
     },
   );
