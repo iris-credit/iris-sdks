@@ -1,5 +1,12 @@
 # @iris-credit/iris-sdk
 
+## 0.3.1
+
+### Patch Changes
+
+- Updated dependencies [[`4477595`](https://github.com/iris-credit/iris-sdks/commit/4477595f7ba4ee56632cb3fac08323782e591fa4)]:
+  - @iris-credit/core-sdk@0.3.0
+
 ## 0.3.0
 
 ### Minor Changes
