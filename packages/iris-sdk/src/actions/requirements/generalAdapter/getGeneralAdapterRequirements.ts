@@ -8,7 +8,12 @@ import type {
 
 import { erc20Abi, isAddressEqual } from "viem";
 import { readContract } from "viem/actions";
-import { erc2612Abi, getChainAddresses, permit2Abi } from "@iris-credit/core-sdk";
+import {
+  erc2612Abi,
+  getChainAddresses,
+  getPermitDomainVersion,
+  permit2Abi,
+} from "@iris-credit/core-sdk";
 import { isDefined } from "@iris-credit/iris-ts";
 import { ChainIdMismatchError } from "../../../types/index.js";
 import { getRequirementsApproval } from "../getRequirementsApproval.js";
@@ -34,7 +39,7 @@ export type GetGeneralAdapterRequirementsParams =
       /**
        * Prefer the ERC-2612 simple-permit path when the SDK detects support.
        * Leave unset or set to `false` to force the Permit2 fallback when a token is known to be
-       * incompatible despite passing the SDK's shallow nonce probe.
+       * incompatible despite its verified domain and a passing nonce probe.
        */
       useSimplePermit?: boolean;
     });
@@ -48,17 +53,17 @@ export type GetGeneralAdapterRequirementsParams =
  *
  * 1. **`supportSignature: false`** — classic ERC-20 `approve` transaction (or no-op when the
  *    direct allowance is already large enough).
- * 2. **`supportSignature: true` + EIP-2612 nonce detected + `useSimplePermit`** — single permit
- *    signature against the token itself. DAI is excluded from this branch (its non-standard
- *    permit signature is incompatible) and falls through to Permit2 even with
- *    `useSimplePermit: true`.
+ * 2. **`supportSignature: true` + verified permit domain + EIP-2612 nonce detected +
+ *    `useSimplePermit`** — single permit signature against the token itself. DAI is excluded
+ *    from this branch (its non-standard permit signature is incompatible) and falls through to
+ *    Permit2 even with `useSimplePermit: true`.
  * 3. **`supportSignature: true`, default** — Permit2 flow: classic approval to the Permit2
  *    contract (if needed), followed by a Permit2 signature against `GeneralAdapter1`.
  *
- * The simple-permit compatibility check is intentionally shallow: when requested, it probes
- * whether the token exposes a readable ERC-2612 `nonces(owner)` value.
+ * The simple-permit gate has two halves: a verified domain version in `SIMPLE_PERMIT_TOKENS`
+ * (unverified tokens route to Permit2 unprobed) and a readable ERC-2612 `nonces(owner)`.
  * Leaving `useSimplePermit` unset, or passing `false`, is the caller escape hatch for tokens
- * that expose `nonces` but are still incompatible with the SDK's ERC-2612 encoder.
+ * that pass both checks but are still incompatible with the SDK's ERC-2612 encoder.
  * DAI is handled as a built-in version of that incompatibility: it exposes `nonces(owner)` but is
  * always routed to Permit2/classic approval instead of DAI-specific permit signing.
  *
@@ -70,9 +75,9 @@ export type GetGeneralAdapterRequirementsParams =
  * @param params.args.from - Account that will grant the approval.
  * @param params.supportSignature - Whether the integrator can collect a signature; controls
  *   permit / permit2 vs. classic approval.
- * @param params.useSimplePermit - When `supportSignature` is `true`, prefer EIP-2612 permit if
- *   the nonce probe detects support. Leave unset or pass `false` to force the Permit2 fallback
- *   for tokens known to be incompatible despite passing that probe.
+ * @param params.useSimplePermit - When `supportSignature` is `true`, prefer EIP-2612 permit for
+ *   a token with a verified domain whose nonce probe succeeds. Leave unset or pass `false` to
+ *   force the Permit2 fallback for tokens known to be incompatible despite those checks.
  * @returns Promise resolving to an array of either deep-frozen approval transactions or
  *   `Requirement` objects (signature requirements with a `sign()` method). Empty when `amount`
  *   is zero or when the classic-approval path can reuse sufficient direct allowance.
@@ -122,7 +127,8 @@ export const getGeneralAdapterRequirements = async (
     const { useSimplePermit } = params;
     const isDai = isAddressEqual(address, tokens.DAI);
 
-    if (useSimplePermit && !isDai) {
+    // Unverified tokens route to Permit2.
+    if (useSimplePermit && !isDai && isDefined(getPermitDomainVersion(address, chainId))) {
       const erc2612Nonce = await readContract(viemClient, {
         abi: erc2612Abi,
         address,

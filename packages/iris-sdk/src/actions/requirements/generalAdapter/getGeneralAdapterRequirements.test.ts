@@ -18,7 +18,7 @@ import { getGeneralAdapterRequirementsPermit } from "./getGeneralAdapterRequirem
 describe("getGeneralAdapterRequirements", () => {
   const {
     permit2,
-    tokens: { DAI, USDC, WETH },
+    tokens: { cbBTC, DAI, USDC, USDT, WETH },
     bundler3: { generalAdapter1 },
   } = getChainAddresses(CHAIN_ID);
 
@@ -200,6 +200,51 @@ describe("getGeneralAdapterRequirements", () => {
         }
         expect(permit.action.type).toBe("permit");
         expect(permit.action.args.amount).toBe(mockAmount);
+      });
+
+      test("should return simple permit for a verified token that is not USDC", async () => {
+        mockTokenReads(cbBTC, { erc2612Nonce: 0n });
+        mockTokenMetadata(cbBTC);
+
+        const requirements = await getGeneralAdapterRequirements(mockClient, {
+          supportSignature: true,
+          address: cbBTC,
+          chainId: CHAIN_ID,
+          args: { amount: mockAmount, from: mockFrom },
+          useSimplePermit: true,
+        });
+
+        expect(requirements).toHaveLength(1);
+        expect(requirements[0]?.action.type).toBe("permit");
+      });
+
+      test("should fall back to permit2 for a token with no verified permit domain, unprobed", async () => {
+        // The nonce read is registered, so if the gate wrongly probed, the permit path would win.
+        mockTokenReads(USDT, {
+          erc20Allowance: 2000000n,
+          erc2612Nonce: 0n,
+          permit2Allowance: [0n, 0, 0],
+        });
+
+        const requirements = await getGeneralAdapterRequirements(mockClient, {
+          supportSignature: true,
+          address: USDT,
+          chainId: CHAIN_ID,
+          args: { amount: mockAmount, from: mockFrom },
+          useSimplePermit: true,
+        });
+
+        expect(requirements).toHaveLength(1);
+        expect(requirements[0]?.action.type).toBe("permit2");
+
+        // The unverified token must not even be probed for a nonce.
+        expect(
+          expectReadCall(mockHandle, {
+            address: USDT,
+            abi: erc2612Abi,
+            functionName: "nonces",
+          }),
+        ).toHaveLength(0);
       });
     });
 
