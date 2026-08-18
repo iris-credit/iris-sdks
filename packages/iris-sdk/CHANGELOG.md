@@ -1,5 +1,11 @@
 # @iris-credit/iris-sdk
 
+## 0.3.3
+
+### Patch Changes
+
+- [#110](https://github.com/iris-credit/iris-sdks/pull/110) [`b668b5c`](https://github.com/iris-credit/iris-sdks/commit/b668b5c7a79b5b5c8a0ef91c04e9516c36b415be) Thanks [@madiha-right](https://github.com/madiha-right)! - Fund `repay` and `close` with one unit of rounding headroom (`REPAY_ROUNDING_HEADROOM`) on top of the 2h projection. Before maturity the settled fixed leg is two separately floored terms — accrued to the settlement timestamp, residual from there to maturity — whose exact sum does not depend on that timestamp, so the projection re-rounds the split rather than bounding it and the contract's figure at the mined block could sit one unit above the funding, reverting the pull with `ERC20: transfer amount exceeds balance` out of `GeneralAdapter1`. The sweep returns the unit.
+
 ## 0.3.2
 
 ### Patch Changes
