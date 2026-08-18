@@ -180,7 +180,7 @@ The same `nativeAmount` parameter funds the debt token on `repay` / `close` / `e
 
 ### Repay
 
-Closes the loan in full. Iris prices the debt at execution — the amount owed accrues per second — so the bundle funds the position projected two hours forward and a final sweep returns whatever the pull left behind. The projection doubles as the transaction's validity window: rebuild after two hours rather than sending a stale one.
+Closes the loan in full. Iris prices the debt at execution — the amount owed accrues per second — so the bundle funds the position projected two hours forward, plus one unit of rounding headroom (`REPAY_ROUNDING_HEADROOM`) for the pre-maturity fixed leg, which the projection only re-rounds, and a final sweep returns whatever the pull left behind. The projection doubles as the transaction's validity window: rebuild after two hours rather than sending a stale one.
 
 ```typescript
 const positionData = await iris.getPositionData(pod);
@@ -198,7 +198,7 @@ Repay resolves the loan but leaves the collateral with the position — recover 
 
 ### Close
 
-Resolves the loan and exits its venue position in one bundle — `repay` then `escape` — so the collateral repay leaves behind comes back atomically, yield included. The repayment leg funds the position projected two hours forward and sweeps the residual back, exactly as `repay` sizes it; the projection doubles as the validity window — rebuild after two hours rather than sending a stale one. The exit rides on `Iris.escape` rather than `withdrawCollateral`: escape sends the venue balance as it stands at execution, where an exact amount a rebase invalidated would revert or strand dust. Unlike the permissionless `repay`, close is borrower-only — `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator, and the escape leg runs on their Iris authorization. A loan already **resolved** leaves nothing to repay and throws `LoanResolvedError` — reach for `escape` on its own to recover the collateral.
+Resolves the loan and exits its venue position in one bundle — `repay` then `escape` — so the collateral repay leaves behind comes back atomically, yield included. The repayment leg funds the position projected two hours forward plus the rounding headroom and sweeps the residual back, exactly as `repay` sizes it; the projection doubles as the validity window — rebuild after two hours rather than sending a stale one. The exit rides on `Iris.escape` rather than `withdrawCollateral`: escape sends the venue balance as it stands at execution, where an exact amount a rebase invalidated would revert or strand dust. Unlike the permissionless `repay`, close is borrower-only — `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator, and the escape leg runs on their Iris authorization. A loan already **resolved** leaves nothing to repay and throws `LoanResolvedError` — reach for `escape` on its own to recover the collateral.
 
 ```typescript
 const positionData = await iris.getPositionData(pod);

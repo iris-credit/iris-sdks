@@ -8,7 +8,7 @@
 - Mirror `Iris.sol`'s rejections locally with typed errors — the pure subset of the contract's requires — and do not re-read guarantees the RFQ or the contract verifies (solver signature, enabled configuration, bond requirement).
 - Actions are pure encoders returning deep-frozen `Transaction<TAction>` with a typed `action` discriminator — no RPC, no clock, no signing — composing bundles in on-chain execution order with explicit `skipRevert` args.
 - Route through Bundler3 / `GeneralAdapter1` only when the flow moves tokens in; withdraw and claim paths encode direct Iris calls.
-- Forward-accrue accruing pulls (repay, escape, refinance) two hours past now and sweep the residual back to the receiver; funding the fetched amount under-funds the pull.
+- Forward-accrue accruing pulls (repay, escape, refinance) two hours past now and sweep the residual back to the receiver; funding the fetched amount under-funds the pull. Repay-sized pulls add `REPAY_ROUNDING_HEADROOM`: the pre-maturity fixed leg is a fixed total the projection only re-rounds, so it can settle one unit above the projection at the mined block.
 - Buffer LLTV ceilings by `DEFAULT_LLTV_BUFFER`: withdraw ceilings below the venue / bond LLTV so a withdrawal sized to the fetched state still clears the on-chain check, and take's max borrow below the venue LLTV so the loan does not open one accrual away from venue liquidation.
 - Enforce builder = signer: entity flows `validateUserAddress` against the role the contract pins (borrower or solver), and signature encoders re-enforce it at `sign()` time.
 - `buildTx` consumes at most one permit and one authorization signature; split arrays with `selectRequirementSignatures`, rejecting ambiguous or unexpected kinds instead of dropping them.
