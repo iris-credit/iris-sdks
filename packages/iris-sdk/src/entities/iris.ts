@@ -62,6 +62,7 @@ import { getGeneralAdapterRequirements } from "../actions/requirements/generalAd
 import { getIrisAuthorizationRequirement } from "../actions/requirements/iris/getIrisAuthorizationRequirement.js";
 import {
   DEFAULT_LLTV_BUFFER,
+  REPAY_ROUNDING_HEADROOM,
   validateChainId,
   validateNativeAsset,
   validateUserAddress,
@@ -774,11 +775,13 @@ export class Iris implements IrisActions {
   /**
    * Prepares a repay transaction closing an existing Iris loan.
    *
-   * Sizes the funding from the pre-fetched `positionData`, projected two hours forward: Iris
-   * accrues `lastUpdate → execution` inside `repay` and pulls whatever the loan owes then, so
-   * funding the amount owed at the fetched state would under-fund the pull and revert. The
-   * bundle sweeps the leftover back to `userAddress`, and the projection doubles as the
-   * transaction's validity window — rebuild it after two hours rather than sending a stale one.
+   * Sizes the funding from the pre-fetched `positionData`, projected two hours forward plus
+   * `REPAY_ROUNDING_HEADROOM`: Iris accrues `lastUpdate → execution` inside `repay` and pulls
+   * whatever the loan owes then, so funding the amount owed at the fetched state would under-fund
+   * the pull and revert, and the pre-maturity fixed leg — a fixed total the projection only
+   * re-rounds — can settle one unit above it at the mined block. The bundle sweeps the leftover
+   * back to `userAddress`, and the projection doubles as the transaction's validity window —
+   * rebuild it after two hours rather than sending a stale one.
    *
    * The repayment is permissionless, so `userAddress` is just the payer closing the loan — it
    * need not be the loan's borrower. It resolves the loan but leaves the collateral with the
@@ -822,12 +825,13 @@ export class Iris implements IrisActions {
     if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
 
     // Forward-accrue (2h) before sizing the funding: Iris accrues `lastUpdate → execution` inside
-    // `repay`, so funding the amount owed now under-funds the pull.
+    // `repay`, so funding the amount owed now under-funds the pull. The projection bounds what
+    // accrues per second; the headroom covers the pre-maturity fixed leg, which it only re-rounds.
     const accrualTimestamp =
       MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate) + Time.s.from.h(2n);
     const { repaid } = positionData.repay(accrualTimestamp);
     // Native funds the pull first; the ERC-20 pulled is the remainder.
-    const erc20Amount = MathLib.zeroFloorSub(repaid, nativeAmount);
+    const erc20Amount = MathLib.zeroFloorSub(repaid + REPAY_ROUNDING_HEADROOM, nativeAmount);
 
     return {
       getRequirements: (params?: { useSimplePermit?: boolean }) =>
@@ -860,11 +864,12 @@ export class Iris implements IrisActions {
   /**
    * Prepares a close transaction resolving an existing Iris loan and recovering its collateral.
    *
-   * Sizes the funding exactly as {@link Iris.repay} does — projected two hours forward, leftover
-   * swept back to `userAddress` — then exits the venue position in the same bundle, so the
-   * collateral `Iris.repay` leaves behind comes back atomically. The exit runs on `Iris.escape`,
-   * which sends the venue balance as it stands at execution, where an exact `withdrawCollateral`
-   * amount a rebase invalidated would revert or strand dust.
+   * Sizes the funding exactly as {@link Iris.repay} does — projected two hours forward plus
+   * `REPAY_ROUNDING_HEADROOM`, leftover swept back to `userAddress` — then exits the venue
+   * position in the same bundle, so the collateral `Iris.repay` leaves behind comes back
+   * atomically. The exit runs on `Iris.escape`, which sends the venue balance as it stands at
+   * execution, where an exact `withdrawCollateral` amount a rebase invalidated would revert or
+   * strand dust.
    *
    * Unlike the permissionless `repay`, `userAddress` must be the loan's borrower:
    * `GeneralAdapter1.irisEscape` pins them as the bundle initiator and the escape runs on their
@@ -914,12 +919,13 @@ export class Iris implements IrisActions {
     if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
 
     // Forward-accrue (2h) before sizing the funding: Iris accrues `lastUpdate → execution` inside
-    // `repay`, so funding the amount owed now under-funds the pull.
+    // `repay`, so funding the amount owed now under-funds the pull. The projection bounds what
+    // accrues per second; the headroom covers the pre-maturity fixed leg, which it only re-rounds.
     const accrualTimestamp =
       MathLib.max(Time.timestamp(), lastUpdate, venue.lastUpdate) + Time.s.from.h(2n);
     const { repaid } = positionData.repay(accrualTimestamp);
     // Native funds the pull first; the ERC-20 pulled is the remainder.
-    const erc20Amount = MathLib.zeroFloorSub(repaid, nativeAmount);
+    const erc20Amount = MathLib.zeroFloorSub(repaid + REPAY_ROUNDING_HEADROOM, nativeAmount);
 
     return {
       getRequirements: async (params?: { useSimplePermit?: boolean }) => {

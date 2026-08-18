@@ -22,6 +22,7 @@ import {
   ORACLE_PRICE_SCALE,
   permit2Abi,
 } from "@iris-credit/core-sdk";
+import { Time } from "@iris-credit/iris-ts";
 import { createMockClient, expectReadCall, mockRead } from "@iris-credit/test/mock";
 import {
   BORROWER,
@@ -39,6 +40,7 @@ import {
   quote as buildQuote,
 } from "../../test/helpers/iris.js";
 import { irisViemExtension } from "../client/index.js";
+import { REPAY_ROUNDING_HEADROOM } from "../helpers/index.js";
 import {
   AddressMismatchError,
   ChainIdMismatchError,
@@ -627,6 +629,117 @@ describe("Iris.refinance", () => {
   });
 });
 
+describe("Iris.repay", () => {
+  let handle: MockClientHandle;
+
+  const makeIris = () => handle.client.extend(irisViemExtension()).iris.core(CHAIN_ID);
+
+  beforeEach(() => {
+    handle = createMockClient(mainnet);
+  });
+
+  const LAST_UPDATE = 1_990_000_000n;
+  /** The sizing projection: `LAST_UPDATE` leads the test-run clock, so this is the accrual floor. */
+  const PROJECTION = LAST_UPDATE + Time.s.from.h(2n);
+  const LLTV = 800_000_000_000_000_000n;
+
+  const loan = {
+    pod: POD,
+    borrower: BORROWER,
+    solver: SOLVER,
+    collateralToken: COLLATERAL_TOKEN,
+    debtToken: DEBT_TOKEN,
+    venueBitmap: 0b11n,
+    maturity: 2_100_000_000n,
+    overduePeriod: 3_600n,
+    // 7.5%: at this rate the 2h projection floors the fixed-leg split one unit under what the
+    // contract settles at most seconds of the window, so the headroom is load-bearing below.
+    fixedRate: 75_000_000_000_000_000n,
+    overdueRate: 200_000_000_000_000_000n,
+    bondLltv: 500_000_000_000_000_000n,
+    fee: 200_000_000_000_000_000n,
+  } as const;
+
+  const venue = new MorphoBlueVenue(
+    {
+      id: 0n,
+      data: "0x",
+      pod: POD,
+      collateral: 2n * MathLib.WAD,
+      debt: MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: LLTV,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: LAST_UPDATE,
+    },
+    {
+      totalSupplyAssets: 2n * MathLib.WAD,
+      totalBorrowAssets: MathLib.WAD,
+      totalBorrowShares: 10n ** 24n,
+      lastUpdate: LAST_UPDATE,
+    },
+    { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
+  );
+
+  const positionData = () =>
+    new AccrualPosition(
+      {
+        pod: POD,
+        collateral: 2n * MathLib.WAD,
+        debt: MathLib.WAD,
+        bond: 100_000_000_000_000_000n,
+        bondRequirement: 1n,
+        collateralIndex: MathLib.RAY,
+        debtIndex: MathLib.RAY,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        surplus: 0n,
+        lastUpdate: LAST_UPDATE,
+        venueId: 0n,
+        data: "0x",
+      },
+      loan,
+      venue,
+    );
+
+  test("default: builds the funding + repay + sweep bundle for the payer", () => {
+    const tx = makeIris().repay({ userAddress: BORROWER, positionData: positionData() }).buildTx();
+
+    expect(tx.to).toBe(bundler3);
+    expect(tx.action.type).toBe("irisRepay");
+    expect(tx.action.args.receiver).toBe(BORROWER);
+    expect(decodeBundle(tx.data).map((call) => call.to)).toContain(generalAdapter1);
+  });
+
+  test("behavior: funds the 2h projection plus the rounding headroom", () => {
+    const tx = makeIris().repay({ userAddress: BORROWER, positionData: positionData() }).buildTx();
+
+    expect(tx.action.args.transferAmount).toBe(
+      positionData().repay(PROJECTION).repaid + REPAY_ROUNDING_HEADROOM,
+    );
+  });
+
+  // Before maturity the settled fixed leg is two separately floored terms of a fixed total, so the
+  // projection re-rounds the split rather than bounding it: the contract's figure at the mined
+  // block can sit one unit above it, which the headroom must cover.
+  test("behavior: the funding covers the contract's figure at every second of the window", () => {
+    const tx = makeIris().repay({ userAddress: BORROWER, positionData: positionData() }).buildTx();
+    const { transferAmount } = tx.action.args;
+    const projected = positionData().repay(PROJECTION).repaid;
+
+    let maxRepaid = 0n;
+    for (let timestamp = LAST_UPDATE; timestamp <= PROJECTION; timestamp += 60n) {
+      maxRepaid = MathLib.max(maxRepaid, positionData().repay(timestamp).repaid);
+    }
+
+    // The projection alone would have under-funded the pull …
+    expect(maxRepaid).toBe(projected + 1n);
+    // … and the headroom is exactly what covers it.
+    expect(maxRepaid).toBe(transferAmount);
+  });
+});
+
 describe("Iris.close", () => {
   let handle: MockClientHandle;
 
@@ -706,6 +819,14 @@ describe("Iris.close", () => {
     // The funding is sized above the fetched debt: repay prices the loan at execution.
     expect(tx.action.args.transferAmount).toBeGreaterThan(MathLib.WAD);
     expect(decodeBundle(tx.data).map((call) => call.to)).toContain(generalAdapter1);
+  });
+
+  test("behavior: sizes the funding as repay does — the 2h projection plus the headroom", () => {
+    const tx = makeIris().close({ userAddress: BORROWER, positionData: positionData() }).buildTx();
+
+    expect(tx.action.args.transferAmount).toBe(
+      positionData().repay(LAST_UPDATE + Time.s.from.h(2n)).repaid + REPAY_ROUNDING_HEADROOM,
+    );
   });
 
   // `GeneralAdapter1.irisEscape` pins the borrower, unlike the permissionless `repay`.

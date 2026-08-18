@@ -7,6 +7,15 @@ import { ChainId, MathLib } from "@iris-credit/core-sdk";
 export const DEFAULT_LLTV_BUFFER = MathLib.WAD / 200n;
 
 /**
+ * Rounding headroom on the repay funding, in debt-token units. Before maturity the settled fixed
+ * leg is two separately floored terms — the interest accrued to the settlement timestamp and the
+ * residual from there to maturity — whose exact sum does not depend on that timestamp, so
+ * projecting it forward re-rounds the split rather than bounding it: the contract's figure at
+ * the mined block can sit one unit above the projection. The sweep returns the unit.
+ */
+export const REPAY_ROUNDING_HEADROOM = 1n;
+
+/**
  * Tokens that require setting allowance from zero before changing approval.
  */
 export const APPROVE_ONLY_ONCE_TOKENS: Partial<Record<number, Address[]>> = {
