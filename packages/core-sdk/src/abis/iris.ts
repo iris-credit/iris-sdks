@@ -1777,6 +1777,11 @@ export const irisAbi = [
   },
   {
     type: "error",
+    name: "LiquidatableLoan",
+    inputs: [],
+  },
+  {
+    type: "error",
     name: "LoanNotCreated",
     inputs: [],
   },

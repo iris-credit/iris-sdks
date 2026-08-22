@@ -578,6 +578,20 @@ describe("AccrualPosition", () => {
       ).toThrow(IrisCoreErrors.LoanResolved);
     });
 
+    test("should throw once the loan is liquidatable", () => {
+      const liquidatable = { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 1n };
+
+      expect(() => new AccrualPosition(liquidatable, loan, venue).refinance(target)).toThrow(
+        IrisCoreErrors.LiquidatableLoan,
+      );
+    });
+
+    test("should refinance at the liquidatable boundary", () => {
+      const atBoundary = { ...position, lastUpdate: loan.maturity + loan.overduePeriod };
+
+      expect(() => new AccrualPosition(atBoundary, loan, venue).refinance(target)).not.toThrow();
+    });
+
     test("should throw when the price is unknown", () => {
       expect(() =>
         new AccrualPosition(

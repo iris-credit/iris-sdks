@@ -1419,6 +1419,8 @@ export class Iris implements IrisActions {
    * @throws {IrisCoreErrors.UnknownVenuePrice} when either venue's price is unknown.
    * @throws {IrisCoreErrors.LoanResolved} when the loan is already resolved.
    * @throws {IrisCoreErrors.NotAllowedVenue} when the loan's venue bitmap disallows `newVenue`.
+   * @throws {IrisCoreErrors.LiquidatableLoan} when the loan is past its overdue period at the
+   *   projected accrual timestamp.
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} when `newVenue` cannot carry the
    *   migrated position.
    */
