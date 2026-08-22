@@ -180,6 +180,13 @@ export namespace IrisCoreErrors {
     }
   }
 
+  /** Error thrown when a refinance is requested after the loan became liquidatable. */
+  export class LiquidatableLoan extends Error {
+    constructor(public readonly pod: Address) {
+      super(`liquidatable loan for pod ${pod}: past maturity and overdue period`);
+    }
+  }
+
   /** Error thrown when a bond withdrawal would leave the bond unhealthy. */
   export class InsufficientBond extends Error {
     constructor(public readonly pod: Address) {

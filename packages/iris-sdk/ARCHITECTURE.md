@@ -49,7 +49,7 @@ Iris is fixed-rate, fixed-term lending overlaid on variable-rate venues. The SDK
 - **Servicing.** While the loan is open, collateral and bond can be topped up permissionlessly (`supplyCollateral`, `supplyBond` — anyone can fund them), and withdrawn by their owners (`withdrawCollateral` by the borrower, `withdrawBond` by the solver) down to health ceilings Iris re-checks on-chain.
 - **Resolution.** `repay` closes the loan — always in full, priced at execution as the legs accrue per second, permissionless. Past `maturity + overduePeriod` the loan is instead liquidatable. Either way the loan becomes **resolved**: settlement credits the solver's net and surplus, and the protocol's fees, to claimable balances drawn down with `claim`.
 - **After resolution.** The pod may still hold a venue position (repay leaves the collateral with it). `escape` exits it: the borrower settles any remaining venue debt and withdraws the venue collateral, yield included. `close` fuses the two legs into one bundle.
-- **Refinance.** At any time while open, the solver can move the position to another venue enabled in the loan's `venueBitmap` — `refinance` clears the current venue's debt and re-enters the new one atomically.
+- **Refinance.** Until the loan becomes liquidatable, the solver can move the position to another venue enabled in the loan's `venueBitmap` — `refinance` clears the current venue's debt and re-enters the new one atomically.
 
 Two facts shape the SDK's flows:
 

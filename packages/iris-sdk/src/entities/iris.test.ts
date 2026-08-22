@@ -616,6 +616,19 @@ describe("Iris.refinance", () => {
       venue,
     );
 
+  test("error: LiquidatableLoan when the loan is past its overdue period", () => {
+    // maturity + overduePeriod (2_000_003_600) falls inside the 2h projected accrual window.
+    const overdue = new AccrualPosition(
+      positionData(),
+      { ...loan, maturity: NEW_VENUE_LAST_UPDATE },
+      venue,
+    );
+
+    expect(() =>
+      makeIris().refinance({ userAddress: SOLVER, positionData: overdue, newVenue }),
+    ).toThrow(IrisCoreErrors.LiquidatableLoan);
+  });
+
   // The migration replay accrues the target venue too: fetched from a chain whose clock leads
   // the local one by more than the 2h buffer, its `lastUpdate` must be in the accrual floor or
   // the flow throws `InvalidInterestAccrual` before ever building a tx.
