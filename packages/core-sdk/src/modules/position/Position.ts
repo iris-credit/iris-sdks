@@ -646,6 +646,7 @@ export class AccrualPosition extends Position {
    * @throws {IrisCoreErrors.LoanResolved} When the loan is already resolved.
    * @throws {IrisCoreErrors.NotAllowedVenue} When the loan's venue bitmap disallows the
    *   venue.
+   * @throws {IrisCoreErrors.LiquidatableLoan} When the loan is liquidatable once accrued.
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the venue cannot support the
    *   migrated position, which Iris rejects when entering it.
    */
@@ -659,6 +660,9 @@ export class AccrualPosition extends Position {
     }
 
     const position = this.accrueLegs(timestamp).rebase();
+
+    if (position.isLiquidatable) throw new IrisCoreErrors.LiquidatableLoan(position.pod);
+
     // The pod exits its old venue entirely and enters the new one with the same assets.
     const migrated = venue
       .supplyCollateral(position.venue.collateral, timestamp)
