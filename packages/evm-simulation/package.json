@@ -1,6 +1,6 @@
 {
   "name": "@iris-credit/evm-simulation",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "EVM simulation engine for Iris transactions.",
   "license": "MIT",
   "repository": {

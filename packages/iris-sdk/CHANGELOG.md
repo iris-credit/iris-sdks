@@ -1,5 +1,14 @@
 # @iris-credit/iris-sdk
 
+## 0.3.4
+
+### Patch Changes
+
+- [#112](https://github.com/iris-credit/iris-sdks/pull/112) [`1b33d21`](https://github.com/iris-credit/iris-sdks/commit/1b33d21b80baa6db1db5df28427afb21c7bdb313) Thanks [@madiha-right](https://github.com/madiha-right)! - Mirror iris-core's refinance liquidatable gate: `AccrualPosition.refinance` now throws the new `IrisCoreErrors.LiquidatableLoan` once the loan is past `maturity + overduePeriod` at the accrual timestamp — the contract rejects the call the same way, and the error joins the vendored `irisAbi`. `Iris.refinance` inherits the rejection through the replay, evaluated at the 2h projected accrual timestamp like every other precondition.
+
+- Updated dependencies [[`1b33d21`](https://github.com/iris-credit/iris-sdks/commit/1b33d21b80baa6db1db5df28427afb21c7bdb313)]:
+  - @iris-credit/core-sdk@0.4.0
+
 ## 0.3.3
 
 ### Patch Changes
