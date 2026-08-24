@@ -57,6 +57,14 @@ describe("irisTake", () => {
     expect(callNames(decodeBundle(tx.data))).toEqual(["erc20TransferFrom", "irisTake"]);
   });
 
+  test("behavior: does not freeze the caller's quote", () => {
+    const quote = buildQuote();
+
+    irisTake({ chainId: CHAIN_ID, args: { quote, quoteSignature } });
+
+    expect(Object.isFrozen(quote)).toBe(false);
+  });
+
   test("behavior: creates a take transaction with native wrapping", () => {
     const quote = buildQuote({ collateralToken: wNative });
 

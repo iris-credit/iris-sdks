@@ -181,7 +181,9 @@ export const irisTake = ({
     ...tx,
     action: {
       type: "irisTake",
-      args: { quote, quoteSignature },
+      // Copied so the freeze below cannot reach the caller's quote.
+      // Shallow copy suffices because every Quote field is a primitive.
+      args: { quote: { ...quote }, quoteSignature },
     },
   });
 };
