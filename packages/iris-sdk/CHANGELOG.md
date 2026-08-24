@@ -1,5 +1,11 @@
 # @iris-credit/iris-sdk
 
+## 0.3.5
+
+### Patch Changes
+
+- [#114](https://github.com/iris-credit/iris-sdks/pull/114) [`737bd07`](https://github.com/iris-credit/iris-sdks/commit/737bd078a76f839d0d6f71c947478662e6d3c088) Thanks [@u-zzam](https://github.com/u-zzam)! - `irisTake` no longer freezes the caller's `Quote` in place: the quote is copied into the returned `action.args` before the transaction is deep-frozen.
+
 ## 0.3.4
 
 ### Patch Changes
