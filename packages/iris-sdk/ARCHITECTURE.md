@@ -10,7 +10,7 @@ The SDK is a TypeScript abstraction layer over the Iris protocol. Its job is to 
 
 - **Deterministic transaction building.** Given the same inputs and on-chain state, the SDK always produces the same `Transaction` object. No simulation, no gas estimation, no sending — the consumer handles those concerns.
 - **Predictable developer experience.** Every flow returns a `{ buildTx, getRequirements }` pair (when tokens flow in) or `{ buildTx }` (when they only flow out). The interface is identical across flows.
-- **Immutability.** Every returned `Transaction` is deep-frozen via `@iris-credit/iris-ts`'s `deepFreeze`. Once built, a transaction object cannot be mutated.
+- **Immutability.** Every returned `Transaction` is deep-frozen via `@iris-credit/iris-ts`'s `deepFreeze`. Once built, a transaction object cannot be mutated. The freeze must never reach caller-owned inputs — `deepFreeze` freezes in place, so objects embedded in `action.args` are copied first (e.g. `irisTake`'s quote).
 - **No `any`.** Strict TypeScript throughout, with discriminated unions for action types and a dedicated error class for every failure mode.
 - **Mirror the contract, don't re-verify the world.** Flows validate the pure subset of what `Iris.sol` would reject — deadlines, bounds, roles, bitmap membership — as typed errors. Guarantees the RFQ or the contract already verifies (solver signature, enabled configuration, bond requirement) are not re-read at build time. The one stricter-than-contract check: `take` caps the quote's debt at the venue's max borrow for its collateral, measured against the venue LLTV minus `DEFAULT_LLTV_BUFFER` — on Morpho Blue the max borrow LTV _is_ the LLTV, so an uncapped take could open one accrual away from venue liquidation.
 
