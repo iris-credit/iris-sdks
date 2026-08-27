@@ -8,7 +8,7 @@
 - Enforce bundler retention by net `(bundler3 address, token)` balance with `DUST_THRESHOLD = 100n`; skip only unknown core-sdk chains.
 - Keep all thrown domain errors under `SimulationPackageError`; only `ExternalServiceError` is bypassable by callers.
 - Add chains through caller `SimulationConfig.chains`; the per-chain `ChainSimulationConfig` is a discriminated union enforcing at least one of `tenderlyRpc` or `simulateV1Url`. Confirm core-sdk bundler addresses intentionally.
-- Keep tests colocated as `{module}.test.ts`; put shared fixtures in `src/test-helpers/`, which must stay out of published builds.
+- Keep unit tests colocated as `{module}.test.ts` and fork tests as `{module}.integration.test.ts` under `test/`; put shared fixtures in `src/test-helpers/`, which must stay out of published builds.
 
 ## Continuous Improvement
 

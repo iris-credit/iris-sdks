@@ -64,7 +64,7 @@ The per-package rules — entity/`*Utils` split, `bigint` for onchain quantities
 
 1. Create a focused branch from `main`.
 2. Make the smallest coherent change for the PR — one concern per PR.
-3. Add or update tests when behavior changes. Colocate unit tests as `{module}.test.ts` next to the source in `src/`; keep fork-based E2E tests in the package's `test/` directory on the shared `setup.ts` fixture.
+3. Add or update tests when behavior changes. Colocate unit tests as `{module}.test.ts` next to the source in `src/`; keep fork-based E2E tests as `{module}.integration.test.ts` in the package's `test/` directory on the shared `setup.ts` fixture.
 4. Run `pnpm lint`, `pnpm build`, and `pnpm test`.
 5. Include a changeset (`pnpm changeset`) when the change is semver-relevant for a published package — see [Releases](#releases). Don't hand-write versions or changelog entries.
 

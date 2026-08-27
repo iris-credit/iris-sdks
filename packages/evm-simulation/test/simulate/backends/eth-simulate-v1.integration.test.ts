@@ -3,8 +3,8 @@ import type { Address } from "viem";
 import { encodeFunctionData, erc20Abi, ethAddress, parseEther, parseUnits } from "viem";
 import { mainnet } from "viem/chains";
 import { describe, expect } from "vitest";
-import { test } from "../../../test/setup.js";
-import { simulateV1 } from "./eth-simulate-v1.js";
+import { simulateV1 } from "../../../src/simulate/backends/eth-simulate-v1.js";
+import { test } from "../../setup.js";
 
 const USDC: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const WETH: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";

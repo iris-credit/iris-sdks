@@ -19,7 +19,7 @@
 - Normalize untrusted addresses with viem's `getAddress`, and keep every literal address checksummed (`pnpm lint:address`).
 - Throw typed errors from `IrisCoreErrors`; getters return `undefined` when an input is unknown, e.g. an unknown venue price.
 - Typed-data helpers return `TypedDataDefinition` with field order matching the contract's typehash.
-- Colocate unit tests as `{module}.test.ts` in `src/`; keep fork-based E2E tests in `test/` on the shared `setup.ts` fixture.
+- Colocate unit tests as `{module}.test.ts` in `src/`; keep fork-based E2E tests as `{module}.integration.test.ts` in `test/` on the shared `setup.ts` fixture.
 - Document public APIs with JSDoc: a Returns description, `@param` with its scale, and an `@example`.
 
 ## Continuous Improvement

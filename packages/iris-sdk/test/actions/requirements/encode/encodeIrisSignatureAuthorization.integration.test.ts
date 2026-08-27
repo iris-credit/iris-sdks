@@ -1,10 +1,10 @@
 import { isHex, verifyTypedData } from "viem";
 import { describe, expect } from "vitest";
 import { getAuthorizationTypedData, getChainAddresses } from "@iris-credit/core-sdk";
-import { CHAIN_ID, UNSUPPORTED_CHAIN_ID, USER_A } from "../../../../test/fixtures/iris.js";
-import { test } from "../../../../test/setup.js";
-import { AddressMismatchError, ChainIdMismatchError } from "../../../types/index.js";
-import { encodeIrisSignatureAuthorization } from "./encodeIrisSignatureAuthorization.js";
+import { encodeIrisSignatureAuthorization } from "../../../../src/actions/requirements/encode/encodeIrisSignatureAuthorization.js";
+import { AddressMismatchError, ChainIdMismatchError } from "../../../../src/types/index.js";
+import { CHAIN_ID, UNSUPPORTED_CHAIN_ID, USER_A } from "../../../fixtures/iris.js";
+import { test } from "../../../setup.js";
 
 const {
   bundler3: { generalAdapter1 },

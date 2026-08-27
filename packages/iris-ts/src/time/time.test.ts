@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { Time } from "../src/index.js";
+import { Time } from "../index.js";
 
 describe("Time — unit conversion matrix", () => {
   describe("from larger to smaller (multiplication)", () => {
