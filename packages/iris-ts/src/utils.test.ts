@@ -20,7 +20,7 @@ import {
   transformValue,
   values,
   ZERO_ADDRESS,
-} from "../src/index.js";
+} from "./index.js";
 
 describe("ZERO_ADDRESS", () => {
   test("is the canonical zero address", () => {

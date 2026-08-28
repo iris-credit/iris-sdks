@@ -5,7 +5,7 @@ import {
   getEffectiveLocale,
   getEnUSNumberToLocalParts,
   getLocaleSymbols,
-} from "../src/index.js";
+} from "../index.js";
 
 describe("getLocaleSymbols", () => {
   test("returns en-US symbols", () => {

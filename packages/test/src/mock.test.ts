@@ -4,7 +4,7 @@ import { decodeFunctionResult, encodeFunctionData, parseAbi } from "viem";
 import { readContract } from "viem/actions";
 import { base, mainnet } from "viem/chains";
 import { describe, expect, test, vi } from "vitest";
-import { createMockClient, expectReadCall, mockRead } from "../src/mock.js";
+import { createMockClient, expectReadCall, mockRead } from "./mock.js";
 
 const erc20Abi = parseAbi([
   "function balanceOf(address owner) view returns (uint256)",

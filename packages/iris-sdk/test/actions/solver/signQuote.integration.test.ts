@@ -2,15 +2,15 @@ import { isHex, verifyTypedData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect } from "vitest";
 import { getQuoteTypedData } from "@iris-credit/core-sdk";
-import { CHAIN_ID, UNSUPPORTED_CHAIN_ID } from "../../../test/fixtures/iris.js";
-import { quote as buildQuote } from "../../../test/helpers/iris.js";
-import { test } from "../../../test/setup.js";
+import { signQuote } from "../../../src/actions/solver/signQuote.js";
 import {
   AddressMismatchError,
   ChainIdMismatchError,
   InvalidSignatureError,
-} from "../../types/index.js";
-import { signQuote } from "./signQuote.js";
+} from "../../../src/types/index.js";
+import { CHAIN_ID, UNSUPPORTED_CHAIN_ID } from "../../fixtures/iris.js";
+import { quote as buildQuote } from "../../helpers/iris.js";
+import { test } from "../../setup.js";
 
 describe("signQuote", () => {
   test("default: signs a quote that verifies against the solver", async ({ client }) => {

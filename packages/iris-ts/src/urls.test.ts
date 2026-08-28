@@ -6,7 +6,7 @@ import {
   DOCS_BASE_URL,
   API_BASE_URL,
   API_GRAPHQL_URL,
-} from "../src/index.js";
+} from "./index.js";
 
 describe("urls", () => {
   test("should have correct domain", () => {

@@ -1,20 +1,19 @@
-import type { Address } from "viem";
-
 import { isHex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { afterEach, describe, expect, vi } from "vitest";
-import { getChainAddresses, MathLib } from "@iris-credit/core-sdk";
+import { getChainAddresses } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
-import { CHAIN_ID, UNSUPPORTED_CHAIN_ID, USER_A } from "../../../../test/fixtures/iris.js";
-import { test } from "../../../../test/setup.js";
+import { encodeErc20Permit } from "../../../../src/actions/requirements/encode/encodeErc20Permit.js";
 import {
   AddressMismatchError,
   ChainIdMismatchError,
   InvalidSignatureError,
-} from "../../../types/index.js";
-import { encodeErc20Permit2Approve } from "./encodeErc20Permit2Approve.js";
+  UnsupportedErc20ApprovalSpenderError,
+} from "../../../../src/types/index.js";
+import { CHAIN_ID, ROGUE, UNSUPPORTED_CHAIN_ID, USER_A } from "../../../fixtures/iris.js";
+import { test } from "../../../setup.js";
 
-describe("encodeErc20Permit2Approve", () => {
+describe("encodeErc20Permit", () => {
   const {
     tokens: { USDC },
     bundler3: { generalAdapter1 },
@@ -22,7 +21,6 @@ describe("encodeErc20Permit2Approve", () => {
 
   const mockAmount = 1000000n;
   const mockNonce = 0n;
-  const mockExpiration = MathLib.MAX_UINT_48;
 
   afterEach(() => {
     vi.restoreAllMocks();
@@ -32,26 +30,40 @@ describe("encodeErc20Permit2Approve", () => {
     test("should throw ChainIdMismatchError when client chain does not match", async ({
       client,
     }) => {
-      expect(() =>
-        encodeErc20Permit2Approve(client, {
+      await expect(
+        encodeErc20Permit(client, {
           token: USDC,
+          spender: generalAdapter1,
           amount: mockAmount,
           chainId: UNSUPPORTED_CHAIN_ID,
           nonce: mockNonce,
-          expiration: mockExpiration,
         }),
-      ).toThrow(ChainIdMismatchError);
+      ).rejects.toThrow(ChainIdMismatchError);
     });
 
-    test("should sign permit2 for token", async ({ client }) => {
+    test("should throw UnsupportedErc20ApprovalSpenderError when spender is not supported", async ({
+      client,
+    }) => {
+      await expect(
+        encodeErc20Permit(client, {
+          token: USDC,
+          spender: ROGUE,
+          amount: mockAmount,
+          chainId: CHAIN_ID,
+          nonce: mockNonce,
+        }),
+      ).rejects.toThrow(UnsupportedErc20ApprovalSpenderError);
+    });
+
+    test("should sign permit for non-DAI token", async ({ client }) => {
       const userAddress = client.account.address;
 
-      const permit = encodeErc20Permit2Approve(client, {
+      const permit = await encodeErc20Permit(client, {
         token: USDC,
+        spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
-        expiration: mockExpiration,
       });
 
       const signatureRequirement = await permit.sign(client, userAddress);
@@ -64,24 +76,23 @@ describe("encodeErc20Permit2Approve", () => {
     test("should throw error if client account address does not match user address", async ({
       client,
     }) => {
-      const differentAddress: Address = USER_A;
-
-      const permit = encodeErc20Permit2Approve(client, {
+      const permit = await encodeErc20Permit(client, {
         token: USDC,
+        spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
-        expiration: mockExpiration,
       });
 
-      await expect(permit.sign(client, differentAddress)).rejects.toThrow(
-        new AddressMismatchError(client.account.address, differentAddress),
+      await expect(permit.sign(client, USER_A)).rejects.toThrow(
+        new AddressMismatchError(client.account.address, USER_A),
       );
     });
 
     test("should throw InvalidSignatureError when signature verification fails", async ({
       client,
     }) => {
+      const userAddress = client.account.address;
       const wrongSigner = privateKeyToAccount(
         "0x0000000000000000000000000000000000000000000000000000000000000002",
       );
@@ -89,32 +100,34 @@ describe("encodeErc20Permit2Approve", () => {
         ...client,
         account: {
           ...wrongSigner,
-          address: client.account.address,
+          address: userAddress,
         },
       };
-      const permit = encodeErc20Permit2Approve(client, {
+      const permit = await encodeErc20Permit(client, {
         token: USDC,
+        spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
-        expiration: mockExpiration,
       });
 
-      await expect(permit.sign(invalidSignatureClient, client.account.address)).rejects.toThrow(
+      await expect(permit.sign(invalidSignatureClient, userAddress)).rejects.toThrow(
         InvalidSignatureError,
       );
     });
 
     test("should return all expected properties in signature args", async ({ client }) => {
-      const permit = encodeErc20Permit2Approve(client, {
+      const userAddress = client.account.address;
+
+      const permit = await encodeErc20Permit(client, {
         token: USDC,
+        spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
-        expiration: mockExpiration,
       });
 
-      const signatureRequirement = await permit.sign(client, client.account.address);
+      const signatureRequirement = await permit.sign(client, userAddress);
 
       expect(signatureRequirement.args).toHaveProperty("owner");
       expect(signatureRequirement.args).toHaveProperty("signature");
@@ -122,30 +135,25 @@ describe("encodeErc20Permit2Approve", () => {
       expect(signatureRequirement.args).toHaveProperty("amount");
       expect(signatureRequirement.args).toHaveProperty("asset");
       expect(signatureRequirement.args).toHaveProperty("nonce");
-      expect(signatureRequirement.args).toHaveProperty("expiration");
-      expect(signatureRequirement.args.owner).toEqual(client.account.address);
+      expect(signatureRequirement.args.owner).toEqual(userAddress);
       expect(signatureRequirement.args.amount).toEqual(mockAmount);
       expect(signatureRequirement.args.asset).toEqual(USDC);
       expect(signatureRequirement.args.nonce).toEqual(mockNonce);
-
-      if (!("expiration" in signatureRequirement.args)) {
-        throw new Error("Expiration is not defined");
-      }
-      expect(signatureRequirement.args.expiration).toEqual(mockExpiration);
     });
 
     test("should set deadline to approximately 2 hours in the future", async ({ client }) => {
+      const userAddress = client.account.address;
       const now = Time.timestamp();
 
-      const permit = encodeErc20Permit2Approve(client, {
+      const permit = await encodeErc20Permit(client, {
         token: USDC,
+        spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
-        expiration: mockExpiration,
       });
 
-      const signatureRequirement = await permit.sign(client, client.account.address);
+      const signatureRequirement = await permit.sign(client, userAddress);
 
       // Deadline should be approximately 2 hours (7200 seconds) in the future
       // Allow 5 seconds tolerance for test execution time
@@ -160,26 +168,20 @@ describe("encodeErc20Permit2Approve", () => {
     });
 
     test("should have correct action structure", async ({ client }) => {
-      const permit = encodeErc20Permit2Approve(client, {
+      const permit = await encodeErc20Permit(client, {
         token: USDC,
+        spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
-        expiration: mockExpiration,
       });
 
-      if (permit.action.type !== "permit2") {
-        throw new Error("Permit action type is not permit2");
-      }
-
-      expect(permit.action.type).toBe("permit2");
+      expect(permit.action.type).toBe("permit");
       expect(permit.action.args).toHaveProperty("spender");
       expect(permit.action.args).toHaveProperty("amount");
       expect(permit.action.args).toHaveProperty("deadline");
-      expect(permit.action.args).toHaveProperty("expiration");
       expect(permit.action.args.spender).toEqual(generalAdapter1);
       expect(permit.action.args.amount).toEqual(mockAmount);
-      expect(permit.action.args.expiration).toEqual(mockExpiration);
     });
   });
 });

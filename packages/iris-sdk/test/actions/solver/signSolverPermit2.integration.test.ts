@@ -7,15 +7,15 @@ import {
   MathLib,
   permit2Abi,
 } from "@iris-credit/core-sdk";
-import { CHAIN_ID, UNSUPPORTED_CHAIN_ID, USER_A } from "../../../test/fixtures/iris.js";
-import { test } from "../../../test/setup.js";
+import { signSolverPermit2 } from "../../../src/actions/solver/signSolverPermit2.js";
 import {
   AddressMismatchError,
   ChainIdMismatchError,
   InvalidSignatureError,
   NonPositiveInputError,
-} from "../../types/index.js";
-import { signSolverPermit2 } from "./signSolverPermit2.js";
+} from "../../../src/types/index.js";
+import { CHAIN_ID, UNSUPPORTED_CHAIN_ID, USER_A } from "../../fixtures/iris.js";
+import { test } from "../../setup.js";
 
 describe("signSolverPermit2", () => {
   const {

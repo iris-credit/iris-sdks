@@ -6,7 +6,7 @@ import {
   formatEnumeration,
   formatLongString,
   formatUnion,
-} from "../src/index.js";
+} from "../../index.js";
 
 describe("format", () => {
   const number = 12345.6789;
