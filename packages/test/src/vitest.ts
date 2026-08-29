@@ -40,9 +40,7 @@ export const createViemTest = <chain extends Chain>(
 
       const client = createAnvilTestClient(
         http(rpcUrl, {
-          fetchOptions: {
-            cache: "force-cache",
-          },
+          retryCount: 0,
           timeout: 30_000,
         }),
         chain,

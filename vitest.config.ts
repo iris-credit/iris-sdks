@@ -1,13 +1,28 @@
 import { defineConfig } from "vitest/config";
 
-// Fork projects get extra time for Anvil startup and remote RPC reads.
+// Fork projects get extra time for Anvil startup and remote RPC reads, and
+// bound their RPC demand in CI while leaving local concurrency unrestricted.
 const forkTestConfig = {
+  ...(process.env.CI
+    ? {
+        maxConcurrency: 1,
+        maxWorkers: 2,
+        sequence: { concurrent: false, groupOrder: 1 },
+      }
+    : {}),
   testTimeout: 120_000,
 } as const;
 
 export default defineConfig({
   test: {
-    retry: process.env.CI ? 2 : 0,
+    // A timed-out test has already spent its full budget; retrying it duplicates
+    // fork RPC work without changing the outcome.
+    retry: process.env.CI
+      ? {
+          count: 2,
+          condition: /^(?!(?:Test|Hook) timed out in \d+ms\.)/,
+        }
+      : 0,
     // Fork tests provision an Anvil fork per test against a live archive RPC; under
     // parallel load fork setup + RPC latency push tests past the 5s default and flake.
     testTimeout: 60_000,
