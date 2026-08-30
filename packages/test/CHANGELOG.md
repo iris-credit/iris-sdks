@@ -1,5 +1,13 @@
 # @iris-credit/test
 
+## 0.2.0
+
+### Minor Changes
+
+- [#119](https://github.com/iris-credit/iris-sdks/pull/119) [`ecd29d3`](https://github.com/iris-credit/iris-sdks/commit/ecd29d3acba5219233c786272a93327fc31b9bd6) Thanks [@madiha-right](https://github.com/madiha-right)! - Stop retrying failed JSON-RPC requests from Vitest clients to local Anvil processes so transport errors surface without duplicating RPC work.
+
+  Support Anvil's Karst hardfork.
+
 ## 0.1.1
 
 ### Patch Changes
