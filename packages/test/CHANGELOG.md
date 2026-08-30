@@ -1,5 +1,11 @@
 # @iris-credit/test
 
+## 0.3.0
+
+### Minor Changes
+
+- [#116](https://github.com/iris-credit/iris-sdks/pull/116) [`3cba1b3`](https://github.com/iris-credit/iris-sdks/commit/3cba1b3672743e1c16e2dd64505f95cc1b5310ed) Thanks [@madiha-right](https://github.com/madiha-right)! - `spawnAnvil` now awaits process cleanup and reports failures as typed errors. It returns a `stopAndWait()` that resolves once the process closes, accepts `signal`/`startupTimeoutMs`/`forceKillAfterMs` options, escalates `SIGINT` to `SIGKILL`, and surfaces `AnvilStartupError`, `AnvilProcessError`, and `AnvilCleanupError`. A new `redactForkUrl` option (default on in CI) strips `forkUrl` and `forkHeader` values from Anvil diagnostics. The Vitest `client` fixture awaits teardown so a retry cannot overlap an abandoned Anvil.
+
 ## 0.2.0
 
 ### Minor Changes
