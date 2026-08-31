@@ -3,8 +3,8 @@ import type { ChainId, Quote } from "@iris-credit/core-sdk";
 
 import { signTypedData, verifyTypedData } from "viem/actions";
 import { getQuoteTypedData } from "@iris-credit/core-sdk";
-import { validateUserAddress } from "../../helpers/index.js";
-import { ChainIdMismatchError, InvalidSignatureError } from "../../types/index.js";
+import { validateChainId, validateUserAddress } from "../../helpers/index.js";
+import { InvalidSignatureError } from "../../types/index.js";
 
 /** Parameters for {@link signQuote}. */
 export interface SignQuoteParams {
@@ -50,9 +50,7 @@ export interface SignQuoteParams {
 export const signQuote = async (client: WalletClient, params: SignQuoteParams): Promise<Hex> => {
   const { chainId, quote } = params;
 
-  if (client.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(client.chain?.id, chainId);
-  }
+  validateChainId(client.chain?.id, chainId);
 
   const account = client.account;
   validateUserAddress(account?.address, quote.solver);

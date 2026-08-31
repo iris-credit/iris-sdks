@@ -15,7 +15,7 @@ import {
   SIMPLE_PERMIT_TOKENS,
 } from "@iris-credit/core-sdk";
 import { isDefined } from "@iris-credit/iris-ts";
-import { ChainIdMismatchError } from "../../../types/index.js";
+import { validateChainId } from "../../../helpers/index.js";
 import { getRequirementsApproval } from "../getRequirementsApproval.js";
 import { getGeneralAdapterRequirementsPermit } from "./getGeneralAdapterRequirementsPermit.js";
 import { getGeneralAdapterRequirementsPermit2 } from "./getGeneralAdapterRequirementsPermit2.js";
@@ -109,9 +109,7 @@ export const getGeneralAdapterRequirements = async (
     args: { amount, from },
   } = params;
 
-  if (viemClient.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(viemClient.chain?.id, chainId);
-  }
+  validateChainId(viemClient.chain?.id, chainId);
 
   if (amount === 0n) {
     return [];

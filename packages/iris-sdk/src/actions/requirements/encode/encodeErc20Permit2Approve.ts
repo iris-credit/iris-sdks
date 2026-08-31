@@ -9,8 +9,8 @@ import type {
 import { signTypedData, verifyTypedData } from "viem/actions";
 import { getChainAddresses, getPermit2PermitTypedData, MathLib } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
-import { validateUserAddress } from "../../../helpers/index.js";
-import { ChainIdMismatchError, InvalidSignatureError } from "../../../types/index.js";
+import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
+import { InvalidSignatureError } from "../../../types/index.js";
 
 /** Parameters for {@link encodeErc20Permit2Approve}. */
 interface EncodeErc20Permit2ApproveParams {
@@ -65,9 +65,7 @@ export const encodeErc20Permit2Approve = (
 ): Requirement<PermitRequirementSignature> => {
   const { token, amount, chainId, nonce, expiration = MathLib.MAX_UINT_48 } = params;
 
-  if (viemClient.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(viemClient.chain?.id, chainId);
-  }
+  validateChainId(viemClient.chain?.id, chainId);
 
   const {
     bundler3: { generalAdapter1 },

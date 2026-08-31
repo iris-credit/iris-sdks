@@ -10,7 +10,7 @@ import type {
 import { encodeFunctionData, publicActions } from "viem";
 import { getChainAddresses, irisAbi } from "@iris-credit/core-sdk";
 import { deepFreeze } from "@iris-credit/iris-ts";
-import { ChainIdMismatchError } from "../../../types/index.js";
+import { validateChainId } from "../../../helpers/index.js";
 import { encodeIrisSignatureAuthorization } from "../encode/index.js";
 
 /**
@@ -65,9 +65,7 @@ export const getIrisAuthorizationRequirement = async (params: {
 > => {
   const { viemClient, chainId, userAddress, supportSignature } = params;
 
-  if (viemClient.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(viemClient.chain?.id, chainId);
-  }
+  validateChainId(viemClient.chain?.id, chainId);
 
   const {
     iris,

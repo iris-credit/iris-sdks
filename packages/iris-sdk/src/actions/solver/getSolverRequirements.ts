@@ -5,7 +5,8 @@ import type { ERC20ApprovalAction, Transaction } from "../../types/index.js";
 import { erc20Abi, maxUint256 } from "viem";
 import { readContract } from "viem/actions";
 import { getChainAddresses, MathLib } from "@iris-credit/core-sdk";
-import { ChainIdMismatchError, NonPositiveInputError } from "../../types/index.js";
+import { validateChainId } from "../../helpers/index.js";
+import { NonPositiveInputError } from "../../types/index.js";
 import { getRequirementsApproval } from "../requirements/getRequirementsApproval.js";
 
 /** Parameters for {@link getSolverRequirements}. */
@@ -71,9 +72,7 @@ export const getSolverRequirements = async (
 ): Promise<Readonly<Transaction<ERC20ApprovalAction>>[]> => {
   const { chainId, solver, debtToken, bond, usePermit2 } = params;
 
-  if (viemClient.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(viemClient.chain?.id, chainId);
-  }
+  validateChainId(viemClient.chain?.id, chainId);
 
   if (bond <= 0n) {
     throw new NonPositiveInputError("bond", bond);
