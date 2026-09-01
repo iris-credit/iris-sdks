@@ -1,5 +1,11 @@
 # @iris-credit/core-sdk
 
+## 0.4.1
+
+### Patch Changes
+
+- [#123](https://github.com/iris-credit/iris-sdks/pull/123) [`afa90e9`](https://github.com/iris-credit/iris-sdks/commit/afa90e9a0cfa9b66f0dd8211020aae6c9dff5403) Thanks [@madiha-right](https://github.com/madiha-right)! - `getPermit2TransferFromTypedData` no longer truncates the permitted amount to `MAX_UINT_160`. Permit2's `TokenPermissions.amount` is a `uint256`, so the clamp silently lowered any signature-transfer request above `2^160 - 1` and produced typed data that did not match the caller's intent. The clamp is now `MAX_UINT_256`.
+
 ## 0.4.0
 
 ### Minor Changes

@@ -1,5 +1,14 @@
 # @iris-credit/iris-sdk
 
+## 0.3.6
+
+### Patch Changes
+
+- [#122](https://github.com/iris-credit/iris-sdks/pull/122) [`4b48045`](https://github.com/iris-credit/iris-sdks/commit/4b4804505fcf12ab584d021781528ca6220a80d8) Thanks [@madiha-right](https://github.com/madiha-right)! - Route the action- and requirement-layer chain checks through the shared `validateChainId` helper instead of inlining the `ChainIdMismatchError` guard at each call site. Pure internal maintenance: the thrown error class and arguments are unchanged.
+
+- Updated dependencies [[`afa90e9`](https://github.com/iris-credit/iris-sdks/commit/afa90e9a0cfa9b66f0dd8211020aae6c9dff5403)]:
+  - @iris-credit/core-sdk@0.4.1
+
 ## 0.3.5
 
 ### Patch Changes
