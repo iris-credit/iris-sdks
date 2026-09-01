@@ -15,14 +15,10 @@ const forkTestConfig = {
 
 export default defineConfig({
   test: {
-    // A timed-out test has already spent its full budget; retrying it duplicates
-    // fork RPC work without changing the outcome.
-    retry: process.env.CI
-      ? {
-          count: 2,
-          condition: /^(?!(?:Test|Hook) timed out in \d+ms\.)/,
-        }
-      : 0,
+    // Plain count only: with `retry: { count, condition }` Vitest 4.0.18 collects
+    // tests but silently never executes them and still reports the files as passed,
+    // so the timed-out-test exemption is unusable until that is fixed upstream.
+    retry: process.env.CI ? 2 : 0,
     // Fork tests provision an Anvil fork per test against a live archive RPC; under
     // parallel load fork setup + RPC latency push tests past the 5s default and flake.
     testTimeout: 60_000,
