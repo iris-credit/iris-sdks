@@ -9,8 +9,8 @@ import type {
 import { signTypedData, verifyTypedData } from "viem/actions";
 import { getAuthorizationTypedData, randomNonce } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
-import { validateUserAddress } from "../../../helpers/index.js";
-import { ChainIdMismatchError, InvalidSignatureError } from "../../../types/index.js";
+import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
+import { InvalidSignatureError } from "../../../types/index.js";
 
 /** Parameters for {@link encodeIrisSignatureAuthorization}. */
 interface EncodeIrisSignatureAuthorizationParams {
@@ -70,9 +70,7 @@ export const encodeIrisSignatureAuthorization = (
 ): Requirement<AuthorizationRequirementSignature> => {
   const { authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
 
-  if (viemClient.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(viemClient.chain?.id, chainId);
-  }
+  validateChainId(viemClient.chain?.id, chainId);
 
   const deadline = params.deadline ?? Time.timestamp() + Time.s.from.h(2n);
 

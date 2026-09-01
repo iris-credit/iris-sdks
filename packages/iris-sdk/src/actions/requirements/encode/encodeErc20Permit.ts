@@ -10,9 +10,8 @@ import { isAddressEqual, verifyTypedData } from "viem";
 import { signTypedData } from "viem/actions";
 import { fetchToken, getChainAddresses, getPermitTypedData } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
-import { validateUserAddress } from "../../../helpers/index.js";
+import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
 import {
-  ChainIdMismatchError,
   InvalidSignatureError,
   UnsupportedErc20ApprovalSpenderError,
 } from "../../../types/index.js";
@@ -70,9 +69,7 @@ export const encodeErc20Permit = async (
 ): Promise<Requirement<PermitRequirementSignature>> => {
   const { token, spender, amount, chainId, nonce } = params;
 
-  if (viemClient.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(viemClient.chain?.id, chainId);
-  }
+  validateChainId(viemClient.chain?.id, chainId);
 
   const {
     bundler3: { generalAdapter1 },

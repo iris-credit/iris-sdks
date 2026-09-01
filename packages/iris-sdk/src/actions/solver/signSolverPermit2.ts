@@ -10,12 +10,8 @@ import {
   permit2Abi,
 } from "@iris-credit/core-sdk";
 import { deepFreeze } from "@iris-credit/iris-ts";
-import { validateUserAddress } from "../../helpers/index.js";
-import {
-  ChainIdMismatchError,
-  InvalidSignatureError,
-  NonPositiveInputError,
-} from "../../types/index.js";
+import { validateChainId, validateUserAddress } from "../../helpers/index.js";
+import { InvalidSignatureError, NonPositiveInputError } from "../../types/index.js";
 
 /** Fixed allowance expiration — once submitted, the permit mimics a standing approval. */
 const EXPIRATION = Number(MathLib.MAX_UINT_48);
@@ -90,9 +86,7 @@ export const signSolverPermit2 = async (
 ): Promise<SolverPermit2> => {
   const { solver, debtToken, bond, chainId, deadline } = params;
 
-  if (client.chain?.id !== chainId) {
-    throw new ChainIdMismatchError(client.chain?.id, chainId);
-  }
+  validateChainId(client.chain?.id, chainId);
 
   if (bond <= 0n) {
     throw new NonPositiveInputError("bond", bond);
