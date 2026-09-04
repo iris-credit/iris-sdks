@@ -1,8 +1,15 @@
-import { isHex, verifyTypedData } from "viem";
+import { isHex, maxUint256, verifyTypedData } from "viem";
 import { describe, expect } from "vitest";
 import { getAuthorizationTypedData, getChainAddresses } from "@iris-credit/core-sdk";
+import { Time } from "@iris-credit/iris-ts";
 import { encodeIrisSignatureAuthorization } from "../../../../src/actions/requirements/encode/encodeIrisSignatureAuthorization.js";
-import { AddressMismatchError, ChainIdMismatchError } from "../../../../src/types/index.js";
+import {
+  AddressMismatchError,
+  ChainIdMismatchError,
+  ExpiredDeadlineError,
+  InputExceedsMaxError,
+  NonPositiveInputError,
+} from "../../../../src/types/index.js";
 import { CHAIN_ID, UNSUPPORTED_CHAIN_ID, USER_A } from "../../../fixtures/iris.js";
 import { test } from "../../../setup.js";
 
@@ -93,5 +100,51 @@ describe("encodeIrisSignatureAuthorization", () => {
     });
 
     await expect(requirement.sign(client, USER_A)).rejects.toBeInstanceOf(AddressMismatchError);
+  });
+
+  test("error: NonPositiveInputError when deadline is not positive", async ({ client }) => {
+    expect(() =>
+      encodeIrisSignatureAuthorization(client, {
+        authorized: generalAdapter1,
+        chainId: CHAIN_ID,
+        nonce: 0n,
+        deadline: 0n,
+      }),
+    ).toThrow(NonPositiveInputError);
+  });
+
+  test("error: InputExceedsMaxError when deadline exceeds uint256", async ({ client }) => {
+    expect(() =>
+      encodeIrisSignatureAuthorization(client, {
+        authorized: generalAdapter1,
+        chainId: CHAIN_ID,
+        nonce: 0n,
+        deadline: maxUint256 + 1n,
+      }),
+    ).toThrow(InputExceedsMaxError);
+  });
+
+  test("error: ExpiredDeadlineError when deadline is in the past", async ({ client }) => {
+    expect(() =>
+      encodeIrisSignatureAuthorization(client, {
+        authorized: generalAdapter1,
+        chainId: CHAIN_ID,
+        nonce: 0n,
+        deadline: 1n,
+      }),
+    ).toThrow(ExpiredDeadlineError);
+  });
+
+  test("behavior: keeps a future deadline", async ({ client }) => {
+    const deadline = Time.timestamp() + Time.s.from.h(1n);
+
+    const requirement = encodeIrisSignatureAuthorization(client, {
+      authorized: generalAdapter1,
+      chainId: CHAIN_ID,
+      nonce: 0n,
+      deadline,
+    });
+
+    expect(requirement.action.args.deadline).toBe(deadline);
   });
 });

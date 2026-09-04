@@ -216,6 +216,22 @@ export class NonPositiveInputError extends Error {
   }
 }
 
+/** Thrown when an input exceeds the largest value its ABI encoding accepts. */
+export class InputExceedsMaxError extends Error {
+  constructor(params: { readonly field: string; readonly value: bigint; readonly max: bigint }) {
+    super(`Input "${params.field}" must be at most "${params.max}", got "${params.value}".`);
+  }
+}
+
+/** Thrown when a caller-supplied signature deadline has already passed. */
+export class ExpiredDeadlineError extends Error {
+  constructor(deadline: bigint, timestamp: bigint) {
+    super(
+      `Deadline "${deadline}" has expired at timestamp "${timestamp}". Choose a future deadline and rebuild the operation.`,
+    );
+  }
+}
+
 /** Thrown when a native amount is supplied for an asset that is not the chain's wrapped native token. */
 export class NativeAmountOnNonWNativeAssetError extends Error {
   constructor(asset: Address, wNative: Address) {
