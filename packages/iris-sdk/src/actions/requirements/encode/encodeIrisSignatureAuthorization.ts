@@ -6,11 +6,17 @@ import type {
   Requirement,
 } from "../../../types/index.js";
 
+import { maxUint256 } from "viem";
 import { signTypedData, verifyTypedData } from "viem/actions";
 import { getAuthorizationTypedData, randomNonce } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
 import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
-import { InvalidSignatureError } from "../../../types/index.js";
+import {
+  ExpiredDeadlineError,
+  InputExceedsMaxError,
+  InvalidSignatureError,
+  NonPositiveInputError,
+} from "../../../types/index.js";
 
 /** Parameters for {@link encodeIrisSignatureAuthorization}. */
 interface EncodeIrisSignatureAuthorizationParams {
@@ -47,6 +53,9 @@ interface EncodeIrisSignatureAuthorizationParams {
  * @param params.deadline - Optional signature deadline in seconds.
  * @returns A `Requirement` whose `sign(client, userAddress)` produces the deep-frozen signature.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
+ * @throws {NonPositiveInputError} when a provided `deadline` is not positive.
+ * @throws {InputExceedsMaxError} when a provided `deadline` exceeds `uint256`.
+ * @throws {ExpiredDeadlineError} when a provided `deadline` is positive but not in the future.
  * @throws {MissingClientPropertyError} from `sign()` when the client has no `account.address`.
  * @throws {AddressMismatchError} from `sign()` when the client account differs from `userAddress`.
  * @throws {InvalidSignatureError} from `sign()` when EIP-712 verification fails.
@@ -71,6 +80,26 @@ export const encodeIrisSignatureAuthorization = (
   const { authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
 
   validateChainId(viemClient.chain?.id, chainId);
+
+  // Reject an invalid or already-expired caller-supplied deadline before signing, so a direct
+  // caller is never walked through a wallet EIP-712 prompt for an authorization Iris would reject
+  // with `SignatureExpired`. An omitted deadline defaults to two hours from now and is always valid.
+  if (params.deadline != null) {
+    if (params.deadline <= 0n) {
+      throw new NonPositiveInputError("deadline", params.deadline);
+    }
+    if (params.deadline > maxUint256) {
+      throw new InputExceedsMaxError({
+        field: "deadline",
+        value: params.deadline,
+        max: maxUint256,
+      });
+    }
+    const timestamp = Time.timestamp();
+    if (params.deadline <= timestamp) {
+      throw new ExpiredDeadlineError(params.deadline, timestamp);
+    }
+  }
 
   const deadline = params.deadline ?? Time.timestamp() + Time.s.from.h(2n);
 
