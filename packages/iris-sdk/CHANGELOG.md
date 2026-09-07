@@ -1,5 +1,11 @@
 # @iris-credit/iris-sdk
 
+## 0.3.7
+
+### Patch Changes
+
+- [#126](https://github.com/iris-credit/iris-sdks/pull/126) [`4c3db35`](https://github.com/iris-credit/iris-sdks/commit/4c3db3515e173cc80d6e1f7b2943dd867722aaea) Thanks [@madiha-right](https://github.com/madiha-right)! - `encodeIrisSignatureAuthorization` now rejects an invalid caller-supplied `deadline` before signing. A non-positive, out-of-`uint256`, or already-expired deadline previously walked the user through a wallet EIP-712 prompt for an authorization Iris would reject with `SignatureExpired`. Adds the `InputExceedsMaxError` and `ExpiredDeadlineError` error classes.
+
 ## 0.3.6
 
 ### Patch Changes
