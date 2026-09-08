@@ -54,10 +54,10 @@ import { encodeIrisSignatureAuthorization } from "../encode/index.js";
  * ```
  */
 export const getIrisAuthorizationRequirement = async (params: {
-  viemClient: Client;
-  chainId: ChainId;
-  userAddress: Address;
-  supportSignature?: boolean;
+  readonly viemClient: Client;
+  readonly chainId: ChainId;
+  readonly userAddress: Address;
+  readonly supportSignature?: boolean;
 }): Promise<
   | Readonly<Transaction<IrisAuthorizationAction>>
   | Requirement<AuthorizationRequirementSignature>

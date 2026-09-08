@@ -314,9 +314,9 @@ export function isAuthorizationSignature(
 /** The typed permit / authorization slots a bundled path consumes, split from a `buildTx` array. */
 export interface SelectedRequirementSignatures {
   /** The single permit / Permit2 signature, when present. */
-  permit?: PermitRequirementSignature;
+  readonly permit?: PermitRequirementSignature;
   /** The single Iris authorization signature, when present. */
-  authorization?: AuthorizationRequirementSignature;
+  readonly authorization?: AuthorizationRequirementSignature;
 }
 
 /**
