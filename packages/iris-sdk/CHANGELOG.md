@@ -1,5 +1,13 @@
 # @iris-credit/iris-sdk
 
+## 0.3.8
+
+### Patch Changes
+
+- [#128](https://github.com/iris-credit/iris-sdks/pull/128) [`38fb7a6`](https://github.com/iris-credit/iris-sdks/commit/38fb7a681caee0166feadd7f2b2285ca78a15ac5) Thanks [@madiha-right](https://github.com/madiha-right)! - Mark the `getIrisAuthorizationRequirement` parameter object and the
+  `SelectedRequirementSignatures` slots `readonly`, so consumers cannot mutate a
+  requirement input or a selected signature set in place.
+
 ## 0.3.7
 
 ### Patch Changes
