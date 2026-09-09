@@ -20,7 +20,8 @@ import {
   SimulationValidationError,
   UnsupportedChainError,
 } from "../errors.js";
-import { makeTransferLog } from "../test-helpers/index.js";
+import { encodeUint256, makeTransferLog, padAddress } from "../test-helpers/index.js";
+import { WITHDRAWAL_TOPIC } from "./parsing/transfers.js";
 import { simulate } from "./simulate.js";
 
 const mockTenderlyRpc = vi.fn<typeof simulateTenderlyRpc>();
@@ -406,6 +407,50 @@ describe.sequential("simulate — backend fallback", () => {
     expect(result.transfers).toHaveLength(1);
     expect(mockTenderlyRpc).not.toHaveBeenCalled();
     expect(mockSimulateV1).toHaveBeenCalled();
+  });
+
+  it("passes the chain's registered wNative and drops lookalike WETH9 events", async () => {
+    mockSimulateV1.mockResolvedValueOnce(
+      makeSuccessResult([
+        {
+          address: USDC,
+          topics: [WITHDRAWAL_TOPIC, padAddress(USER)],
+          data: encodeUint256(1000n),
+        },
+      ]),
+    );
+
+    const config: SimulationConfig = {
+      chains: new Map([[1, { simulateV1Url: "http://rpc.local" }]]),
+    };
+    const result = await simulate(config, makeParams());
+
+    expect(result.transfers).toEqual([]);
+    expect(mockSimulateV1.mock.calls[0]![0].wNative).toBe(getChainAddresses(1).wNative);
+  });
+
+  it("keeps signature-based parsing on a configured chain core-sdk does not know", async () => {
+    const chainId = 999999;
+    const amount = 1000n;
+    mockSimulateV1.mockResolvedValueOnce(
+      makeSuccessResult([
+        {
+          address: USDC,
+          topics: [WITHDRAWAL_TOPIC, padAddress(USER)],
+          data: encodeUint256(amount),
+        },
+      ]),
+    );
+
+    const config: SimulationConfig = {
+      chains: new Map([[chainId, { simulateV1Url: "http://rpc.local" }]]),
+    };
+    const result = await simulate(config, makeParams({ chainId }));
+
+    expect(result.transfers).toEqual([
+      { token: USDC, from: USER, to: zeroAddress, amount, txIdx: 0 },
+    ]);
+    expect(mockSimulateV1.mock.calls[0]![0].wNative).toBeUndefined();
   });
 });
 

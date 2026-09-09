@@ -1,16 +1,28 @@
 import type { Address, Hex } from "viem";
-import type { RawLog } from "../../types.js";
+import type { RawLog, SimulationLogger } from "../../types.js";
 
 import { ethAddress, getAddress, parseEther, zeroAddress } from "viem";
 import { describe, expect, it, test, vi } from "vitest";
 import { encodeUint256, makeCall, padAddress } from "../../test-helpers/index.js";
-import { DEPOSIT_TOPIC, parseTransfers, TRANSFER_TOPIC, WITHDRAWAL_TOPIC } from "./transfers.js";
+import {
+  DEPOSIT_TOPIC,
+  parseTransfers as parseRawTransfers,
+  TRANSFER_TOPIC,
+  WITHDRAWAL_TOPIC,
+} from "./transfers.js";
 
 const USDC: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
 const WETH: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 const DAI: Address = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
 const USER: Address = "0x1111111111111111111111111111111111111111";
 const VAULT: Address = "0x2222222222222222222222222222222222222222";
+
+// Most cases exercise a chain whose registered wrapped-native is WETH; the
+// registry-metadata cases below call `parseRawTransfers` directly.
+const parseTransfers = (
+  calls: Parameters<typeof parseRawTransfers>[0],
+  logger?: SimulationLogger,
+) => parseRawTransfers(calls, { wNative: WETH, logger });
 
 describe("parseTransfers", () => {
   it("parses a standard ERC20 Transfer", () => {
@@ -139,7 +151,9 @@ describe("parseTransfers", () => {
         data: encodeUint256(amount),
       },
       {
-        address: WETH,
+        // Different casing from the Withdrawal log: pairing compares addresses
+        // semantically, not byte-for-byte.
+        address: WETH.toLowerCase() as Address,
         topics: [TRANSFER_TOPIC, padAddress(USER), `0x${"0".repeat(64)}` as Hex],
         data: encodeUint256(amount),
       },
@@ -173,6 +187,38 @@ describe("parseTransfers", () => {
     expect(result).toHaveLength(1);
     expect(result[0]!.from).toBe(zeroAddress);
     expect(result[0]!.to).toBe(getAddress(USER));
+  });
+
+  test("behavior: ignores WETH9-shaped events from unregistered tokens", () => {
+    const logs: RawLog[] = [
+      {
+        address: DAI,
+        topics: [DEPOSIT_TOPIC, padAddress(USER)],
+        data: encodeUint256(1_000n),
+      },
+    ];
+
+    expect(parseRawTransfers([makeCall(logs)], { wNative: WETH })).toEqual([]);
+  });
+
+  test("behavior: keeps signature-based parsing without registry metadata", () => {
+    const logs: RawLog[] = [
+      {
+        address: DAI,
+        topics: [DEPOSIT_TOPIC, padAddress(USER)],
+        data: encodeUint256(1_000n),
+      },
+    ];
+
+    expect(parseRawTransfers([makeCall(logs)])).toEqual([
+      {
+        token: DAI,
+        from: zeroAddress,
+        to: USER,
+        amount: 1_000n,
+        txIdx: 0,
+      },
+    ]);
   });
 
   it("handles multi-token flows", () => {

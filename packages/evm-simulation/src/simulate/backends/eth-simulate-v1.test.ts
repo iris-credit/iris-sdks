@@ -8,7 +8,8 @@ import {
   SimulationRevertedError,
   SimulationValidationError,
 } from "../../errors.js";
-import { makeTransferLog } from "../../test-helpers/index.js";
+import { encodeUint256, makeTransferLog, padAddress } from "../../test-helpers/index.js";
+import { WITHDRAWAL_TOPIC } from "../parsing/transfers.js";
 import { simulateV1 } from "./eth-simulate-v1.js";
 
 type MockSimulateCalls = (args: SimulateCallsParameters) => Promise<unknown>;
@@ -30,6 +31,7 @@ const USER: Address = "0x1111111111111111111111111111111111111111";
 const OTHER: Address = "0x2222222222222222222222222222222222222222";
 const VAULT: Address = "0x3333333333333333333333333333333333333333";
 const USDC: Address = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48";
+const WETH: Address = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
 
 const BASIC_TX: SimulationTransaction = {
   from: USER,
@@ -356,6 +358,34 @@ describe.sequential("simulateV1", () => {
       { account: USER, changes: [{ token: USDC, diff: -1_000_000n }] },
       { account: VAULT, changes: [{ token: USDC, diff: 1_000_000n }] },
     ]);
+  });
+
+  it("excludes WETH9 events from unregistered tokens from assetChanges", async () => {
+    mockSimulateCalls.mockResolvedValueOnce({
+      results: [
+        {
+          status: "success",
+          gasUsed: 0n,
+          data: "0x" as Hex,
+          logs: [
+            {
+              address: USDC,
+              topics: [WITHDRAWAL_TOPIC, padAddress(USER)],
+              data: encodeUint256(1000n),
+            },
+          ],
+        },
+      ],
+    });
+
+    const result = await simulateV1({
+      rpcUrl: "http://rpc.local",
+      chainId: 1,
+      transactions: [BASIC_TX],
+      wNative: WETH,
+    });
+
+    expect(result.assetChanges).toEqual([]);
   });
 
   it("nets inbound and outbound transfers of the same token to zero and drops it", async () => {
