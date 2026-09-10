@@ -1,5 +1,11 @@
 # @iris-credit/evm-simulation
 
+## 0.1.4
+
+### Patch Changes
+
+- [#130](https://github.com/iris-credit/iris-sdks/pull/130) [`29e3983`](https://github.com/iris-credit/iris-sdks/commit/29e398336ee641a8bbbbc4327ff311ef3b9aa33d) Thanks [@madiha-right](https://github.com/madiha-right)! - Normalize the native-ETH sentinel case-insensitively when mapping Tenderly asset changes. A sentinel carried (checksummed or otherwise non-lowercase) in `assetInfo.contractAddress` was previously `getAddress`-checksummed and no longer matched the lowercase `ethAddress` key used by `assertNoBundlerRetention`, so a retained bundler3 native residual could escape the retention gate and return a false-safe simulation. The transfer-log parser and the Tenderly asset-change mapper now share a single `normalizeAssetToken` helper, removing the drift between the two normalization paths.
+
 ## 0.1.3
 
 ### Patch Changes
