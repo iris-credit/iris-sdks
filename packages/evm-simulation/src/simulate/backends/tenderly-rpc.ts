@@ -9,14 +9,14 @@ import type {
 } from "../../types.js";
 import type { AssetChangeEntry } from "../asset-changes.js";
 
-import { ethAddress, getAddress, isAddress, isHex, maxUint256, numberToHex } from "viem";
+import { ethAddress, isAddress, isHex, maxUint256, numberToHex } from "viem";
 import { z } from "zod";
 import {
   ExternalServiceError,
   SimulationRevertedError,
   SimulationValidationError,
 } from "../../errors.js";
-import { groupAssetChanges } from "../asset-changes.js";
+import { groupAssetChanges, normalizeAssetToken } from "../asset-changes.js";
 
 interface TenderlyRpcCall {
   from: Address;
@@ -260,7 +260,7 @@ function toAssetChanges(results: SimResult[]): AccountAssetChanges[] {
     for (const change of result.assetChanges ?? []) {
       const amount = BigInt(change.rawAmount);
       const token = change.assetInfo.contractAddress
-        ? getAddress(change.assetInfo.contractAddress)
+        ? normalizeAssetToken(change.assetInfo.contractAddress)
         : ethAddress;
       const { symbol, decimals } = change.assetInfo;
       if (change.to)
