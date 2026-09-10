@@ -1,5 +1,13 @@
 # @iris-credit/evm-simulation
 
+## 0.1.5
+
+### Patch Changes
+
+- [#131](https://github.com/iris-credit/iris-sdks/pull/131) [`f42005a`](https://github.com/iris-credit/iris-sdks/commit/f42005a142e42b8b4f4d0a792e228b6192758b2f) Thanks [@madiha-right](https://github.com/madiha-right)! - Use core-sdk chain metadata when parsing WETH9 `Deposit` and `Withdrawal` logs:
+  accept them only from the chain's registered `wNative` token, and retain legacy
+  signature-based parsing on chains core-sdk does not know.
+
 ## 0.1.4
 
 ### Patch Changes
