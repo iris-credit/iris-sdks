@@ -1,4 +1,4 @@
-import type { BlockTag } from "viem";
+import type { Address, BlockTag } from "viem";
 import type {
   AccountAssetChanges,
   RawCall,
@@ -36,9 +36,10 @@ export async function simulateV1(params: {
   chainId: number;
   transactions: SimulationTransaction[];
   blockNumber?: bigint | BlockTag;
+  wNative?: Address;
   signal?: AbortSignal;
 }): Promise<RawSimulationResult> {
-  const { rpcUrl, transactions, blockNumber, signal } = params;
+  const { rpcUrl, transactions, blockNumber, wNative, signal } = params;
 
   const client = createPublicClient({
     transport: http(rpcUrl, {
@@ -121,7 +122,7 @@ export async function simulateV1(params: {
 
     return {
       calls: rawCalls,
-      assetChanges: toAssetChanges(parseTransfers(rawCalls)),
+      assetChanges: toAssetChanges(parseTransfers(rawCalls, { wNative })),
     };
   } catch (error) {
     if (error instanceof SimulationRevertedError) throw error;

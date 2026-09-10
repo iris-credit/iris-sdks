@@ -1,5 +1,8 @@
+import type { Address } from "viem";
+import type { ChainId } from "@iris-credit/core-sdk";
 import type { SimulateParams, SimulationConfig, SimulationResult } from "../types.js";
 
+import { getChainAddresses, UnsupportedChainIdError } from "@iris-credit/core-sdk";
 import { ExternalServiceError } from "../errors.js";
 import { parseTransfers } from "./parsing/index.js";
 import {
@@ -14,7 +17,9 @@ import {
  *
  * Validates input → resolves authorizations into prepended approve txs → runs the bundle
  * through Tenderly RPC (primary) or `eth_simulateV1` (fallback) with a shared timeout
- * budget → parses ERC20/WETH transfers from per-tx logs → asserts no funds are retained
+ * budget → parses ERC20 transfers and WETH9 events from per-tx logs, restricting WETH9
+ * events to the chain's registered wrapped-native token and retaining signature-based
+ * parsing on chains core-sdk does not know → asserts no funds are retained
  * by `bundler3` → returns the full result set. The caller reads whichever fields they need:
  *
  * - `transfers` → user-facing preview / server-side verification.
@@ -76,12 +81,15 @@ export async function simulate(
 ): Promise<SimulationResult> {
   validateInput(params);
 
+  const wNative = getWNative(params.chainId);
+
   const simulationTxs = buildSimulationTxs(params);
   const result = await executeSimulation({
     config,
     chainId: params.chainId,
     transactions: simulationTxs,
     blockNumber: params.blockNumber,
+    wNative,
   });
   if (result.calls.length !== simulationTxs.length) {
     throw new ExternalServiceError(
@@ -89,7 +97,7 @@ export async function simulate(
     );
   }
 
-  const transfers = parseTransfers(result.calls, config.logger);
+  const transfers = parseTransfers(result.calls, { wNative, logger: config.logger });
 
   assertNoBundlerRetention({
     chainId: params.chainId,
@@ -104,4 +112,19 @@ export async function simulate(
     transfers,
     assetChanges: result.assetChanges,
   };
+}
+
+/**
+ * The chain's registered wrapped-native token, or `undefined` when core-sdk does
+ * not know the chain. `undefined` keeps `parseTransfers` on its legacy
+ * signature-based path rather than silently dropping every WETH9 event on a
+ * custom chain the caller configured a backend for.
+ */
+function getWNative(chainId: number): Address | undefined {
+  try {
+    return getChainAddresses(chainId as ChainId).wNative;
+  } catch (error) {
+    if (error instanceof UnsupportedChainIdError) return undefined;
+    throw error;
+  }
 }
