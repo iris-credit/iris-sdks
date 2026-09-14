@@ -328,11 +328,11 @@ describe("fetchVenue", () => {
 
   test("behavior: leaves caller-owned parameters untouched", async () => {
     const { handle } = mockMorphoClient();
-    const parameters = { chainId: ChainId.EthMainnet };
+    const parameters = {};
 
     await fetchVenue(args, handle.client, parameters);
 
-    expect(parameters).toStrictEqual({ chainId: ChainId.EthMainnet });
+    expect(parameters).toStrictEqual({});
   });
 
   test("error: UnsupportedVenueAdapterError on an unregistered venue id", async () => {
