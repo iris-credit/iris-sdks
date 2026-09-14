@@ -648,12 +648,13 @@ describe("AccrualPosition", () => {
   });
 
   describe("supplyBond", () => {
-    test("should top up the bond in place", () => {
+    test("should top up the bond without changing the source position", () => {
       const value = new AccrualPosition(position, loan, venue);
+      const supplied = value.supplyBond(position.bond);
 
-      expect(value.supplyBond(position.bond).bond).toBe(2n * position.bond);
-      // The top-up is also applied in place.
-      expect(value.bond).toBe(2n * position.bond);
+      expect(supplied.bond).toBe(2n * position.bond);
+      expect(supplied).not.toBe(value);
+      expect(value.bond).toBe(position.bond);
     });
   });
 
