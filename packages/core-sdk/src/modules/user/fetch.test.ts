@@ -56,6 +56,15 @@ describe("fetchUser", () => {
     expect(handle.request.mock.calls.map(([call]) => call.method)).not.toContain("eth_chainId");
   });
 
+  test("behavior: leaves caller-owned parameters untouched", async () => {
+    const { client } = mockUserClient(true);
+    const parameters = {};
+
+    await fetchUser(USER, client, parameters);
+
+    expect(parameters).toStrictEqual({});
+  });
+
   test("error: UnsupportedChainIdError", async () => {
     const { client } = mockUserClient(true);
 

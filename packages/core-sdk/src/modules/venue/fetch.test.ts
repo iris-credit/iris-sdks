@@ -326,6 +326,15 @@ describe("fetchVenue", () => {
     ).toStrictEqual([[tokens.cbBTC], [tokens.USDC]]);
   });
 
+  test("behavior: leaves caller-owned parameters untouched", async () => {
+    const { handle } = mockMorphoClient();
+    const parameters = {};
+
+    await fetchVenue(args, handle.client, parameters);
+
+    expect(parameters).toStrictEqual({});
+  });
+
   test("error: UnsupportedVenueAdapterError on an unregistered venue id", async () => {
     // An unregistered venue id resolves to the zero address.
     const handle = createMockClient(mainnet);
