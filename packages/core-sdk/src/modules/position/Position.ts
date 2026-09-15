@@ -552,14 +552,17 @@ export class AccrualPosition extends Position {
 
   /**
    * Returns a new position with the bond topped up, matching Iris's `supplyBond` (which
-   * accrues nothing onchain). The top-up is also applied in place on this position.
+   * accrues nothing onchain). This position is left unchanged, as every other projection
+   * leaves it — a caller-owned snapshot may be shared across concurrent previews.
    *
    * @param amount The bond amount to supply.
    */
   public supplyBond(amount: bigint) {
-    this.bond += amount;
+    const position = new AccrualPosition(this, this._loan, this._venue);
 
-    return new AccrualPosition(this, this._loan, this._venue);
+    position.bond += amount;
+
+    return position;
   }
 
   /**
