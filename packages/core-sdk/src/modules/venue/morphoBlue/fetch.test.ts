@@ -12,7 +12,7 @@ import {
 } from "../../../abis/morphoBlue.js";
 import { getChainAddresses } from "../../../addresses.js";
 import { ChainId } from "../../../chain.js";
-import { UnsupportedChainIdError } from "../../../errors.js";
+import { UnsupportedChainIdError, UnsupportedVenueIrmError } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { fetchMorphoBlueVenue } from "./fetch.js";
 
@@ -81,6 +81,7 @@ describe("fetchMorphoBlueVenue", () => {
       totalBorrowAssets: 1_000n,
       totalBorrowShares: 1_000_000n,
       lastUpdate: 1_799_999_000n,
+      irm: adaptiveCurveIrm,
     });
     expect(venue.position).toStrictEqual({ borrowShares: 500_000n, collateral: 10n });
     expect(venue.rateAtTarget).toBe(1_268_391_679n);
@@ -115,10 +116,9 @@ describe("fetchMorphoBlueVenue", () => {
     const venue = await fetchMorphoBlueVenue(view, { pod: POD, data }, handle.client);
 
     expect(venue.rateAtTarget).toBeUndefined();
-    // Without a rate model the venue holds its indices flat instead of guessing one.
-    expect(venue.accrueInterest(view.lastUpdate + 86_400n).debtIndex).toBe(
-      venue.accrueInterest(view.lastUpdate).debtIndex,
-    );
+    expect(venue.market.irm).toBe(OTHER_IRM);
+    // Without a rate model the venue refuses to project rather than guessing a zero rate.
+    expect(() => venue.accrueInterest(view.lastUpdate + 86_400n)).toThrow(UnsupportedVenueIrmError);
   });
 
   test("behavior: skips the IRM read entirely on a non-canonical IRM", async () => {

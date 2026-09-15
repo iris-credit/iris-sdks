@@ -1,6 +1,9 @@
+import type { Address } from "viem";
+
+import { zeroAddress } from "viem";
 import { describe, expect, test } from "vitest";
 import { ORACLE_PRICE_SCALE, SECONDS_PER_YEAR } from "../../../constants.js";
-import { IrisCoreErrors } from "../../../errors.js";
+import { IrisCoreErrors, UnsupportedVenueIrmError } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { VenueName } from "../../../registries.js";
 import { AdaptiveCurveIrmLib } from "./AdaptiveCurveIrmLib.js";
@@ -22,11 +25,14 @@ describe("MorphoBlueVenue", () => {
   };
 
   const rateAtTarget = 1_268_391_679n; // ~4% per year, per-second WAD rate.
+  /** An IRM other than the canonical Adaptive Curve deployment. */
+  const OTHER_IRM: Address = "0x0000000000000000000000000000000000000009";
   const market = {
     totalSupplyAssets: MathLib.WAD * 2n,
     totalBorrowAssets: MathLib.WAD,
     totalBorrowShares: MathLib.WAD * 1_000_000n,
     lastUpdate: 1_000n,
+    irm: OTHER_IRM,
   };
   const position = { borrowShares: 0n, collateral: 0n };
 
@@ -92,8 +98,17 @@ describe("MorphoBlueVenue", () => {
     expect(stale.borrowApy).toBeLessThan(venue.borrowApy);
   });
 
-  test("should answer a zero borrow APY without a rate model (non-canonical IRM)", () => {
-    expect(new MorphoBlueVenue(view, market, position).borrowApy).toBe(0n);
+  test("should answer a zero borrow APY on an idle market (zero IRM)", () => {
+    expect(new MorphoBlueVenue(view, { ...market, irm: zeroAddress }, position).borrowApy).toBe(0n);
+  });
+
+  test("should reject the borrow APY without a rate model (non-canonical IRM)", () => {
+    const unsupported = new MorphoBlueVenue(view, market, position);
+
+    expect(() => unsupported.borrowApy).toThrow(UnsupportedVenueIrmError);
+    expect(() => unsupported.getBorrowApy(1_000n + SECONDS_PER_YEAR)).toThrow(
+      UnsupportedVenueIrmError,
+    );
   });
 
   test("should pin the collateral index and keep the debt index at the last update", () => {
@@ -127,12 +142,40 @@ describe("MorphoBlueVenue", () => {
     expect(accrued.collateralIndex).toBe(MathLib.RAY);
   });
 
-  test("should hold the indices constant without a rate model (non-canonical IRM)", () => {
-    const idle = new MorphoBlueVenue(view, market, position);
+  test("should hold the indices constant on an idle market (zero IRM)", () => {
+    const idle = new MorphoBlueVenue(view, { ...market, irm: zeroAddress }, position);
 
     expect(idle.accrueInterest(1_000n + SECONDS_PER_YEAR).debtIndex).toBe(
       idle.accrueInterest(1_000n).debtIndex,
     );
+  });
+
+  test("should reject a projection without a rate model (non-canonical IRM)", () => {
+    const unsupported = new MorphoBlueVenue(view, market, position);
+
+    // Charging an unsupported rate model at zero would understate the pod's debt.
+    expect(() => unsupported.accrueInterest(1_000n + SECONDS_PER_YEAR)).toThrow(
+      UnsupportedVenueIrmError,
+    );
+    expect(() => unsupported.getAccrualDebtIndex(1_000n + SECONDS_PER_YEAR)).toThrow(
+      UnsupportedVenueIrmError,
+    );
+    // The snapshot itself needs no projection.
+    expect(unsupported.accrueInterest(1_000n).debtIndex).toBe(debtIndex(market));
+  });
+
+  test("should accrue a debt-free market without a rate model (non-canonical IRM)", () => {
+    const empty = new MorphoBlueVenue(
+      view,
+      { ...market, totalBorrowAssets: 0n, totalBorrowShares: 0n },
+      position,
+    );
+    const accrued = empty.accrueInterest(1_000n + SECONDS_PER_YEAR);
+
+    // No debt to charge interest on: the accrual is exactly interest-free.
+    expect(accrued.market.lastUpdate).toBe(1_000n + SECONDS_PER_YEAR);
+    expect(accrued.market.totalBorrowAssets).toBe(0n);
+    expect(accrued.market.totalSupplyAssets).toBe(empty.market.totalSupplyAssets);
   });
 
   test("should accrue the pod's debt from its borrow shares and keep the collateral idle", () => {
@@ -187,6 +230,7 @@ describe("MorphoBlueVenue", () => {
         totalBorrowAssets: MathLib.WAD * 9n,
         totalBorrowShares: MathLib.WAD * 9_000_000n,
         lastUpdate: 1_000n,
+        irm: OTHER_IRM,
       },
       position,
       rateAtTarget,
@@ -215,6 +259,7 @@ describe("MorphoBlueVenue", () => {
         totalBorrowAssets: MathLib.WAD * 9n,
         totalBorrowShares: MathLib.WAD * 9_000_000n,
         lastUpdate: 1_000n,
+        irm: OTHER_IRM,
       },
       position,
       rateAtTarget,
@@ -364,7 +409,9 @@ describe("MorphoBlueVenue", () => {
 
   test("should bound a borrow by the LLTV through the shares round-trip", () => {
     // 1 collateral at a 1:1 price and an 80% LLTV — the round-trip keeps it whole here.
-    expect(priced.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBe(800_000_000_000_000_000n);
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n })).toBe(
+      800_000_000_000_000_000n,
+    );
     expect(priced.getMaxBorrowAmount(0n, { timestamp: 1_000n })).toBe(0n);
     // Ten collaterals outgrow the market: the idle wad of supply caps the bound.
     expect(priced.getMaxBorrowAmount(10n * MathLib.WAD, { timestamp: 1_000n })).toBe(MathLib.WAD);
@@ -372,7 +419,10 @@ describe("MorphoBlueVenue", () => {
 
   test("should measure the borrow bound at a tighter LTV, capped by the venue's own", () => {
     expect(
-      priced.getMaxBorrowAmount(MathLib.WAD, { maxLtv: 750_000_000_000_000_000n, timestamp: 1_000n }),
+      priced.getMaxBorrowAmount(MathLib.WAD, {
+        maxLtv: 750_000_000_000_000_000n,
+        timestamp: 1_000n,
+      }),
     ).toBe(750_000_000_000_000_000n);
     // Asking above the venue's max borrow LTV clamps back to it.
     expect(priced.getMaxBorrowAmount(MathLib.WAD, { maxLtv: MathLib.WAD, timestamp: 1_000n })).toBe(
@@ -393,7 +443,9 @@ describe("MorphoBlueVenue", () => {
       accrued.market.totalBorrowAssets,
       accrued.market.totalBorrowShares,
     );
-    expect(priced.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n + SECONDS_PER_YEAR })).toBe(expected);
+    expect(priced.getMaxBorrowAmount(MathLib.WAD, { timestamp: 1_000n + SECONDS_PER_YEAR })).toBe(
+      expected,
+    );
     // The accrued venue answers the same at its own `lastUpdate` default.
     expect(accrued.getMaxBorrowAmount(MathLib.WAD)).toBe(expected);
   });

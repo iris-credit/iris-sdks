@@ -69,8 +69,8 @@ export async function fetchMorphoBlueVenue(
       functionName: "position",
       args: [id, pod],
     }),
-    // Only the canonical Adaptive Curve IRM exposes its state; markets on any other IRM
-    // accrue at a zero rate offline (see `MorphoBlueVenue.accrueInterest`).
+    // Only the canonical Adaptive Curve IRM exposes its state; the venue rejects offline
+    // projections on any other nonzero IRM (see `MorphoBlueVenue.accrueInterest`).
     isAddressEqual(marketParams.irm, adaptiveCurveIrm)
       ? readContract(client, {
           ...parameters,
@@ -84,7 +84,13 @@ export async function fetchMorphoBlueVenue(
 
   return new MorphoBlueVenue(
     venue,
-    { totalSupplyAssets, totalBorrowAssets, totalBorrowShares, lastUpdate },
+    {
+      totalSupplyAssets,
+      totalBorrowAssets,
+      totalBorrowShares,
+      lastUpdate,
+      irm: marketParams.irm,
+    },
     { borrowShares, collateral },
     rateAtTarget,
   );

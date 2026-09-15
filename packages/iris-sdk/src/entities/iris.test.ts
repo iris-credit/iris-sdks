@@ -149,6 +149,7 @@ describe("Iris.take", () => {
         totalBorrowAssets: 0n,
         totalBorrowShares: 0n,
         lastUpdate: 1_900_000_000n,
+        irm: zeroAddress,
       },
       { borrowShares: 0n, collateral: 0n },
     );
@@ -568,6 +569,7 @@ describe("Iris.refinance", () => {
       totalBorrowAssets: MathLib.WAD,
       totalBorrowShares: 10n ** 24n,
       lastUpdate: LAST_UPDATE,
+      irm: zeroAddress,
     },
     { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
   );
@@ -591,6 +593,7 @@ describe("Iris.refinance", () => {
       totalBorrowAssets: 0n,
       totalBorrowShares: 0n,
       lastUpdate: NEW_VENUE_LAST_UPDATE,
+      irm: zeroAddress,
     },
     { borrowShares: 0n, collateral: 0n },
   );
@@ -691,6 +694,7 @@ describe("Iris.repay", () => {
       totalBorrowAssets: MathLib.WAD,
       totalBorrowShares: 10n ** 24n,
       lastUpdate: LAST_UPDATE,
+      irm: zeroAddress,
     },
     { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
   );
@@ -798,6 +802,7 @@ describe("Iris.close", () => {
       totalBorrowAssets: MathLib.WAD,
       totalBorrowShares: 10n ** 24n,
       lastUpdate: LAST_UPDATE,
+      irm: zeroAddress,
     },
     { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
   );

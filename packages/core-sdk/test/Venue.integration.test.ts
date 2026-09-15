@@ -129,7 +129,13 @@ describe("venue parity (mainnet fork)", () => {
           lltv: 0n,
           lastUpdate: block.timestamp,
         },
-        { totalSupplyAssets, totalBorrowAssets, totalBorrowShares, lastUpdate },
+        {
+          totalSupplyAssets,
+          totalBorrowAssets,
+          totalBorrowShares,
+          lastUpdate,
+          irm: marketParams.irm,
+        },
         { borrowShares: 0n, collateral: 0n },
         rateAtTarget,
       );
