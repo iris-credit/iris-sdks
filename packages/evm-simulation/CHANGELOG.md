@@ -1,5 +1,14 @@
 # @iris-credit/evm-simulation
 
+## 0.1.6
+
+### Patch Changes
+
+- [#135](https://github.com/iris-credit/iris-sdks/pull/135) [`94e762e`](https://github.com/iris-credit/iris-sdks/commit/94e762eaa9589ccd99a9fa08859a7172eb9b796f) Thanks [@madiha-right](https://github.com/madiha-right)! - Map a node-level viem `ExecutionRevertedError` thrown by `eth_simulateV1` to `SimulationRevertedError` instead of `ExternalServiceError`, so a reverting bundle is never classified as a fallback-eligible service failure.
+
+- Updated dependencies [[`a5151d0`](https://github.com/iris-credit/iris-sdks/commit/a5151d0b63b1978d154276d38fc1b5aa529c4fb5)]:
+  - @iris-credit/core-sdk@0.4.2
+
 ## 0.1.5
 
 ### Patch Changes

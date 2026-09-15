@@ -1,5 +1,11 @@
 # @iris-credit/core-sdk
 
+## 0.4.2
+
+### Patch Changes
+
+- [#136](https://github.com/iris-credit/iris-sdks/pull/136) [`a5151d0`](https://github.com/iris-credit/iris-sdks/commit/a5151d0b63b1978d154276d38fc1b5aa529c4fb5) Thanks [@madiha-right](https://github.com/madiha-right)! - Stop `AccrualPosition.supplyBond` from mutating the position it is called on. The top-up is now applied only to the returned position, matching every other projection, so a caller-owned snapshot shared across concurrent previews is no longer corrupted by a bond top-up that is never submitted.
+
 ## 0.4.1
 
 ### Patch Changes
