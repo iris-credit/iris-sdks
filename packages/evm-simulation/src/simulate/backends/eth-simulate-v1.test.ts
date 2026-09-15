@@ -1,7 +1,7 @@
 import type { Address, Hex, SimulateCallsParameters } from "viem";
 import type { SimulationTransaction } from "../../types.js";
 
-import { ethAddress, maxUint256, parseEther } from "viem";
+import { ethAddress, ExecutionRevertedError, maxUint256, parseEther } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   ExternalServiceError,
@@ -279,6 +279,24 @@ describe.sequential("simulateV1", () => {
         transactions: [BASIC_TX],
       }),
     ).rejects.toThrow(SimulationRevertedError);
+  });
+
+  it("maps a node-level ExecutionRevertedError to SimulationRevertedError", async () => {
+    const cause = new ExecutionRevertedError({
+      message: "execution reverted: insufficient collateral",
+    });
+    mockSimulateCalls.mockRejectedValueOnce(cause);
+
+    const error = await simulateV1({
+      rpcUrl: "http://rpc.local",
+      chainId: 1,
+      transactions: [BASIC_TX],
+    }).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(SimulationRevertedError);
+    expect(error).not.toBeInstanceOf(ExternalServiceError);
+    expect((error as SimulationRevertedError).details).toBe(cause);
+    expect((error as SimulationRevertedError).cause).toBe(cause);
   });
 
   it("throws ExternalServiceError when results is not an array", async () => {
