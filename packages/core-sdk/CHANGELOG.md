@@ -1,5 +1,11 @@
 # @iris-credit/core-sdk
 
+## 0.4.3
+
+### Patch Changes
+
+- [#137](https://github.com/iris-credit/iris-sdks/pull/137) [`fa1acc5`](https://github.com/iris-credit/iris-sdks/commit/fa1acc57d725372b19cd34dbe496ceb9960b6f66) Thanks [@u-zzam](https://github.com/u-zzam)! - Add Morpho Blue's events (`AccrueInterest`, `Borrow`, `CreateMarket`, `EnableIrm`, `EnableLltv`, `FlashLoan`, `IncrementNonce`, `Liquidate`, `Repay`, `SetAuthorization`, `SetFee`, `SetFeeRecipient`, `SetOwner`, `Supply`, `SupplyCollateral`, `Withdraw`, `WithdrawCollateral`) to `morphoBlueAbi`, which previously carried only the interface's functions. Consumers can now decode and subscribe to Morpho events without declaring them inline.
+
 ## 0.4.2
 
 ### Patch Changes
