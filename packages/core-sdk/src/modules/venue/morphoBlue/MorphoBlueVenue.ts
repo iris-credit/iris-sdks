@@ -1,7 +1,9 @@
+import type { Address } from "viem";
 import type { BigIntish } from "../../../types.js";
 import type { IVenue, MaxBorrowOptions } from "../Venue.js";
 
-import { IrisCoreErrors } from "../../../errors.js";
+import { isAddressEqual, zeroAddress } from "viem";
+import { IrisCoreErrors, UnsupportedVenueIrmError } from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { VenueName } from "../../../registries.js";
 import { PositionUtils } from "../../position/PositionUtils.js";
@@ -15,6 +17,7 @@ export interface IMorphoBlueMarket {
   totalBorrowAssets: bigint;
   totalBorrowShares: bigint;
   lastUpdate: bigint;
+  irm: Address;
 }
 
 /** Plain input shape for the pod's Morpho Blue position primitives. */
@@ -87,14 +90,16 @@ export class MorphoBlueVenue extends Venue {
    * Returns the venue's instantaneous borrow-side Annual Percentage Yield (APY) at the
    * given timestamp, if the market state remains untouched until then: the Adaptive Curve
    * IRM's rate at the market's utilization, compounded continuously — scaled by WAD, as
-   * Morpho quotes it (see `MorphoBlueMath.rateToApy` for the precision bound). Markets
-   * without {@link rateAtTarget} (not on the canonical IRM) answer 0n, matching their
-   * zero-rate accrual.
+   * Morpho quotes it (see `MorphoBlueMath.rateToApy` for the precision bound). Idle markets
+   * (zero IRM) answer 0n, matching their zero-rate accrual.
    *
    * @param timestamp - The timestamp to project the rate's adaptation to (in seconds).
    *   Must be at or after the market's last update. Defaults to `lastUpdate` — the venue
    *   snapshot's timestamp, so a market untouched since before the fetch answers the rate
    *   the venue would charge at the fetch block (as `accrueInterest` accrues by default).
+   * @throws {IrisCoreErrors.InvalidVenueInterestAccrual} When the timestamp is prior to the
+   *   market's last update.
+   * @throws {UnsupportedVenueIrmError} When the market uses a nonzero unsupported IRM.
    */
   public getBorrowApy(timestamp: BigIntish = this.lastUpdate): bigint {
     timestamp = BigInt(timestamp);
@@ -108,7 +113,11 @@ export class MorphoBlueVenue extends Venue {
       );
     }
 
-    if (this.rateAtTarget == null) return 0n;
+    if (this.rateAtTarget == null) {
+      this.assertSupportedIrm();
+
+      return 0n;
+    }
 
     const { endBorrowRate } = AdaptiveCurveIrmLib.getBorrowRate(
       this.utilization,
@@ -122,12 +131,18 @@ export class MorphoBlueVenue extends Venue {
   /**
    * Returns a new venue accrued up to the given timestamp, compounding the market's borrow
    * assets from its `lastUpdate` at the Adaptive Curve IRM's average borrow rate and
-   * crediting the interest to the supply assets, as Morpho's `_accrueInterest` does —
-   * markets without {@link rateAtTarget} (not on the canonical IRM) accrue at a zero rate.
-   * The market and its rate-at-target re-anchor at the accrued state; the collateral index
-   * stays pinned (idle collateral).
+   * crediting the interest to the supply assets, as Morpho's `_accrueInterest` does — idle
+   * markets (zero IRM) accrue at a zero rate. The market and its rate-at-target re-anchor at
+   * the accrued state; the collateral index stays pinned (idle collateral).
+   *
+   * A market on a nonzero unsupported IRM only accrues while there is no debt to charge
+   * interest on: its timestamp advances at an exact zero rate instead of being projected.
    *
    * @param timestamp - The timestamp to accrue to (in seconds). Defaults to `lastUpdate`.
+   * @throws {IrisCoreErrors.InvalidVenueInterestAccrual} When the timestamp is prior to the
+   *   market's last update.
+   * @throws {UnsupportedVenueIrmError} When projecting positive debt requires a nonzero
+   *   unsupported IRM.
    */
   public accrueInterest(timestamp: BigIntish = this.lastUpdate): MorphoBlueVenue {
     timestamp = BigInt(timestamp);
@@ -217,6 +232,8 @@ export class MorphoBlueVenue extends Venue {
   /**
    * Returns the market's total borrow assets accrued up to the given timestamp at the
    * IRM's average borrow rate. Throws on a timestamp prior to the market's last update.
+   * A nonzero unsupported IRM is rejected rather than charged at a zero rate, except where
+   * the accrual is exactly interest-free: an elapsed-free or debt-free market.
    */
   protected getAccrualTotalBorrowAssets(timestamp: BigIntish): bigint {
     timestamp = BigInt(timestamp);
@@ -230,19 +247,40 @@ export class MorphoBlueVenue extends Venue {
       );
     }
 
-    const borrowRate =
-      this.rateAtTarget != null
-        ? AdaptiveCurveIrmLib.getBorrowRate(this.utilization, this.rateAtTarget, elapsed)
-            .avgBorrowRate
-        : 0n;
+    if (this.rateAtTarget == null) {
+      if (elapsed > 0n && this.market.totalBorrowAssets > 0n) this.assertSupportedIrm();
+
+      // Idle markets, and the interest-free accruals of an unsupported one, accrue nothing.
+      return this.market.totalBorrowAssets;
+    }
+
+    const { avgBorrowRate } = AdaptiveCurveIrmLib.getBorrowRate(
+      this.utilization,
+      this.rateAtTarget,
+      elapsed,
+    );
 
     return (
       this.market.totalBorrowAssets +
       MathLib.wMulDown(
         this.market.totalBorrowAssets,
-        MorphoBlueMath.wTaylorCompounded(borrowRate, elapsed),
+        MorphoBlueMath.wTaylorCompounded(avgBorrowRate, elapsed),
       )
     );
+  }
+
+  /**
+   * Asserts the market's rate model can be projected offline: only the canonical Adaptive
+   * Curve IRM (which exposes its {@link rateAtTarget}) and the zero IRM of an idle market
+   * can. Any other model would otherwise be silently charged at a zero rate, understating
+   * debt and overstating free collateral.
+   *
+   * @throws {UnsupportedVenueIrmError} When the market uses a nonzero unsupported IRM.
+   */
+  protected assertSupportedIrm(): void {
+    if (!isAddressEqual(this.market.irm, zeroAddress)) {
+      throw new UnsupportedVenueIrmError(this.pod, this.id, this.market.irm);
+    }
   }
 
   /**

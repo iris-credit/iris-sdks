@@ -28,6 +28,22 @@ export class UnsupportedAaveV3TokenError extends Error {
   }
 }
 
+/**
+ * Error thrown when interest projection is requested for a venue market whose nonzero
+ * interest-rate model the SDK cannot model offline.
+ */
+export class UnsupportedVenueIrmError extends Error {
+  constructor(
+    public readonly pod: Address,
+    public readonly venueId: bigint,
+    public readonly irm: Address,
+  ) {
+    super(
+      `unsupported IRM ${irm} for pod ${pod} and venue ${venueId}: interest can't be projected without a supported rate model`,
+    );
+  }
+}
+
 /** Error thrown when a data hash has no market data payload recorded in the SDK registry. */
 export class UnknownDataHashError extends Error {
   constructor(

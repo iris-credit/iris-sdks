@@ -1,7 +1,12 @@
 import { describe, expect, test } from "vitest";
 import { EMPTY_HEX, POD, USER } from "../test/fixtures/iris.js";
 import { ChainId } from "./chain.js";
-import { IrisCoreErrors, UnsupportedChainIdError, UnsupportedVenueAdapterError } from "./errors.js";
+import {
+  IrisCoreErrors,
+  UnsupportedChainIdError,
+  UnsupportedVenueAdapterError,
+  UnsupportedVenueIrmError,
+} from "./errors.js";
 
 describe("error classes", () => {
   test("UnsupportedChainIdError preserves chainId", () => {
@@ -18,6 +23,16 @@ describe("error classes", () => {
     expect(err).toBeInstanceOf(Error);
     expect(err.adapter).toBe(USER);
     expect(err.chainId).toBe(ChainId.EthMainnet);
+    expect(err.message).toContain(USER);
+  });
+
+  test("UnsupportedVenueIrmError preserves pod, venueId and irm", () => {
+    const err = new UnsupportedVenueIrmError(POD, 1n, USER);
+
+    expect(err).toBeInstanceOf(Error);
+    expect(err.pod).toBe(POD);
+    expect(err.venueId).toBe(1n);
+    expect(err.irm).toBe(USER);
     expect(err.message).toContain(USER);
   });
 });

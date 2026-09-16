@@ -261,6 +261,7 @@ describe("fetchVenue", () => {
       totalBorrowAssets: 1_000n,
       totalBorrowShares: 1_000_000n,
       lastUpdate: BLOCK_TIMESTAMP,
+      irm: adaptiveCurveIrm,
     });
     expect(venue.position).toStrictEqual({ borrowShares: 500_000n, collateral: 10n });
     expect(venue.rateAtTarget).toBe(1_268_391_679n);
