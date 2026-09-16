@@ -1,5 +1,13 @@
 # @iris-credit/core-sdk
 
+## 0.5.0
+
+### Minor Changes
+
+- [#140](https://github.com/iris-credit/iris-sdks/pull/140) [`c41e388`](https://github.com/iris-credit/iris-sdks/commit/c41e38860892debcf870fd3195dc182df0323285) Thanks [@madiha-right](https://github.com/madiha-right)! - Throw `UnsupportedVenueIrmError` when a Morpho Blue venue is asked to quote a rate for, or project positive debt on, an interest-rate model the SDK cannot model offline — instead of charging it at a zero rate, which understated debt and overstated free collateral.
+
+  `IMorphoBlueMarket` now carries the market's `irm`, so the venue tells an idle market (zero IRM, no interest) apart from a nonzero model it has no `rateAtTarget` for. Exactly interest-free accruals are preserved: idle markets, same-timestamp snapshots, and debt-free markets still accrue without throwing.
+
 ## 0.4.3
 
 ### Patch Changes
