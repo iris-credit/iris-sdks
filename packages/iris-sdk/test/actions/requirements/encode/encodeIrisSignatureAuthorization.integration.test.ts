@@ -1,4 +1,5 @@
 import { isHex, maxUint256, verifyTypedData } from "viem";
+import { signTypedData } from "viem/actions";
 import { describe, expect } from "vitest";
 import { getAuthorizationTypedData, getChainAddresses } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
@@ -21,6 +22,7 @@ describe("encodeIrisSignatureAuthorization", () => {
   test("error: ChainIdMismatchError when client chain differs", async ({ client }) => {
     expect(() =>
       encodeIrisSignatureAuthorization(client, {
+        owner: client.account.address,
         authorized: generalAdapter1,
         chainId: UNSUPPORTED_CHAIN_ID,
         nonce: 0n,
@@ -30,6 +32,7 @@ describe("encodeIrisSignatureAuthorization", () => {
 
   test("default: signs a verifiable Iris authorization", async ({ client }) => {
     const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: client.account.address,
       authorized: generalAdapter1,
       chainId: CHAIN_ID,
       nonce: 0n,
@@ -65,6 +68,7 @@ describe("encodeIrisSignatureAuthorization", () => {
 
   test("behavior: supports revocation via isAuthorized=false", async ({ client }) => {
     const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: client.account.address,
       authorized: generalAdapter1,
       chainId: CHAIN_ID,
       nonce: 1n,
@@ -82,6 +86,7 @@ describe("encodeIrisSignatureAuthorization", () => {
   }) => {
     const sign = async () => {
       const requirement = encodeIrisSignatureAuthorization(client, {
+        owner: client.account.address,
         authorized: generalAdapter1,
         chainId: CHAIN_ID,
       });
@@ -94,6 +99,7 @@ describe("encodeIrisSignatureAuthorization", () => {
 
   test("error: AddressMismatchError when signer differs from userAddress", async ({ client }) => {
     const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: client.account.address,
       authorized: generalAdapter1,
       chainId: CHAIN_ID,
       nonce: 0n,
@@ -105,6 +111,7 @@ describe("encodeIrisSignatureAuthorization", () => {
   test("error: NonPositiveInputError when deadline is not positive", async ({ client }) => {
     expect(() =>
       encodeIrisSignatureAuthorization(client, {
+        owner: client.account.address,
         authorized: generalAdapter1,
         chainId: CHAIN_ID,
         nonce: 0n,
@@ -116,6 +123,7 @@ describe("encodeIrisSignatureAuthorization", () => {
   test("error: InputExceedsMaxError when deadline exceeds uint256", async ({ client }) => {
     expect(() =>
       encodeIrisSignatureAuthorization(client, {
+        owner: client.account.address,
         authorized: generalAdapter1,
         chainId: CHAIN_ID,
         nonce: 0n,
@@ -127,6 +135,7 @@ describe("encodeIrisSignatureAuthorization", () => {
   test("error: ExpiredDeadlineError when deadline is in the past", async ({ client }) => {
     expect(() =>
       encodeIrisSignatureAuthorization(client, {
+        owner: client.account.address,
         authorized: generalAdapter1,
         chainId: CHAIN_ID,
         nonce: 0n,
@@ -139,6 +148,7 @@ describe("encodeIrisSignatureAuthorization", () => {
     const deadline = Time.timestamp() + Time.s.from.h(1n);
 
     const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: client.account.address,
       authorized: generalAdapter1,
       chainId: CHAIN_ID,
       nonce: 0n,
@@ -146,5 +156,65 @@ describe("encodeIrisSignatureAuthorization", () => {
     });
 
     expect(requirement.action.args.deadline).toBe(deadline);
+  });
+
+  test("behavior: action.typedData carries the Authorization payload for the owner", async ({
+    client,
+  }) => {
+    const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: client.account.address,
+      authorized: generalAdapter1,
+      chainId: CHAIN_ID,
+      nonce: 0n,
+    });
+
+    const typedData = requirement.action.typedData;
+
+    expect(typedData.primaryType).toBe("Authorization");
+    expect(typedData.message).toMatchObject({
+      authorizer: client.account.address,
+      authorized: generalAdapter1,
+      isAuthorized: true,
+      nonce: 0n,
+    });
+    expect(Object.isFrozen(typedData)).toBe(true);
+  });
+
+  test("behavior: signing action.typedData externally matches sign()", async ({ client }) => {
+    const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: client.account.address,
+      authorized: generalAdapter1,
+      chainId: CHAIN_ID,
+      nonce: 0n,
+    });
+
+    const typedData = requirement.action.typedData;
+    const externalSignature = await signTypedData(client, {
+      ...typedData,
+      account: client.account,
+    });
+    const signed = await requirement.sign(client, client.account.address);
+
+    expect(externalSignature).toEqual(signed.args.signature);
+    await expect(
+      verifyTypedData({
+        ...typedData,
+        address: client.account.address,
+        signature: externalSignature,
+      }),
+    ).resolves.toBe(true);
+  });
+
+  test("error: AddressMismatchError when userAddress differs from owner", async ({ client }) => {
+    const requirement = encodeIrisSignatureAuthorization(client, {
+      owner: USER_A,
+      authorized: generalAdapter1,
+      chainId: CHAIN_ID,
+      nonce: 0n,
+    });
+
+    await expect(requirement.sign(client, client.account.address)).rejects.toBeInstanceOf(
+      AddressMismatchError,
+    );
   });
 });

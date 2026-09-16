@@ -471,6 +471,7 @@ describe("getGeneralAdapterRequirements", () => {
 
       const requirements = await getGeneralAdapterRequirementsPermit(mockClient, {
         token: USDC,
+        owner: mockFrom,
         chainId: CHAIN_ID,
         args: { amount: mockAmount },
         nonce: 0n,

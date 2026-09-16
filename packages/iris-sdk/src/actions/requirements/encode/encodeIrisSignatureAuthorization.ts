@@ -1,10 +1,6 @@
 import type { Address, Client, WalletClient } from "viem";
 import type { ChainId } from "@iris-credit/core-sdk";
-import type {
-  AuthorizationAction,
-  AuthorizationRequirementSignature,
-  Requirement,
-} from "../../../types/index.js";
+import type { AuthorizationRequirementSignature, Requirement } from "../../../types/index.js";
 
 import { maxUint256 } from "viem";
 import { signTypedData, verifyTypedData } from "viem/actions";
@@ -20,6 +16,8 @@ import {
 
 /** Parameters for {@link encodeIrisSignatureAuthorization}. */
 interface EncodeIrisSignatureAuthorizationParams {
+  /** Account granting the authorization and signing it (the Iris `authorizer`). */
+  owner: Address;
   /** Account to authorize on Iris (GeneralAdapter1). */
   authorized: Address;
   /** Target chain id; must match `viemClient.chain.id`. */
@@ -41,23 +39,27 @@ interface EncodeIrisSignatureAuthorizationParams {
  * typed data, verifies it against the connected account (via the client, so ERC-1271
  * smart-contract wallets are supported), and returns a deep-frozen `RequirementSignature` the
  * bundler action helpers consume. Iris nonces are unordered, so the nonce defaults to a random
- * value instead of a fetched sequential one. Deadline defaults to two hours from
+ * value instead of a fetched sequential one. The requirement's `action.typedData` holds that EIP-712
+ * payload so it can be inspected or displayed before signing. Deadline defaults to two hours from
  * `Time.timestamp()`.
  *
  * @param viemClient - Connected viem `Client` whose `chain.id` matches `params.chainId`.
  * @param params - Authorization encoding parameters.
+ * @param params.owner - Account granting the authorization and signing it (the Iris `authorizer`).
  * @param params.authorized - Account to authorize (GeneralAdapter1).
  * @param params.chainId - Target chain id.
  * @param params.nonce - Optional authorization nonce; defaults to a random value.
  * @param params.isAuthorized - Grant (`true`, default) or revoke (`false`).
  * @param params.deadline - Optional signature deadline in seconds.
- * @returns A `Requirement` whose `sign(client, userAddress)` produces the deep-frozen signature.
+ * @returns A `Requirement` whose `action.typedData` is the EIP-712 payload and whose
+ *   `sign(client, userAddress)` produces the deep-frozen signature.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
  * @throws {NonPositiveInputError} when a provided `deadline` is not positive.
  * @throws {InputExceedsMaxError} when a provided `deadline` exceeds `uint256`.
  * @throws {ExpiredDeadlineError} when a provided `deadline` is positive but not in the future.
  * @throws {MissingClientPropertyError} from `sign()` when the client has no `account.address`.
- * @throws {AddressMismatchError} from `sign()` when the client account differs from `userAddress`.
+ * @throws {AddressMismatchError} from `sign()` when `userAddress` differs from `owner`, or when the
+ *   client account differs from `userAddress`.
  * @throws {InvalidSignatureError} from `sign()` when EIP-712 verification fails.
  * @example
  * ```ts
@@ -67,17 +69,18 @@ interface EncodeIrisSignatureAuthorizationParams {
  *
  * const client = createWalletClient({ chain: mainnet, transport: http() });
  * const requirement = encodeIrisSignatureAuthorization(client, {
+ *   owner,
  *   authorized: generalAdapter1,
  *   chainId: 1,
  * });
- * // requirement satisfies Requirement
+ * // Inspect the EIP-712 payload (requirement.action.typedData) or sign via requirement.sign(...).
  * ```
  */
 export const encodeIrisSignatureAuthorization = (
   viemClient: Client,
   params: EncodeIrisSignatureAuthorizationParams,
 ): Requirement<AuthorizationRequirementSignature> => {
-  const { authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
+  const { owner, authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
 
   validateChainId(viemClient.chain?.id, chainId);
 
@@ -103,24 +106,30 @@ export const encodeIrisSignatureAuthorization = (
 
   const deadline = params.deadline ?? Time.timestamp() + Time.s.from.h(2n);
 
-  const action: AuthorizationAction = {
+  const typedData = deepFreeze(
+    getAuthorizationTypedData(chainId, {
+      authorizer: owner,
+      authorized,
+      isAuthorized,
+      nonce,
+      deadline,
+    }),
+  );
+
+  const action: Requirement<AuthorizationRequirementSignature>["action"] = {
     type: "authorization",
     args: { authorized, isAuthorized, deadline },
+    typedData,
   };
 
   return {
     action,
     async sign(client: WalletClient, userAddress: Address) {
+      // The authorizer is fixed at build time and embedded in the signed payload, so a different
+      // signer cannot produce a valid authorization for it.
+      validateUserAddress(userAddress, owner);
       const account = client.account;
       validateUserAddress(account?.address, userAddress);
-
-      const typedData = getAuthorizationTypedData(chainId, {
-        authorizer: userAddress,
-        authorized,
-        isAuthorized,
-        nonce,
-        deadline,
-      });
 
       const signature = await signTypedData(client, {
         ...typedData,
@@ -139,7 +148,7 @@ export const encodeIrisSignatureAuthorization = (
 
       return deepFreeze({
         args: {
-          owner: userAddress,
+          owner,
           authorized,
           isAuthorized,
           nonce,
