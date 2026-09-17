@@ -9,8 +9,8 @@ import { UnsupportedChainIdError } from "../../errors.js";
 import { User } from "./User.js";
 
 /**
- * Fetches a user's Iris bundler authorization state. Returns `false` without a contract read when
- * the chain has no deployed general adapter configured.
+ * Fetches a user's Iris bundler authorization state and sequential authorization nonce. Both
+ * reads are issued concurrently, so they coalesce into the caller's multicall batch.
  *
  * @param address - User address to fetch.
  * @param client - Viem client used for the contract read.
@@ -30,15 +30,18 @@ export async function fetchUser(
 
   const chainAddresses = getChainAddresses(chainId);
 
-  const isBundlerAuthorized = await readContract(client, {
-    ...parameters,
-    address: chainAddresses.iris,
-    abi: irisAbi,
-    functionName: "isAuthorized",
-    args: [address, chainAddresses.bundler3.generalAdapter1],
-  });
+  const call = { ...parameters, address: chainAddresses.iris, abi: irisAbi } as const;
 
-  return new User({ address, isBundlerAuthorized });
+  const [isBundlerAuthorized, nonce] = await Promise.all([
+    readContract(client, {
+      ...call,
+      functionName: "isAuthorized",
+      args: [address, chainAddresses.bundler3.generalAdapter1],
+    }),
+    readContract(client, { ...call, functionName: "nonce", args: [address] }),
+  ]);
+
+  return new User({ address, isBundlerAuthorized, nonce });
 }
 
 /**

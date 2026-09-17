@@ -33,7 +33,7 @@ Package that defines Iris-related entity classes, together with the viem-based f
 - [**`Config`**](./src/modules/config/Config.ts): represents the mutable protocol-level Iris configuration
 - [**`Token`**](./src/modules/token/Token.ts): represents an ERC20 token
 - [**`Holding`**](./src/modules/holding/Holding.ts): represents a user's balance and allowance state for one token
-- [**`User`**](./src/modules/user/User.ts): represents a user of Iris
+- [**`User`**](./src/modules/user/User.ts): represents a user of Iris — the bundler authorization and the next sequential authorization nonce
 
 The entity math is framework-agnostic: every calculation mirrors the Iris contracts and runs offline, so positions can be projected to arbitrary timestamps without an RPC. `viem` is only needed to hydrate entities from the chain.
 

@@ -186,10 +186,10 @@ The simple-permit gate has two halves: the token must be verified in core-sdk's 
 
 ### The Iris authorization requirement
 
-`getIrisAuthorizationRequirement` reads `Iris.isAuthorized(user, generalAdapter1)` and returns `null` when authorization is already in place — which a previous bundled `take` leaves behind. Otherwise:
+`getIrisAuthorizationRequirement` reads the user's `Iris.isAuthorized(user, generalAdapter1)` (and, on the signable path, `Iris.nonce(user)`) and returns `null` when authorization is already in place — which a previous bundled `take` leaves behind. Otherwise:
 
 - **Default** — the `setAuthorization(generalAdapter1, true)` transaction the user sends before the bundle.
-- **`supportSignature: true`** — a signable `Requirement`; the signed authorization is folded into the bundle via `irisSetAuthorizationWithSig`, removing the standalone transaction. Iris authorization nonces are unordered, so no nonce read is needed — the requirement signs with a random nonce.
+- **`supportSignature: true`** — a signable `Requirement`; the signed authorization is folded into the bundle via `irisSetAuthorizationWithSig`, removing the standalone transaction. Iris authorization nonces are sequential per authorizer, so the requirement signs the fetched `Iris.nonce(user)` and only one outstanding signed authorization per account is valid — a second flow signing concurrently for the same account reverts with `InvalidNonce`.
 
 The encoder (`getIrisAuthorizationAction`) rejects any signed authorization whose `authorized` account is not the chain's general adapter (`BundlerErrors.UnexpectedSignature`), so a stray signature can never grant operator rights to an unintended address.
 
