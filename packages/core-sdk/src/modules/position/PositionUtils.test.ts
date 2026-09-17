@@ -481,8 +481,20 @@ describe("PositionUtils", () => {
     const position = {
       collateral: 10n * MathLib.WAD,
       debt: 5n * MathLib.WAD,
+      bond: 2n * MathLib.WAD,
       bondRequirement: 1n,
+      fixedLeg: 0n,
       floatingLeg: 0n,
+      surplus: 0n,
+    };
+    // Principal 100 with 10 floating and 5 fixed accrued, backed by an 8 bond.
+    const crossing = {
+      collateral: 200n * MathLib.WAD,
+      debt: 100n * MathLib.WAD,
+      bond: 8n * MathLib.WAD,
+      bondRequirement: 1n,
+      fixedLeg: 5n * MathLib.WAD,
+      floatingLeg: 10n * MathLib.WAD,
       surplus: 0n,
     };
 
@@ -493,14 +505,29 @@ describe("PositionUtils", () => {
           collateral: 10n * MathLib.WAD,
           debt: 5n * MathLib.WAD,
         }),
-      ).toEqual(position);
+      ).toEqual({ ...position, bondSlashed: 0n });
       // One-sided drift does not rebase either.
       expect(
         PositionUtils.getRebasedPosition(position, {
           collateral: 8n * MathLib.WAD,
           debt: 5n * MathLib.WAD,
         }),
-      ).toEqual(position);
+      ).toEqual({ ...position, bondSlashed: 0n });
+    });
+
+    test("should track a direct venue supply as the borrower's collateral", () => {
+      // Venue collateral 12 above the tracked 10 + 1 surplus: the borrower's share is 11.
+      expect(
+        PositionUtils.getRebasedPosition(
+          { ...position, surplus: MathLib.WAD },
+          { collateral: 12n * MathLib.WAD, debt: 5n * MathLib.WAD },
+        ),
+      ).toEqual({
+        ...position,
+        collateral: 11n * MathLib.WAD,
+        surplus: MathLib.WAD,
+        bondSlashed: 0n,
+      });
     });
 
     test("should track an external liquidation seizing collateral and repaying debt", () => {
@@ -511,11 +538,10 @@ describe("PositionUtils", () => {
           price: ORACLE_PRICE_SCALE,
         }),
       ).toEqual({
+        ...position,
         collateral: 4n * MathLib.WAD,
         debt: 2n * MathLib.WAD,
-        bondRequirement: 1n,
-        floatingLeg: 0n,
-        surplus: 0n,
+        bondSlashed: 0n,
       });
     });
 
@@ -527,11 +553,89 @@ describe("PositionUtils", () => {
           { collateral: 9n * MathLib.WAD, debt: 2n * MathLib.WAD, price: ORACLE_PRICE_SCALE },
         ),
       ).toEqual({
+        ...position,
         collateral: 9n * MathLib.WAD,
         debt: 7n * MathLib.WAD,
+        bondSlashed: 0n,
+      });
+    });
+
+    test("should net the paid floating against the fixed leg", () => {
+      // The liquidation retired the 5 principal plus 0.5 of the 1 floating: 0.5 comes off the
+      // 1 fixed leg, and the bond is untouched.
+      expect(
+        PositionUtils.getRebasedPosition(
+          { ...position, fixedLeg: MathLib.WAD, floatingLeg: MathLib.WAD },
+          { collateral: 4n * MathLib.WAD, debt: MathLib.WAD / 2n, price: ORACLE_PRICE_SCALE },
+        ),
+      ).toEqual({
+        ...position,
+        collateral: 4n * MathLib.WAD,
+        debt: 0n,
+        fixedLeg: MathLib.WAD / 2n,
+        floatingLeg: MathLib.WAD / 2n,
+        bondSlashed: 0n,
+      });
+    });
+
+    test("should slash the paid floating beyond the fixed leg from the bond", () => {
+      // The liquidation retired the 100 principal plus the 10 floating: 5 nets against the
+      // fixed leg, and the other 5 is slashed off the 8 bond to the borrower.
+      expect(
+        PositionUtils.getRebasedPosition(crossing, {
+          collateral: 80n * MathLib.WAD,
+          debt: 0n,
+          price: ORACLE_PRICE_SCALE,
+        }),
+      ).toEqual({
+        collateral: 80n * MathLib.WAD,
+        debt: 0n,
+        bond: 3n * MathLib.WAD,
         bondRequirement: 1n,
+        fixedLeg: 0n,
         floatingLeg: 0n,
         surplus: 0n,
+        bondSlashed: 5n * MathLib.WAD,
+      });
+    });
+
+    test("should resolve the loan and forfeit the surplus when the slash exhausts the bond", () => {
+      // 20 floating, the liquidation retired 115: the 10 beyond the fixed leg exceeds the 8
+      // bond, so the bond is refunded whole and the loan resolves.
+      expect(
+        PositionUtils.getRebasedPosition(
+          { ...crossing, floatingLeg: 20n * MathLib.WAD, surplus: MathLib.WAD },
+          { collateral: 80n * MathLib.WAD, debt: 5n * MathLib.WAD, price: ORACLE_PRICE_SCALE },
+        ),
+      ).toEqual({
+        collateral: 79n * MathLib.WAD,
+        debt: 0n,
+        bond: 0n,
+        bondRequirement: 0n,
+        fixedLeg: 0n,
+        floatingLeg: 5n * MathLib.WAD,
+        surplus: 0n,
+        bondSlashed: 8n * MathLib.WAD,
+      });
+    });
+
+    test("should not net the repayment a seized surplus funded", () => {
+      // 115 of the 100 collateral + 20 surplus was seized to retire 110: only the 100 the
+      // borrower's collateral paid is credited, which the principal absorbs whole.
+      expect(
+        PositionUtils.getRebasedPosition(
+          { ...crossing, collateral: 100n * MathLib.WAD, surplus: 20n * MathLib.WAD },
+          { collateral: 5n * MathLib.WAD, debt: 0n, price: ORACLE_PRICE_SCALE },
+        ),
+      ).toEqual({
+        collateral: 0n,
+        debt: 0n,
+        bond: 8n * MathLib.WAD,
+        bondRequirement: 1n,
+        fixedLeg: 5n * MathLib.WAD,
+        floatingLeg: 0n,
+        surplus: 5n * MathLib.WAD,
+        bondSlashed: 0n,
       });
     });
 
@@ -544,31 +648,122 @@ describe("PositionUtils", () => {
           price: ORACLE_PRICE_SCALE,
         }),
       ).toEqual({
+        ...position,
         collateral: MathLib.WAD,
         debt: 2n * MathLib.WAD,
         bondRequirement: 0n,
+        bondSlashed: 0n,
+      });
+    });
+
+    test("should net nothing when bad debt resolves the loan", () => {
+      // badDebt = 2 - 1: the 8 retired over the principal is not netted.
+      expect(
+        PositionUtils.getRebasedPosition(crossing, {
+          collateral: MathLib.WAD,
+          debt: 2n * MathLib.WAD,
+          price: ORACLE_PRICE_SCALE,
+        }),
+      ).toEqual({
+        collateral: MathLib.WAD,
+        debt: 0n,
+        bond: 8n * MathLib.WAD,
+        bondRequirement: 0n,
+        fixedLeg: 5n * MathLib.WAD,
+        floatingLeg: 2n * MathLib.WAD,
+        surplus: 0n,
+        bondSlashed: 0n,
+      });
+    });
+
+    test("should net nothing when the venue is wiped", () => {
+      expect(
+        PositionUtils.getRebasedPosition(crossing, {
+          collateral: 0n,
+          debt: 0n,
+          price: ORACLE_PRICE_SCALE,
+        }),
+      ).toEqual({
+        collateral: 0n,
+        debt: 0n,
+        bond: 8n * MathLib.WAD,
+        bondRequirement: 0n,
+        fixedLeg: 5n * MathLib.WAD,
         floatingLeg: 0n,
         surplus: 0n,
+        bondSlashed: 0n,
+      });
+    });
+
+    test("should net nothing on a resolved loan", () => {
+      expect(
+        PositionUtils.getRebasedPosition(
+          { ...crossing, bondRequirement: 0n },
+          { collateral: 80n * MathLib.WAD, debt: 0n, price: ORACLE_PRICE_SCALE },
+        ),
+      ).toEqual({
+        collateral: 80n * MathLib.WAD,
+        debt: 0n,
+        bond: 8n * MathLib.WAD,
+        bondRequirement: 0n,
+        fixedLeg: 5n * MathLib.WAD,
+        floatingLeg: 0n,
+        surplus: 0n,
+        bondSlashed: 0n,
       });
     });
 
     test("should resolve the loan and clamp the legs when the venue is emptied", () => {
       expect(
         PositionUtils.getRebasedPosition(
-          { collateral: 3n, debt: 4n, bondRequirement: 5n, floatingLeg: 1n, surplus: 2n },
+          {
+            collateral: 3n,
+            debt: 4n,
+            bond: 6n,
+            bondRequirement: 5n,
+            fixedLeg: 7n,
+            floatingLeg: 1n,
+            surplus: 2n,
+          },
           { collateral: 0n, debt: 0n, price: ORACLE_PRICE_SCALE },
         ),
-      ).toEqual({ collateral: 0n, debt: 0n, bondRequirement: 0n, floatingLeg: 0n, surplus: 0n });
+      ).toEqual({
+        collateral: 0n,
+        debt: 0n,
+        bond: 6n,
+        bondRequirement: 0n,
+        fixedLeg: 7n,
+        floatingLeg: 0n,
+        surplus: 0n,
+        bondSlashed: 0n,
+      });
     });
 
     test("should clamp the floating leg and surplus to the venue's actuals", () => {
       // badDebt = 3 - 2 also resolves the loan.
       expect(
         PositionUtils.getRebasedPosition(
-          { collateral: 0n, debt: 0n, bondRequirement: 1n, floatingLeg: 5n, surplus: 5n },
+          {
+            collateral: 0n,
+            debt: 0n,
+            bond: 6n,
+            bondRequirement: 1n,
+            fixedLeg: 7n,
+            floatingLeg: 5n,
+            surplus: 5n,
+          },
           { collateral: 2n, debt: 3n, price: ORACLE_PRICE_SCALE },
         ),
-      ).toEqual({ collateral: 0n, debt: 0n, bondRequirement: 0n, floatingLeg: 3n, surplus: 2n });
+      ).toEqual({
+        collateral: 0n,
+        debt: 0n,
+        bond: 6n,
+        bondRequirement: 0n,
+        fixedLeg: 7n,
+        floatingLeg: 3n,
+        surplus: 2n,
+        bondSlashed: 0n,
+      });
     });
 
     test("should return undefined when a rebase is needed but the price is unknown", () => {

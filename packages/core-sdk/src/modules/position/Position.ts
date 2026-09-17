@@ -366,7 +366,10 @@ export class AccrualPosition extends Position {
 
   /**
    * Returns a new position rebased against the venue's view of the pod, matching Iris's
-   * onchain rebase (see `PositionUtils.getRebasedPosition`).
+   * onchain rebase (see `PositionUtils.getRebasedPosition`): a venue liquidation writes
+   * down the collateral and debt, nets the floating interest it paid against the fixed leg
+   * and slashes the excess from the bond to the borrower's claimable. The slashed amount is
+   * not carried on the position — see `PositionUtils.getRebasedPosition` for it.
    *
    * Expects accrued legs: call `accrueLegs` beforehand, as the rebase runs after accrual
    * onchain.
