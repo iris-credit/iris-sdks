@@ -455,10 +455,10 @@ export const irisAbi = [
   },
   {
     type: "function",
-    name: "isNonceUsed",
+    name: "isQuoteNonceUsed",
     inputs: [
       {
-        name: "authorizer",
+        name: "solver",
         type: "address",
         internalType: "address",
       },
@@ -529,6 +529,25 @@ export const irisAbi = [
       },
     ],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "nonce",
+    inputs: [
+      {
+        name: "authorizer",
+        type: "address",
+        internalType: "address",
+      },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "uint256",
+        internalType: "uint256",
+      },
+    ],
+    stateMutability: "view",
   },
   {
     type: "function",
@@ -1229,6 +1248,18 @@ export const irisAbi = [
         internalType: "uint256",
       },
       {
+        name: "newFixedLeg",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
+        name: "newBond",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
+      },
+      {
         name: "venueCollateral",
         type: "uint256",
         indexed: false,
@@ -1426,6 +1457,31 @@ export const irisAbi = [
         type: "address",
         indexed: true,
         internalType: "address",
+      },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "SetQuoteNonce",
+    inputs: [
+      {
+        name: "caller",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "solver",
+        type: "address",
+        indexed: true,
+        internalType: "address",
+      },
+      {
+        name: "nonce",
+        type: "uint256",
+        indexed: false,
+        internalType: "uint256",
       },
     ],
     anonymous: false,

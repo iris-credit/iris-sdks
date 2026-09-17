@@ -42,22 +42,21 @@ export async function fetchUser(
 }
 
 /**
- * Fetches whether an account has used a nonce on Iris.
+ * Fetches whether a solver has used a quote nonce on Iris.
  *
- * `take` and `setAuthorizationWithSig` consume nonces, so a quote whose `(solver, nonce)` pair
- * is already used is unsubmittable.
+ * A quote whose `(solver, nonce)` pair is already used is unsubmittable.
  *
- * @param authorizer - Account owning the nonce (e.g. `quote.solver`).
+ * @param solver - Solver owning the nonce (e.g. `quote.solver`).
  * @param nonce - Nonce to look up.
  * @param client - Viem client used for the read.
  * @param parameters.blockNumber - Optional block number for historical reads.
  * @param parameters.blockTag - Optional block tag for historical reads.
  * @param parameters.stateOverride - Optional viem state override.
  * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
- * @returns Whether `authorizer` has used `nonce`.
+ * @returns Whether `solver` has used `nonce`.
  */
-export async function fetchIsNonceUsed(
-  authorizer: Address,
+export async function fetchIsQuoteNonceUsed(
+  solver: Address,
   nonce: BigIntish,
   client: Client,
   parameters: FetchParameters = {},
@@ -71,8 +70,8 @@ export async function fetchIsNonceUsed(
     ...parameters,
     address: iris,
     abi: irisAbi,
-    functionName: "isNonceUsed",
-    args: [authorizer, BigInt(nonce)],
+    functionName: "isQuoteNonceUsed",
+    args: [solver, BigInt(nonce)],
   });
 }
 
