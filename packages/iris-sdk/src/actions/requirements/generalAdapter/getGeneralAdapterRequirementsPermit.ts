@@ -10,9 +10,10 @@ import { encodeErc20Permit } from "../encode/index.js";
  *
  * @param viemClient - Connected viem `Client` (used by the returned `Requirement.sign()`).
  * @param params.token - ERC-20 token address (must support EIP-2612).
+ * @param params.owner - Account that owns the tokens and signs the permit.
  * @param params.chainId - The chain the bundle targets.
  * @param params.args.amount - Required token amount.
- * @param params.nonce - The user's current EIP-2612 nonce on `token`.
+ * @param params.nonce - The owner's current EIP-2612 nonce on `token`.
  * @returns A single-element array containing the exact-amount `Requirement` to sign.
  * @example
  * ```ts
@@ -23,6 +24,7 @@ import { encodeErc20Permit } from "../encode/index.js";
  * const client = createWalletClient({ chain: mainnet, transport: http() });
  * const reqs = await getGeneralAdapterRequirementsPermit(client, {
  *   token: USDC, // an ERC-2612-compatible token; DAI is excluded by getGeneralAdapterRequirements
+ *   owner,
  *   chainId: 1,
  *   args: { amount: 1_000_000n },
  *   nonce: 0n,
@@ -34,6 +36,7 @@ export const getGeneralAdapterRequirementsPermit = async (
   viemClient: Client,
   params: {
     token: Address;
+    owner: Address;
     chainId: ChainId;
     args: { amount: bigint };
     nonce: bigint;
@@ -41,6 +44,7 @@ export const getGeneralAdapterRequirementsPermit = async (
 ) => {
   const {
     token,
+    owner,
     chainId,
     args: { amount },
     nonce,
@@ -55,6 +59,7 @@ export const getGeneralAdapterRequirementsPermit = async (
   return [
     await encodeErc20Permit(viemClient, {
       token,
+      owner,
       spender: generalAdapter1,
       amount,
       chainId,

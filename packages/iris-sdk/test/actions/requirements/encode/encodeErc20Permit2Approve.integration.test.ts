@@ -1,7 +1,8 @@
 import type { Address } from "viem";
 
-import { isHex } from "viem";
+import { isHex, verifyTypedData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { signTypedData } from "viem/actions";
 import { afterEach, describe, expect, vi } from "vitest";
 import { getChainAddresses, MathLib } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
@@ -16,6 +17,7 @@ import { test } from "../../../setup.js";
 
 describe("encodeErc20Permit2Approve", () => {
   const {
+    permit2,
     tokens: { USDC },
     bundler3: { generalAdapter1 },
   } = getChainAddresses(CHAIN_ID);
@@ -180,6 +182,63 @@ describe("encodeErc20Permit2Approve", () => {
       expect(permit.action.args.spender).toEqual(generalAdapter1);
       expect(permit.action.args.amount).toEqual(mockAmount);
       expect(permit.action.args.expiration).toEqual(mockExpiration);
+    });
+  });
+
+  describe("action.typedData", () => {
+    test("default", ({ client }) => {
+      const permit = encodeErc20Permit2Approve(client, {
+        token: USDC,
+        amount: mockAmount,
+        chainId: CHAIN_ID,
+        nonce: mockNonce,
+        expiration: mockExpiration,
+      });
+
+      const typedData = permit.action.typedData;
+
+      expect(typedData.primaryType).toBe("PermitSingle");
+      expect(typedData.domain).toMatchObject({
+        name: "Permit2",
+        chainId: CHAIN_ID,
+        verifyingContract: permit2,
+      });
+      expect(typedData.message).toMatchObject({
+        details: {
+          token: USDC,
+          amount: mockAmount,
+          nonce: Number(mockNonce),
+        },
+        spender: generalAdapter1,
+      });
+      expect(Object.isFrozen(typedData)).toBe(true);
+    });
+
+    test("behavior: signing action.typedData externally matches sign()", async ({ client }) => {
+      const userAddress = client.account.address;
+      const permit = encodeErc20Permit2Approve(client, {
+        token: USDC,
+        amount: mockAmount,
+        chainId: CHAIN_ID,
+        nonce: mockNonce,
+        expiration: mockExpiration,
+      });
+
+      const typedData = permit.action.typedData;
+      const externalSignature = await signTypedData(client, {
+        ...typedData,
+        account: client.account,
+      });
+      const signed = await permit.sign(client, userAddress);
+
+      expect(externalSignature).toEqual(signed.args.signature);
+      expect(
+        await verifyTypedData({
+          ...typedData,
+          address: userAddress,
+          signature: externalSignature,
+        }),
+      ).toBe(true);
     });
   });
 });
