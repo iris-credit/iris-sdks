@@ -135,54 +135,74 @@ export namespace PositionUtils {
   };
 
   /**
-   * Mirror of Iris's `_rebase`: detects venue-side liquidations or repayments on the pod's
-   * venue position and returns the rebased position fields.
+   * Mirror of Iris's `_rebase`: detects venue-side liquidations on the pod's venue position
+   * and returns the rebased position fields.
    *
    * `liquidated` collateral (tracked collateral + surplus above the venue's actual) and
    * `repaid` debt (tracked debt + floating leg above the venue's actual) are derived from
-   * the venue's view; when either is zero, the position is returned unchanged. Otherwise
-   * the tracked collateral is reduced by the liquidated amount and the tracked debt by the
-   * repaid amount, capped at the liquidated amount's value in debt assets. The surplus and
-   * floating leg are clamped to the venue's actuals, and the bond requirement is zeroed
-   * (resolving the loan) on bad debt or when the venue position is emptied.
+   * the venue's view. When either is zero, the position is returned unchanged, except that
+   * live collateral above the tracked collateral and surplus (a direct venue supply) is
+   * tracked as the borrower's collateral. Otherwise the tracked collateral is reduced by the
+   * liquidated amount and the tracked debt by the repaid amount, capped at the liquidated
+   * amount's value in debt assets. The surplus and floating leg are clamped to the venue's
+   * actuals, and the bond requirement is zeroed (resolving the loan) on bad debt or when the
+   * venue position is emptied.
+   *
+   * Repayment recognized over the principal is floating interest the borrower's collateral
+   * paid. it nets against the fixed leg, and the excess is slashed from the bond to the
+   * borrower's claimable (`bondSlashed`), so the borrower does not pay both legs on the
+   * recognized portion. The borrower is credited at most the value of the collateral they
+   * lost — repayment a seized surplus funded is not netted — and a resolved loan (bad debt,
+   * wipe or bond requirement already zero) nets nothing. A slash that exhausts the bond
+   * resolves the loan, forfeiting the surplus, as a bond liquidation would.
    *
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand, as the rebase
    * runs after accrual onchain (and before every other state change).
    *
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
+   * @param position.bond The position's bond.
    * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param position.surplus The position's surplus.
    * @param venue.collateral The pod's collateral on the venue, from `IVenueAdapter.positionAssets`.
    * @param venue.debt The pod's debt on the venue, from `IVenueAdapter.positionAssets`.
    * @param venue.price The collateral price quoted in debt assets, from `IVenueAdapter.price` (scaled by ORACLE_PRICE_SCALE), or `undefined` when unknown.
-   * @returns The rebased `collateral`, `debt`, `bondRequirement`, `floatingLeg` & `surplus`
-   * (the bond, fixed leg and indices are unaffected), or `undefined` when a rebase is
-   * needed but the price is unknown.
+   * @returns The rebased `collateral`, `debt`, `bond`, `bondRequirement`, `fixedLeg`,
+   * `floatingLeg` & `surplus` (the indices are unaffected) alongside the `bondSlashed` to the
+   * borrower's claimable, or `undefined` when a rebase is needed but the price is unknown.
    * @example
    * ```ts
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
+   * // A venue liquidation retired the 5 principal plus 1 floating out of 7 collateral.
    * const rebased = PositionUtils.getRebasedPosition(
    *   {
    *     collateral: 10n * MathLib.WAD,
    *     debt: 5n * MathLib.WAD,
+   *     bond: 2n * MathLib.WAD,
    *     bondRequirement: 1n,
-   *     floatingLeg: 0n,
+   *     fixedLeg: MathLib.WAD / 2n,
+   *     floatingLeg: MathLib.WAD,
    *     surplus: 0n,
    *   },
-   *   { collateral: 4n * MathLib.WAD, debt: 2n * MathLib.WAD, price: ORACLE_PRICE_SCALE },
+   *   { collateral: 3n * MathLib.WAD, debt: 0n, price: ORACLE_PRICE_SCALE },
    * );
-   * // rebased.collateral === 4000000000000000000n
-   * // rebased.debt === 2000000000000000000n
+   * // rebased.collateral === 3000000000000000000n
+   * // rebased.debt === 0n
+   * // rebased.fixedLeg === 0n
+   * // rebased.bond === 1500000000000000000n
+   * // rebased.bondSlashed === 500000000000000000n
    * ```
    */
   export const getRebasedPosition = (
     position: {
       collateral: BigIntish;
       debt: BigIntish;
+      bond: BigIntish;
       bondRequirement: BigIntish;
+      fixedLeg: BigIntish;
       floatingLeg: BigIntish;
       surplus: BigIntish;
     },
@@ -190,7 +210,9 @@ export namespace PositionUtils {
   ) => {
     position.collateral = BigInt(position.collateral);
     position.debt = BigInt(position.debt);
+    position.bond = BigInt(position.bond);
     position.bondRequirement = BigInt(position.bondRequirement);
+    position.fixedLeg = BigInt(position.fixedLeg);
     position.floatingLeg = BigInt(position.floatingLeg);
     position.surplus = BigInt(position.surplus);
     venue.collateral = BigInt(venue.collateral);
@@ -200,15 +222,21 @@ export namespace PositionUtils {
       position.collateral + position.surplus,
       venue.collateral,
     );
-    const repaid = MathLib.zeroFloorSub(position.debt + position.floatingLeg, venue.debt);
+    let repaid = MathLib.zeroFloorSub(position.debt + position.floatingLeg, venue.debt);
 
     if (liquidated === 0n || repaid === 0n) {
       return {
-        collateral: position.collateral,
+        collateral:
+          venue.collateral > position.collateral + position.surplus
+            ? venue.collateral - position.surplus
+            : position.collateral,
         debt: position.debt,
+        bond: position.bond,
         bondRequirement: position.bondRequirement,
+        fixedLeg: position.fixedLeg,
         floatingLeg: position.floatingLeg,
         surplus: position.surplus,
+        bondSlashed: 0n,
       };
     }
 
@@ -219,16 +247,48 @@ export namespace PositionUtils {
       venue.debt,
       getCollateralValue({ collateral: venue.collateral }, { price: venue.price })!,
     );
+    repaid = MathLib.min(repaid, maxRepaid);
+
+    let surplus = MathLib.min(position.surplus, venue.collateral);
+    const floatingLeg = MathLib.min(position.floatingLeg, venue.debt);
+    let bondRequirement =
+      badDebt !== 0n || (venue.debt === 0n && venue.collateral === 0n)
+        ? 0n
+        : position.bondRequirement;
+
+    const borrowerRepaid = MathLib.min(
+      repaid,
+      MathLib.mulDivDown(
+        MathLib.min(liquidated, position.collateral),
+        venue.price,
+        ORACLE_PRICE_SCALE,
+      ),
+    );
+    const overpaid =
+      bondRequirement === 0n ? 0n : MathLib.zeroFloorSub(borrowerRepaid, position.debt);
+    const bondSlashed = MathLib.min(
+      MathLib.zeroFloorSub(overpaid, position.fixedLeg),
+      position.bond,
+    );
+
+    let bond = position.bond;
+    if (bondSlashed !== 0n) {
+      bond -= bondSlashed;
+      if (bond === 0n) {
+        bondRequirement = 0n;
+        surplus = 0n;
+      }
+    }
 
     return {
       collateral: MathLib.zeroFloorSub(position.collateral, liquidated),
-      debt: MathLib.zeroFloorSub(position.debt, MathLib.min(repaid, maxRepaid)),
-      bondRequirement:
-        badDebt !== 0n || (venue.debt === 0n && venue.collateral === 0n)
-          ? 0n
-          : position.bondRequirement,
-      floatingLeg: MathLib.min(position.floatingLeg, venue.debt),
-      surplus: MathLib.min(position.surplus, venue.collateral),
+      debt: MathLib.zeroFloorSub(position.debt, repaid),
+      bond,
+      bondRequirement,
+      fixedLeg: MathLib.zeroFloorSub(position.fixedLeg, overpaid),
+      floatingLeg,
+      surplus,
+      bondSlashed,
     };
   };
 

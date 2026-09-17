@@ -437,6 +437,29 @@ describe("AccrualPosition", () => {
       expect(value?.bondRequirement).toBe(position.bondRequirement);
     });
 
+    test("should net the paid floating against the fixed leg and slash the excess from the bond", () => {
+      // liquidated = 2 - 0.8 and repaid = 1.1 - 0.02: 0.08 over the principal nets the 0.05
+      // fixed leg, and the other 0.03 is slashed off the 0.1 bond.
+      const value = new AccrualPosition(
+        { ...position, fixedLeg: 50_000_000_000_000_000n, floatingLeg: 100_000_000_000_000_000n },
+        loan,
+        new TestVenue({
+          ...venue,
+          collateral: 800_000_000_000_000_000n,
+          debt: 20_000_000_000_000_000n,
+        }),
+      ).rebase();
+
+      expect(value.collateral).toBe(800_000_000_000_000_000n);
+      expect(value.debt).toBe(0n);
+      expect(value.fixedLeg).toBe(0n);
+      expect(value.floatingLeg).toBe(20_000_000_000_000_000n);
+      expect(value.bond).toBe(70_000_000_000_000_000n);
+      expect(value.bondRequirement).toBe(position.bondRequirement);
+      // The slashed amount goes to the borrower's claimable, not to the position.
+      expect(value).not.toHaveProperty("bondSlashed");
+    });
+
     test("should throw when the price is unknown", () => {
       expect(() =>
         new AccrualPosition(
@@ -519,6 +542,39 @@ describe("AccrualPosition", () => {
       // The venue is repaid in full and the seized collateral withdrawn from it.
       expect(value.venue.debt).toBe(0n);
       expect(value.venue.collateral).toBe(850_000_000_000_000_000n);
+    });
+
+    test("should repay the fixed leg the rebase netted", () => {
+      // A venue liquidation retired the principal plus 0.1 floating out of 1.2 collateral:
+      // the 0.1 nets the 0.15 fixed leg down to 0.05, which is all the liquidator repays
+      // (0.02 floating is left on the venue, within the bond), seized at the max lif.
+      const {
+        position: value,
+        repaid,
+        seized,
+      } = new AccrualPosition(
+        {
+          ...liquidatable,
+          fixedLeg: 150_000_000_000_000_000n,
+          floatingLeg: 120_000_000_000_000_000n,
+        },
+        loan,
+        new TestVenue({
+          ...venue,
+          collateral: 800_000_000_000_000_000n,
+          debt: 20_000_000_000_000_000n,
+        }),
+      ).liquidate();
+
+      expect(repaid).toBe(50_000_000_000_000_000n);
+      expect(seized).toBe(57_500_000_000_000_000n);
+      expect(value.collateral).toBe(742_500_000_000_000_000n);
+      expect(value.debt).toBe(0n);
+      expect(value.fixedLeg).toBe(0n);
+      expect(value.bond).toBe(position.bond);
+      expect(value.bondRequirement).toBe(0n);
+      expect(value.venue.debt).toBe(0n);
+      expect(value.venue.collateral).toBe(742_500_000_000_000_000n);
     });
 
     test("should throw when the price is unknown", () => {
