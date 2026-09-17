@@ -676,12 +676,15 @@ export namespace PositionUtils {
 
   /**
    * Mirror of Iris's `withdrawBond` limit: returns the maximum bond withdrawable while
-   * keeping the bond healthy (see `isHealthyBond`).
+   * keeping the remaining bond at or above the bond requirement and healthy (see
+   * `isHealthyBond`) — the two checks `withdrawBond` runs, as the requirement is a
+   * withdrawal floor the health check does not enforce.
    *
    * The remaining bond must cover the bond requirement and keep the drawdown within the
    * loan's bond LLTV. Returns zero on a zero bond LLTV; otherwise, once the loan is closed
    * (zero bond requirement), the full bond is withdrawable. Returns zero when no
-   * withdrawal can pass the check, including when the bond is already unhealthy.
+   * withdrawal can pass the checks, including when the bond is already below the
+   * requirement or unhealthy.
    *
    * Iris accepts `withdrawBond(pod, amount, receiver)` iff `amount` does not exceed this
    * limit.
@@ -774,9 +777,9 @@ export namespace PositionUtils {
   };
 
   /**
-   * Returns whether the position's bond is healthy: the bond covers the bond requirement, and
-   * the drawdown of the floating leg over the fixed leg, relative to the bond, does not exceed
-   * the loan's bond LLTV. A closed loan (zero bond requirement) is always healthy.
+   * Returns whether the position's bond is healthy: the drawdown of the floating leg over the
+   * fixed leg, relative to the bond, does not exceed the loan's bond LLTV. A closed loan (zero
+   * bond requirement) is always healthy.
    *
    * @param position.bond The position's bond.
    * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
@@ -811,7 +814,6 @@ export namespace PositionUtils {
     bondLltv = BigInt(bondLltv);
 
     if (position.bondRequirement === 0n) return true;
-    if (position.bond < position.bondRequirement) return false;
     if (position.floatingLeg <= position.fixedLeg) return true;
 
     return getDrawdown(position) <= bondLltv;

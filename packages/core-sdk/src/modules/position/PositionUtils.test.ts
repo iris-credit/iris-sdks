@@ -428,6 +428,17 @@ describe("PositionUtils", () => {
       expect(
         PositionUtils.getBondLiquidationSeizedAmount({ ...position, bondRequirement: 0n }, loan),
       ).toBe(0n);
+      // A bond below the requirement is not liquidatable while the drawdown holds.
+      expect(
+        PositionUtils.getBondLiquidationSeizedAmount(
+          {
+            ...position,
+            bondRequirement: 2n * MathLib.WAD,
+            floatingLeg: 950_000_000_000_000_000n,
+          },
+          loan,
+        ),
+      ).toBe(0n);
     });
 
     test("should cap the incentive at MAX_BOND_LIF", () => {
@@ -840,10 +851,21 @@ describe("PositionUtils", () => {
       ).toBe(1_000n);
     });
 
-    test("should return zero when the bond is already unhealthy", () => {
+    test("should return zero when the bond is already below the requirement", () => {
+      // Healthy (no drawdown), yet no withdrawal can restore the floor.
       expect(
         PositionUtils.getWithdrawableBond(
           { bond: 250n, bondRequirement: 300n, fixedLeg: 0n, floatingLeg: 0n },
+          loan,
+        ),
+      ).toBe(0n);
+    });
+
+    test("should return zero when the bond is already unhealthy", () => {
+      // A negative net of 200 requires 400: the 250 bond is over the LLTV.
+      expect(
+        PositionUtils.getWithdrawableBond(
+          { bond: 250n, bondRequirement: 1n, fixedLeg: 0n, floatingLeg: 200n },
           loan,
         ),
       ).toBe(0n);
@@ -928,13 +950,16 @@ describe("PositionUtils", () => {
       ).toBe(true);
     });
 
-    test("should be unhealthy when the bond does not cover the requirement", () => {
-      expect(
-        PositionUtils.isHealthyBond(
-          { bond: 99n, bondRequirement: 100n, fixedLeg: 0n, floatingLeg: 0n },
-          { bondLltv: MathLib.WAD },
-        ),
-      ).toBe(false);
+    test("should stay healthy below the requirement while the drawdown holds", () => {
+      // The requirement is a withdrawal floor, not a liquidation trigger.
+      const position = { bond: 99n, bondRequirement: 100n, fixedLeg: 0n, floatingLeg: 0n };
+      const loan = { bondLltv: 500_000_000_000_000_000n };
+
+      expect(PositionUtils.isHealthyBond(position, loan)).toBe(true);
+      // drawdown = 49 * 1e18 / 99 ≈ 0.495 <= 0.5.
+      expect(PositionUtils.isHealthyBond({ ...position, floatingLeg: 49n }, loan)).toBe(true);
+      // drawdown = 50 * 1e18 / 99 ≈ 0.505 > 0.5.
+      expect(PositionUtils.isHealthyBond({ ...position, floatingLeg: 50n }, loan)).toBe(false);
     });
 
     test("should be healthy when the net is not negative", () => {
