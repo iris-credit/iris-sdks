@@ -593,7 +593,7 @@ describe("PositionUtils", () => {
       // A year out: 1 debt + 0.025 fixed leg + 0.1 residual.
       expect(
         PositionUtils.getRequiredCollateralValue(
-          { debt: MathLib.WAD, fixedLeg: 25_000_000_000_000_000n },
+          { debt: MathLib.WAD, fixedLeg: 25_000_000_000_000_000n, floatingLeg: 0n, bond: 0n },
           loan,
           40_086_400n - SECONDS_PER_YEAR,
         ),
@@ -603,11 +603,44 @@ describe("PositionUtils", () => {
     test("should reserve no residual past the deadline", () => {
       expect(
         PositionUtils.getRequiredCollateralValue(
-          { debt: MathLib.WAD, fixedLeg: 25_000_000_000_000_000n },
+          { debt: MathLib.WAD, fixedLeg: 25_000_000_000_000_000n, floatingLeg: 0n, bond: 0n },
           loan,
           40_086_401n,
         ),
       ).toBe(1_025_000_000_000_000_000n);
+    });
+
+    test("should reserve the floating leg beyond the bond when it outgrows the fixed interest", () => {
+      // A year out the fixed side reserves 0.125; the 0.5 floating leg beyond the 0.3 bond
+      // reserves 0.2. The larger is reserved, never their sum.
+      expect(
+        PositionUtils.getRequiredCollateralValue(
+          {
+            debt: MathLib.WAD,
+            fixedLeg: 25_000_000_000_000_000n,
+            floatingLeg: 500_000_000_000_000_000n,
+            bond: 300_000_000_000_000_000n,
+          },
+          loan,
+          40_086_400n - SECONDS_PER_YEAR,
+        ),
+      ).toBe(1_200_000_000_000_000_000n);
+    });
+
+    test("should reserve the fixed interest while it covers the floating leg beyond the bond", () => {
+      // The 0.3 bond leaves 0.1 of the 0.4 floating leg uncovered: the fixed side's 0.125 wins.
+      expect(
+        PositionUtils.getRequiredCollateralValue(
+          {
+            debt: MathLib.WAD,
+            fixedLeg: 25_000_000_000_000_000n,
+            floatingLeg: 400_000_000_000_000_000n,
+            bond: 300_000_000_000_000_000n,
+          },
+          loan,
+          40_086_400n - SECONDS_PER_YEAR,
+        ),
+      ).toBe(1_125_000_000_000_000_000n);
     });
   });
 
@@ -628,19 +661,27 @@ describe("PositionUtils", () => {
 
     test("should reserve the worst-case interest until the liquidation deadline", () => {
       // One year to maturity: residual = 365 * (0.1 * (1y + 1d) + 0.2 * 1d) / 1y = 36.8.
-      const position = { collateral: 500n * MathLib.WAD, debt: 365n * MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: 500n * MathLib.WAD,
+        debt: 365n * MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 1_000_000n),
       ).toBe(98_200_000_000_000_000_000n);
     });
 
-    test("should not reserve any interest at or past the liquidation deadline", () => {
-      // Past the deadline the payoff is just debt + fixedLeg.
+    test("should not reserve any interest at the liquidation deadline", () => {
+      // At the deadline the payoff is just debt + fixedLeg.
       const position = {
         collateral: 5n * MathLib.WAD,
         debt: 2n * MathLib.WAD,
         fixedLeg: MathLib.WAD,
+        floatingLeg: 0n,
+        bond: 0n,
       };
 
       expect(
@@ -648,9 +689,30 @@ describe("PositionUtils", () => {
       ).toBe(2n * MathLib.WAD);
     });
 
+    test("should return zero once the loan is liquidatable", () => {
+      // Past the deadline Iris rejects the withdrawal outright, even with nothing owed.
+      const position = {
+        collateral: 5n * MathLib.WAD,
+        debt: 0n,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
+
+      expect(
+        PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 32_622_401n),
+      ).toBe(0n);
+    });
+
     test("should require more collateral the lower the LLTV", () => {
       // A payoff of 2 at a 50% LLTV reserves 4.
-      const position = { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: 5n * MathLib.WAD,
+        debt: 2n * MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(
@@ -664,7 +726,7 @@ describe("PositionUtils", () => {
 
     test("should round the required collateral up", () => {
       // ceil(ceil(3 / 0.4) * OPS / (3 * OPS)) = ceil(8 / 3) = 3: 5 - 3 = 2.
-      const position = { collateral: 5n, debt: 3n, fixedLeg: 0n };
+      const position = { collateral: 5n, debt: 3n, fixedLeg: 0n, floatingLeg: 0n, bond: 0n };
 
       expect(
         PositionUtils.getWithdrawableCollateral(
@@ -682,7 +744,13 @@ describe("PositionUtils", () => {
 
     test("should bound by the venue's own limit when the floating leg outgrows the payoff", () => {
       // Past the deadline Iris reserves the 2 debt, freeing 3 of the 5; the venue owes 4, freeing 1.
-      const position = { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: 5n * MathLib.WAD,
+        debt: 2n * MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(
@@ -695,7 +763,13 @@ describe("PositionUtils", () => {
     });
 
     test("should return zero when the collateral cannot cover the worst-case payoff", () => {
-      const position = { collateral: MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: MathLib.WAD,
+        debt: 2n * MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 32_622_400n),
@@ -703,7 +777,13 @@ describe("PositionUtils", () => {
     });
 
     test("should return zero when the venue position is already unhealthy", () => {
-      const position = { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: 5n * MathLib.WAD,
+        debt: 2n * MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(
@@ -717,7 +797,7 @@ describe("PositionUtils", () => {
 
     test("should return the full collateral on a zero payoff", () => {
       // Nothing owed: the check passes for any amount.
-      const position = { collateral: 7n, debt: 0n, fixedLeg: 0n };
+      const position = { collateral: 7n, debt: 0n, fixedLeg: 0n, floatingLeg: 0n, bond: 0n };
 
       expect(
         PositionUtils.getWithdrawableCollateral(position, loan, venueUnder(position), 1_000_000n),
@@ -725,7 +805,13 @@ describe("PositionUtils", () => {
     });
 
     test("should return zero on a zero price or LLTV", () => {
-      const position = { collateral: MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: MathLib.WAD,
+        debt: MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(
@@ -746,7 +832,13 @@ describe("PositionUtils", () => {
     });
 
     test("should return undefined when the price is unknown", () => {
-      const position = { collateral: MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n };
+      const position = {
+        collateral: MathLib.WAD,
+        debt: MathLib.WAD,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
+      };
 
       expect(
         PositionUtils.getWithdrawableCollateral(
@@ -880,6 +972,8 @@ describe("PositionUtils", () => {
         collateral: 2n * MathLib.WAD,
         debt: 1_600_000_000_000_000_000n,
         fixedLeg: 0n,
+        floatingLeg: 0n,
+        bond: 0n,
       };
 
       // At the liquidation deadline the residual is zero: maxDebt = 2 * 0.8 = 1.6.
@@ -898,7 +992,13 @@ describe("PositionUtils", () => {
       // A year out, the 10% fixed rate reserves 0.16 on top of the 1.6 debt.
       expect(
         PositionUtils.isHealthy(
-          { collateral: 2n * MathLib.WAD, debt: 1_600_000_000_000_000_000n, fixedLeg: 0n },
+          {
+            collateral: 2n * MathLib.WAD,
+            debt: 1_600_000_000_000_000_000n,
+            fixedLeg: 0n,
+            floatingLeg: 0n,
+            bond: 0n,
+          },
           loan,
           venue,
           40_086_400n - SECONDS_PER_YEAR,
@@ -909,7 +1009,7 @@ describe("PositionUtils", () => {
     test("should be undefined when the price is unknown", () => {
       expect(
         PositionUtils.isHealthy(
-          { collateral: MathLib.WAD, debt: 0n, fixedLeg: 0n },
+          { collateral: MathLib.WAD, debt: 0n, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
           loan,
           { lltv: MathLib.WAD },
           0n,

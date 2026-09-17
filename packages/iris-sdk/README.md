@@ -229,7 +229,7 @@ const tx = buildTx([permitSignature]);
 
 ### Withdraw Collateral
 
-Direct call to `Iris.withdrawCollateral` — no bundler, no approval, no authorization requirement (the collateral flows out of the venue, not in). The withdrawal is validated against both ceilings — Iris's health check and the venue's own — measured against the venue LLTV minus a 0.5% buffer (`DEFAULT_LLTV_BUFFER`) so a withdrawal sized to the fetched state still clears them once it lands.
+Direct call to `Iris.withdrawCollateral` — no bundler, no approval, no authorization requirement (the collateral flows out of the venue, not in). The withdrawal is validated against both ceilings — Iris's health check and the venue's own — measured against the venue LLTV minus a 0.5% buffer (`DEFAULT_LLTV_BUFFER`) so a withdrawal sized to the fetched state still clears them once it lands. Withdrawals close once the loan is liquidatable (past `maturity + overduePeriod`): the flow throws `IrisCoreErrors.LiquidatableLoan`, as Iris reverts.
 
 ```typescript
 import { Time } from "@iris-credit/iris-ts";

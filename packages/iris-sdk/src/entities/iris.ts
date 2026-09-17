@@ -1067,6 +1067,8 @@ export class Iris implements IrisActions {
    * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
    * @throws {NonPositiveInputError} when `amount` is not positive.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
+   * @throws {IrisCoreErrors.LiquidatableLoan} when the loan is liquidatable as of `positionData`:
+   *   Iris closes withdrawals past `maturity + overduePeriod`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} when the venue price is unknown, which leaves both
    *   ceilings underivable.
    * @throws {UnhealthyCollateralError} when `amount` would leave the position
@@ -1089,6 +1091,7 @@ export class Iris implements IrisActions {
     const { pod, lastUpdate, venue } = positionData;
 
     if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
+    if (positionData.isLiquidatable) throw new IrisCoreErrors.LiquidatableLoan(pod);
 
     const withdrawable = PositionUtils.getWithdrawableCollateral(
       positionData,
