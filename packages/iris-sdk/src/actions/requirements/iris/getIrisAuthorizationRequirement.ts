@@ -22,10 +22,9 @@ import { encodeIrisSignatureAuthorization } from "../encode/index.js";
  *
  * - When `supportSignature` is falsy (default), returns the
  *   `setAuthorization(generalAdapter1, true)` transaction the user submits before the bundle.
- * - When `supportSignature` is `true`, returns a signable `Requirement`; the signed
- *   authorization is folded into the bundle via `setAuthorizationWithSig`, removing the
- *   standalone transaction. Iris authorization nonces are unordered, so no nonce read is
- *   needed — the requirement signs with a random nonce.
+ * - When `supportSignature` is `true`, reads the user's Iris `nonce` and returns a signable
+ *   `Requirement`; the signed authorization is folded into the bundle via
+ *   `setAuthorizationWithSig`, removing the standalone transaction.
  *
  * @param params.viemClient - Connected viem `Client` whose `chain.id` matches `params.chainId`.
  * @param params.chainId - Target chain id (used to resolve Iris and `GeneralAdapter1`).
@@ -74,6 +73,33 @@ export const getIrisAuthorizationRequirement = async (params: {
 
   const pc = viemClient.extend(publicActions);
 
+  if (supportSignature) {
+    const [isAuthorized, nonce] = await Promise.all([
+      pc.readContract({
+        address: iris,
+        abi: irisAbi,
+        functionName: "isAuthorized",
+        args: [userAddress, generalAdapter1],
+      }),
+      pc.readContract({
+        address: iris,
+        abi: irisAbi,
+        functionName: "nonce",
+        args: [userAddress],
+      }),
+    ]);
+
+    if (isAuthorized) {
+      return null;
+    }
+
+    return encodeIrisSignatureAuthorization(viemClient, {
+      authorized: generalAdapter1,
+      chainId,
+      nonce,
+    });
+  }
+
   const isAuthorized = await pc.readContract({
     address: iris,
     abi: irisAbi,
@@ -83,13 +109,6 @@ export const getIrisAuthorizationRequirement = async (params: {
 
   if (isAuthorized) {
     return null;
-  }
-
-  if (supportSignature) {
-    return encodeIrisSignatureAuthorization(viemClient, {
-      authorized: generalAdapter1,
-      chainId,
-    });
   }
 
   return deepFreeze({

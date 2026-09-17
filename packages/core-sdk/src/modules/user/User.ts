@@ -11,14 +11,22 @@ export class User {
    */
   public isBundlerAuthorized: boolean;
 
+  /**
+   * The user's next Iris authorization nonce.
+   */
+  public nonce: bigint;
+
   constructor({
     address,
     isBundlerAuthorized,
+    nonce,
   }: {
     address: Address;
     isBundlerAuthorized: boolean;
+    nonce: bigint;
   }) {
     this.address = address;
     this.isBundlerAuthorized = isBundlerAuthorized;
+    this.nonce = nonce;
   }
 }
