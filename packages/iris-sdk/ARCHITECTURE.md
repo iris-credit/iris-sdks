@@ -97,7 +97,7 @@ The withdrawals are validated locally against the ceiling Iris re-checks on-chai
 | `supplyBond`         | Bundler3 (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the debt token. Optional native wrapping. Permissionless.              |
 | `escape`             | Bundler3 (general adapter) | Funds residual venue debt (2h upper bound), settles, withdraws venue collateral + yield. Borrower only.          |
 | `refinance`          | Bundler3 (general adapter) | Funds current venue debt (2h upper bound), re-enters the new venue, returns proceeds. Solver only.               |
-| `withdrawCollateral` | Direct Iris call           | Nothing flows in. Ceiling = min(Iris check, venue check) against the buffered venue LLTV. Borrower only.         |
+| `withdrawCollateral` | Direct Iris call           | Nothing flows in. Ceiling = min(Iris check, venue check) against the buffered venue LLTV. Closed once liquidatable. Borrower only. |
 | `withdrawBond`       | Direct Iris call           | Nothing flows in. Post-withdrawal bond health against the buffered bond LLTV. Solver only.                       |
 | `claim`              | Direct Iris call           | Nothing flows in. Validated against the claimable balance; defaults to claiming it all.                          |
 

@@ -645,6 +645,101 @@ describe("Iris.refinance", () => {
   });
 });
 
+describe("Iris.withdrawCollateral", () => {
+  let handle: MockClientHandle;
+
+  const makeIris = () => handle.client.extend(irisViemExtension()).iris.core(CHAIN_ID);
+
+  beforeEach(() => {
+    handle = createMockClient(mainnet);
+  });
+
+  const LAST_UPDATE = 1_990_000_000n;
+  const LLTV = 800_000_000_000_000_000n;
+
+  const loan = {
+    pod: POD,
+    borrower: BORROWER,
+    solver: SOLVER,
+    collateralToken: COLLATERAL_TOKEN,
+    debtToken: DEBT_TOKEN,
+    venueBitmap: 0b11n,
+    maturity: 2_100_000_000n,
+    overduePeriod: 3_600n,
+    fixedRate: 100_000_000_000_000_000n,
+    overdueRate: 200_000_000_000_000_000n,
+    bondLltv: 500_000_000_000_000_000n,
+    fee: 200_000_000_000_000_000n,
+  } as const;
+
+  const venue = new MorphoBlueVenue(
+    {
+      id: 0n,
+      data: "0x",
+      pod: POD,
+      collateral: 2n * MathLib.WAD,
+      debt: MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: LLTV,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: LAST_UPDATE,
+    },
+    {
+      totalSupplyAssets: 2n * MathLib.WAD,
+      totalBorrowAssets: MathLib.WAD,
+      totalBorrowShares: 10n ** 24n,
+      lastUpdate: LAST_UPDATE,
+      irm: zeroAddress,
+    },
+    { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
+  );
+
+  /** The position as given to the flow, i.e. already accrued to `lastUpdate` by the caller. */
+  const positionData = (lastUpdate = LAST_UPDATE) =>
+    new AccrualPosition(
+      {
+        pod: POD,
+        collateral: 2n * MathLib.WAD,
+        debt: MathLib.WAD,
+        bond: 100_000_000_000_000_000n,
+        bondRequirement: 1n,
+        collateralIndex: MathLib.RAY,
+        debtIndex: MathLib.RAY,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        surplus: 0n,
+        lastUpdate,
+        venueId: 0n,
+        data: "0x",
+      },
+      loan,
+      venue,
+    );
+
+  test("default: builds the direct Iris call for the borrower", () => {
+    const tx = makeIris()
+      .withdrawCollateral({ userAddress: BORROWER, positionData: positionData(), amount: 1n })
+      .buildTx();
+
+    expect(tx.to).toBe(iris);
+    expect(tx.action.type).toBe("irisWithdrawCollateral");
+    expect(tx.action.args.receiver).toBe(BORROWER);
+  });
+
+  test("error: LiquidatableLoan when the loan is past its overdue period", () => {
+    const liquidatable = positionData(loan.maturity + loan.overduePeriod + 1n);
+
+    expect(() =>
+      makeIris().withdrawCollateral({
+        userAddress: BORROWER,
+        positionData: liquidatable,
+        amount: 1n,
+      }),
+    ).toThrow(IrisCoreErrors.LiquidatableLoan);
+  });
+});
+
 describe("Iris.repay", () => {
   let handle: MockClientHandle;
 

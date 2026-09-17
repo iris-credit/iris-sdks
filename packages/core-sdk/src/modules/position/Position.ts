@@ -524,10 +524,12 @@ export class AccrualPosition extends Position {
    * `withdrawCollateral`: the legs are accrued to `timestamp` and rebased, the withdrawal
    * is applied on the venue too (see `Venue.withdrawCollateral`), and it must keep the
    * position healthy through the liquidation deadline (see `PositionUtils.isHealthy`).
+   * Withdrawals close once the loan is liquidatable.
    *
    * @param amount The collateral amount to withdraw.
    * @param timestamp The withdrawal timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.LiquidatableLoan} When the loan is liquidatable once accrued.
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
    *   the venue position unhealthy (see `Venue.withdrawCollateral`).
    * @throws {IrisCoreErrors.InsufficientCollateral} When the withdrawal would leave the
@@ -539,6 +541,9 @@ export class AccrualPosition extends Position {
     }
 
     const position = this.accrueLegs(timestamp).rebase();
+
+    if (position.isLiquidatable) throw new IrisCoreErrors.LiquidatableLoan(position.pod);
+
     const venue = position.venue.withdrawCollateral(amount, timestamp);
 
     position.collateral -= amount;

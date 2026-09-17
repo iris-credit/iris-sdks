@@ -636,6 +636,14 @@ describe("AccrualPosition", () => {
       );
     });
 
+    test("should throw once the loan is liquidatable", () => {
+      const liquidatable = { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 1n };
+
+      expect(() => new AccrualPosition(liquidatable, loan, venue).withdrawCollateral(1n)).toThrow(
+        IrisCoreErrors.LiquidatableLoan,
+      );
+    });
+
     test("should throw when the price is unknown", () => {
       expect(() =>
         new AccrualPosition(
