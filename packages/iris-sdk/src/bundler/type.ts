@@ -156,7 +156,7 @@ export interface ActionArgs {
     skipRevert?: boolean,
   ];
 
-  /** Iris escape call exiting the resolved loan of `pod` to `receiver`, requiring the initiator to be the loan's borrower; `skipRevert` controls Bundler3 revert handling. */
+  /** Iris escape call exiting the closed loan of `pod` to `receiver`, requiring the initiator to be the loan's borrower; `skipRevert` controls Bundler3 revert handling. */
   readonly irisEscape: [pod: Address, receiver: Address, skipRevert?: boolean];
 
   /** Iris claim call for `amount` of `token` accrued to the initiator, sent to `receiver`; `skipRevert` controls Bundler3 revert handling. */

@@ -392,7 +392,7 @@ export interface IrisActions {
   };
 
   /**
-   * Prepares an escape transaction exiting the venue position of a resolved Iris loan.
+   * Prepares an escape transaction exiting the venue position of a closed Iris loan.
    *
    * Takes the pre-fetched `positionData` for the pod — escape covers the pod's live venue debt,
    * which the loan alone does not carry — and withdraws the venue collateral, yield included, to
@@ -799,7 +799,8 @@ export class Iris implements IrisActions {
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
    * @throws {NegativeInputError} when `nativeAmount` is negative.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
-   * @throws {LoanResolvedError} when the loan is already resolved, leaving nothing to repay.
+   * @throws {LoanResolvedError} when the loan is already closed (bond requirement, debt, fixed leg
+   *   and surplus all zero), leaving nothing to repay.
    * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt
    *   token is not the chain's wNative.
    * @throws {IrisCoreErrors.UnknownVenuePrice} from `AccrualPosition.repay` when the venue price
@@ -817,11 +818,13 @@ export class Iris implements IrisActions {
 
     if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
 
-    const { pod, debt, fixedLeg, bondRequirement, lastUpdate, venue } = positionData;
+    const { pod, debt, fixedLeg, bondRequirement, surplus, lastUpdate, venue } = positionData;
     const { debtToken } = positionData.loan;
 
     if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
-    if (debt + fixedLeg === 0n && bondRequirement === 0n) throw new LoanResolvedError(pod);
+    if (debt + fixedLeg === 0n && bondRequirement === 0n && surplus === 0n) {
+      throw new LoanResolvedError(pod);
+    }
     if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
 
     // Forward-accrue (2h) before sizing the funding: Iris accrues `lastUpdate → execution` inside
@@ -887,8 +890,9 @@ export class Iris implements IrisActions {
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
    * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
-   * @throws {LoanResolvedError} when the loan is already resolved, leaving nothing to repay —
-   *   reach for {@link Iris.escape} to recover the collateral on its own.
+   * @throws {LoanResolvedError} when the loan is already closed (bond requirement, debt, fixed leg
+   *   and surplus all zero), leaving nothing to repay — reach for {@link Iris.escape} to recover
+   *   the collateral on its own.
    * @throws {NegativeInputError} when `nativeAmount` is negative.
    * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt
    *   token is not the chain's wNative.
@@ -906,14 +910,16 @@ export class Iris implements IrisActions {
   }) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
-    const { pod, debt, fixedLeg, bondRequirement, lastUpdate, venue } = positionData;
+    const { pod, debt, fixedLeg, bondRequirement, surplus, lastUpdate, venue } = positionData;
     const { borrower, debtToken } = positionData.loan;
 
     // `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator.
     validateUserAddress(userAddress, borrower);
 
     if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
-    if (debt + fixedLeg === 0n && bondRequirement === 0n) throw new LoanResolvedError(pod);
+    if (debt + fixedLeg === 0n && bondRequirement === 0n && surplus === 0n) {
+      throw new LoanResolvedError(pod);
+    }
 
     if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
     if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);
@@ -1290,7 +1296,7 @@ export class Iris implements IrisActions {
   }
 
   /**
-   * Prepares an escape transaction exiting the venue position of a resolved Iris loan.
+   * Prepares an escape transaction exiting the venue position of a closed Iris loan.
    *
    * Escape settles the pod's venue debt and withdraws the venue collateral, yield included, to
    * `userAddress`. The bundle funds `GeneralAdapter1` with the venue debt projected two hours past
@@ -1301,14 +1307,17 @@ export class Iris implements IrisActions {
    *   receiving the collateral; must be the loan's borrower, whose Iris authorization of
    *   `GeneralAdapter1` the bundled escape runs on.
    * @param params.positionData - Pre-fetched position for the pod, from
-   *   {@link Iris.getPositionData}; supplies the pod, its resolution state and its venue debt.
+   *   {@link Iris.getPositionData}; supplies the pod, whether the loan is closed and its venue
+   *   debt.
    * @param params.nativeAmount - Optional venue debt paid in the native token and wrapped
    *   in-bundle; the loan's debt token must be the chain's wNative.
    * @returns Object with `buildTx` and `getRequirements`.
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
    * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
-   * @throws {LoanNotResolvedError} when the loan is still open (non-zero bond requirement).
+   * @throws {LoanNotResolvedError} when the loan is not closed: still open (non-zero bond
+   *   requirement), or resolved with debt, fixed leg or surplus outstanding, which `repay` settles
+   *   first.
    * @throws {NegativeInputError} when `nativeAmount` is negative.
    * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt token
    *   is not the chain's wNative.
@@ -1324,14 +1333,16 @@ export class Iris implements IrisActions {
   }) {
     validateChainId(this.client.viemClient.chain?.id, this.chainId);
 
-    const { pod, lastUpdate, bondRequirement, venue } = positionData;
+    const { pod, lastUpdate, bondRequirement, debt, fixedLeg, surplus, venue } = positionData;
     const { borrower, debtToken } = positionData.loan;
 
     // `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator.
     validateUserAddress(userAddress, borrower);
 
     if (lastUpdate === 0n) throw new LoanNotCreatedError(pod);
-    if (bondRequirement !== 0n) throw new LoanNotResolvedError(pod);
+    if (bondRequirement !== 0n || debt + fixedLeg + surplus !== 0n) {
+      throw new LoanNotResolvedError(pod);
+    }
 
     if (nativeAmount < 0n) throw new NegativeInputError("nativeAmount", nativeAmount);
     if (nativeAmount > 0n) validateNativeAsset(this.chainId, debtToken);

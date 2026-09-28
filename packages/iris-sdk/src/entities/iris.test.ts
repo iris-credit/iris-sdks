@@ -46,6 +46,7 @@ import {
   ChainIdMismatchError,
   isRequirementApproval,
   isRequirementIrisAuthorization,
+  LoanNotResolvedError,
   LoanResolvedError,
   NativeAmountExceedsCollateralError,
   NativeAmountOnNonWNativeAssetError,
@@ -699,19 +700,21 @@ describe("Iris.repay", () => {
     { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
   );
 
-  const positionData = () =>
+  const positionData = (
+    overrides: { bondRequirement?: bigint; debt?: bigint; surplus?: bigint } = {},
+  ) =>
     new AccrualPosition(
       {
         pod: POD,
         collateral: 2n * MathLib.WAD,
-        debt: MathLib.WAD,
+        debt: overrides.debt ?? MathLib.WAD,
         bond: 100_000_000_000_000_000n,
-        bondRequirement: 1n,
+        bondRequirement: overrides.bondRequirement ?? 1n,
         collateralIndex: MathLib.RAY,
         debtIndex: MathLib.RAY,
         fixedLeg: 0n,
         floatingLeg: 0n,
-        surplus: 0n,
+        surplus: overrides.surplus ?? 0n,
         lastUpdate: LAST_UPDATE,
         venueId: 0n,
         data: "0x",
@@ -754,6 +757,27 @@ describe("Iris.repay", () => {
     expect(maxRepaid).toBe(projected + 1n);
     // … and the headroom is exactly what covers it.
     expect(maxRepaid).toBe(transferAmount);
+  });
+
+  test("error: LoanResolvedError when the loan is closed and carries nothing to repay", () => {
+    expect(() =>
+      makeIris().repay({
+        userAddress: BORROWER,
+        positionData: positionData({ bondRequirement: 0n, debt: 0n }),
+      }),
+    ).toThrow(LoanResolvedError);
+  });
+
+  // `Iris.repay` admits a resolved loan while surplus is outstanding: it settles to the solver.
+  test("behavior: still builds for a resolved loan with surplus outstanding", () => {
+    const tx = makeIris()
+      .repay({
+        userAddress: BORROWER,
+        positionData: positionData({ bondRequirement: 0n, debt: 0n, surplus: 1n }),
+      })
+      .buildTx();
+
+    expect(tx.action.type).toBe("irisRepay");
   });
 });
 
@@ -807,7 +831,9 @@ describe("Iris.close", () => {
     { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
   );
 
-  const positionData = (overrides: { bondRequirement?: bigint; debt?: bigint } = {}) =>
+  const positionData = (
+    overrides: { bondRequirement?: bigint; debt?: bigint; surplus?: bigint } = {},
+  ) =>
     new AccrualPosition(
       {
         pod: POD,
@@ -819,7 +845,7 @@ describe("Iris.close", () => {
         debtIndex: MathLib.RAY,
         fixedLeg: 0n,
         floatingLeg: 0n,
-        surplus: 0n,
+        surplus: overrides.surplus ?? 0n,
         lastUpdate: LAST_UPDATE,
         venueId: 0n,
         data: "0x",
@@ -854,13 +880,25 @@ describe("Iris.close", () => {
     );
   });
 
-  test("error: LoanResolvedError when the loan carries nothing to repay", () => {
+  test("error: LoanResolvedError when the loan is closed and carries nothing to repay", () => {
     expect(() =>
       makeIris().close({
         userAddress: BORROWER,
         positionData: positionData({ bondRequirement: 0n, debt: 0n }),
       }),
     ).toThrow(LoanResolvedError);
+  });
+
+  // `Iris.repay` admits a resolved loan while surplus is outstanding, so close settles it and exits.
+  test("behavior: still builds for a resolved loan with surplus outstanding", () => {
+    const tx = makeIris()
+      .close({
+        userAddress: BORROWER,
+        positionData: positionData({ bondRequirement: 0n, debt: 0n, surplus: 1n }),
+      })
+      .buildTx();
+
+    expect(tx.action.type).toBe("irisClose");
   });
 
   // The escape leg runs on the borrower's Iris authorization, which `repay` alone never needs.
@@ -886,5 +924,121 @@ describe("Iris.close", () => {
       "erc20Approval",
       "irisAuthorization",
     ]);
+  });
+});
+
+describe("Iris.escape", () => {
+  let handle: MockClientHandle;
+
+  const makeIris = () => handle.client.extend(irisViemExtension()).iris.core(CHAIN_ID);
+
+  beforeEach(() => {
+    handle = createMockClient(mainnet);
+  });
+
+  const LAST_UPDATE = 1_990_000_000n;
+  const LLTV = 800_000_000_000_000_000n;
+
+  const loan = {
+    pod: POD,
+    borrower: BORROWER,
+    solver: SOLVER,
+    collateralToken: COLLATERAL_TOKEN,
+    debtToken: DEBT_TOKEN,
+    venueBitmap: 0b11n,
+    maturity: 2_100_000_000n,
+    overduePeriod: 3_600n,
+    fixedRate: 100_000_000_000_000_000n,
+    overdueRate: 200_000_000_000_000_000n,
+    bondLltv: 500_000_000_000_000_000n,
+    fee: 200_000_000_000_000_000n,
+  } as const;
+
+  // After a bond liquidation the venue still carries the debt, which the escape bundle funds.
+  const venue = new MorphoBlueVenue(
+    {
+      id: 0n,
+      data: "0x",
+      pod: POD,
+      collateral: 2n * MathLib.WAD,
+      debt: MathLib.WAD,
+      collateralIndex: MathLib.RAY,
+      debtIndex: MathLib.RAY,
+      lltv: LLTV,
+      price: ORACLE_PRICE_SCALE,
+      lastUpdate: LAST_UPDATE,
+    },
+    {
+      totalSupplyAssets: 2n * MathLib.WAD,
+      totalBorrowAssets: MathLib.WAD,
+      totalBorrowShares: 10n ** 24n,
+      lastUpdate: LAST_UPDATE,
+      irm: zeroAddress,
+    },
+    { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
+  );
+
+  /** A closed loan by default: bond requirement, debt, fixed leg and surplus all zero. */
+  const positionData = (
+    overrides: {
+      bondRequirement?: bigint;
+      debt?: bigint;
+      fixedLeg?: bigint;
+      surplus?: bigint;
+    } = {},
+  ) =>
+    new AccrualPosition(
+      {
+        pod: POD,
+        collateral: 2n * MathLib.WAD,
+        debt: overrides.debt ?? 0n,
+        bond: 0n,
+        bondRequirement: overrides.bondRequirement ?? 0n,
+        collateralIndex: MathLib.RAY,
+        debtIndex: MathLib.RAY,
+        fixedLeg: overrides.fixedLeg ?? 0n,
+        floatingLeg: 0n,
+        surplus: overrides.surplus ?? 0n,
+        lastUpdate: LAST_UPDATE,
+        venueId: 0n,
+        data: "0x",
+      },
+      loan,
+      venue,
+    );
+
+  test("default: builds the funding + escape + sweep bundle for the borrower", () => {
+    const tx = makeIris().escape({ userAddress: BORROWER, positionData: positionData() }).buildTx();
+
+    expect(tx.to).toBe(bundler3);
+    expect(tx.action.type).toBe("irisEscape");
+    expect(tx.action.args.receiver).toBe(BORROWER);
+  });
+
+  // `GeneralAdapter1.irisEscape` pins the borrower.
+  test("error: AddressMismatchError when userAddress is not the borrower", () => {
+    expect(() => makeIris().escape({ userAddress: ROGUE, positionData: positionData() })).toThrow(
+      AddressMismatchError,
+    );
+  });
+
+  // `Iris.escape` requires the loan closed: bond requirement zero and debt, fixed leg and surplus
+  // zero.
+  test("error: LoanNotResolvedError while the loan is open", () => {
+    expect(() =>
+      makeIris().escape({
+        userAddress: BORROWER,
+        positionData: positionData({ bondRequirement: 1n, debt: MathLib.WAD }),
+      }),
+    ).toThrow(LoanNotResolvedError);
+  });
+
+  test("error: LoanNotResolvedError for a resolved loan with the fixed leg or surplus outstanding", () => {
+    expect(() =>
+      makeIris().escape({ userAddress: BORROWER, positionData: positionData({ fixedLeg: 1n }) }),
+    ).toThrow(LoanNotResolvedError);
+    expect(() =>
+      makeIris().escape({ userAddress: BORROWER, positionData: positionData({ surplus: 1n }) }),
+    ).toThrow(LoanNotResolvedError);
   });
 });

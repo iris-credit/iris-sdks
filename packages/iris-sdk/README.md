@@ -75,7 +75,7 @@ All flows live on the chain-scoped entity returned by `client.iris.core(chainId)
 | `supplyBond`         | Bundler (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the loan's debt token — the asset the bond is denominated in. Permissionless top-up. Supports native token wrapping.                                                                                                                                                                   |
 | `withdrawBond`       | Direct Iris call          | No bundler overhead. Validates post-withdrawal bond health against the buffered bond LLTV. Solver only.                                                                                                                                                                                                                          |
 | `claim`              | Direct Iris call          | No bundler overhead. Validates the claim against the claimable balance — `Iris.claim` has no max-sweep sentinel, so `amount` defaults to the whole balance.                                                                                                                                                                      |
-| `escape`             | Bundler (general adapter) | Exits a resolved loan's venue position: funds the venue debt (projected two hours forward), settles it, withdraws the venue collateral — yield included — and sweeps the residual back. Borrower only.                                                                                                                           |
+| `escape`             | Bundler (general adapter) | Exits a closed loan's venue position: funds the venue debt (projected two hours forward), settles it, withdraws the venue collateral — yield included — and sweeps the residual back. Borrower only.                                                                                                                             |
 | `refinance`          | Bundler (general adapter) | Moves the position to another venue: funds the current venue debt (projected two hours forward), replays the migration locally to reject what the contract rejects, and returns the new venue's borrow proceeds. Solver only.                                                                                                    |
 
 Solver-side (maker-flow) helpers are standalone functions:
@@ -194,11 +194,11 @@ const requirements = await getRequirements();
 const tx = buildTx([permitSignature]);
 ```
 
-Repay resolves the loan but leaves the collateral with the position — recover it with `escape`, or do both in one bundle with `close`.
+Repay closes the loan but leaves the collateral with the position — recover it with `escape`, or do both in one bundle with `close`.
 
 ### Close
 
-Resolves the loan and exits its venue position in one bundle — `repay` then `escape` — so the collateral repay leaves behind comes back atomically, yield included. The repayment leg funds the position projected two hours forward plus the rounding headroom and sweeps the residual back, exactly as `repay` sizes it; the projection doubles as the validity window — rebuild after two hours rather than sending a stale one. The exit rides on `Iris.escape` rather than `withdrawCollateral`: escape sends the venue balance as it stands at execution, where an exact amount a rebase invalidated would revert or strand dust. Unlike the permissionless `repay`, close is borrower-only — `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator, and the escape leg runs on their Iris authorization. A loan already **resolved** leaves nothing to repay and throws `LoanResolvedError` — reach for `escape` on its own to recover the collateral.
+Closes the loan and exits its venue position in one bundle — `repay` then `escape` — so the collateral repay leaves behind comes back atomically, yield included. The repayment leg funds the position projected two hours forward plus the rounding headroom and sweeps the residual back, exactly as `repay` sizes it; the projection doubles as the validity window — rebuild after two hours rather than sending a stale one. The exit rides on `Iris.escape` rather than `withdrawCollateral`: escape sends the venue balance as it stands at execution, where an exact amount a rebase invalidated would revert or strand dust. Unlike the permissionless `repay`, close is borrower-only — `GeneralAdapter1.irisEscape` pins the borrower to the bundle initiator, and the escape leg runs on their Iris authorization. A loan already **closed** (nothing on the legs, no bond requirement, no surplus) leaves nothing to repay and throws `LoanResolvedError` — reach for `escape` on its own to recover the collateral. A loan a venue liquidation **resolved** (bond requirement zero) with fixed leg or surplus still outstanding is not closed yet: `close` settles it and exits, where `escape` alone would revert.
 
 ```typescript
 const positionData = await iris.getPositionData(pod);
@@ -294,7 +294,7 @@ const tx = buildTx();
 
 ### Escape
 
-Exits the venue position of a **resolved** loan (`bondRequirement === 0n`): the bundle funds the pod's live venue debt (projected two hours forward, residual swept back), settles it, and withdraws the venue collateral — yield included — to `userAddress`. The venue usually carries no debt after a repay or liquidation, in which case the funding requirement comes back empty.
+Exits the venue position of a **closed** loan (`bondRequirement === 0n` with `debt`, `fixedLeg` and `surplus` at `0n`): the bundle funds the pod's live venue debt (projected two hours forward, residual swept back), settles it, and withdraws the venue collateral — yield included — to `userAddress`. The venue usually carries no debt after a repay or liquidation, in which case the funding requirement comes back empty. A loan a venue liquidation resolved but left with fixed leg or surplus outstanding is not closed yet and throws `LoanNotResolvedError`; `repay` or `close` settles it first.
 
 ```typescript
 const positionData = await iris.getPositionData(pod);
