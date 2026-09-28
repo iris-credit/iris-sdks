@@ -580,7 +580,8 @@ describe("PositionUtils", () => {
 
     test("should slash the paid floating beyond the fixed leg from the bond", () => {
       // The liquidation retired the 100 principal plus the 10 floating: 5 nets against the
-      // fixed leg, and the other 5 is slashed off the 8 bond to the borrower.
+      // fixed leg, and the other 5 is slashed off the 8 bond to the borrower. Retiring the
+      // whole venue debt also resolves the loan.
       expect(
         PositionUtils.getRebasedPosition(crossing, {
           collateral: 80n * MathLib.WAD,
@@ -591,7 +592,7 @@ describe("PositionUtils", () => {
         collateral: 80n * MathLib.WAD,
         debt: 0n,
         bond: 3n * MathLib.WAD,
-        bondRequirement: 1n,
+        bondRequirement: 0n,
         fixedLeg: 0n,
         floatingLeg: 0n,
         surplus: 0n,
@@ -621,7 +622,8 @@ describe("PositionUtils", () => {
 
     test("should not net the repayment a seized surplus funded", () => {
       // 115 of the 100 collateral + 20 surplus was seized to retire 110: only the 100 the
-      // borrower's collateral paid is credited, which the principal absorbs whole.
+      // borrower's collateral paid is credited, which the principal absorbs whole. The
+      // retired venue debt resolves the loan.
       expect(
         PositionUtils.getRebasedPosition(
           { ...crossing, collateral: 100n * MathLib.WAD, surplus: 20n * MathLib.WAD },
@@ -631,7 +633,7 @@ describe("PositionUtils", () => {
         collateral: 0n,
         debt: 0n,
         bond: 8n * MathLib.WAD,
-        bondRequirement: 1n,
+        bondRequirement: 0n,
         fixedLeg: 5n * MathLib.WAD,
         floatingLeg: 0n,
         surplus: 5n * MathLib.WAD,
@@ -656,8 +658,27 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should net nothing when bad debt resolves the loan", () => {
-      // badDebt = 2 - 1: the 8 retired over the principal is not netted.
+    test("should resolve the loan once the venue debt is retired, collateral remaining", () => {
+      // liquidated = 2 and repaid = 5, capped at 2: the venue holds no debt, so the loan
+      // resolves with 3 principal still tracked.
+      expect(
+        PositionUtils.getRebasedPosition(position, {
+          collateral: 8n * MathLib.WAD,
+          debt: 0n,
+          price: ORACLE_PRICE_SCALE,
+        }),
+      ).toEqual({
+        ...position,
+        collateral: 8n * MathLib.WAD,
+        debt: 3n * MathLib.WAD,
+        bondRequirement: 0n,
+        bondSlashed: 0n,
+      });
+    });
+
+    test("should net on the rebase that resolves the loan on bad debt", () => {
+      // badDebt = 2 - 1 resolves the loan, and the 8 retired over the principal still nets
+      // the 5 fixed leg, the other 3 slashed off the bond.
       expect(
         PositionUtils.getRebasedPosition(crossing, {
           collateral: MathLib.WAD,
@@ -667,16 +688,18 @@ describe("PositionUtils", () => {
       ).toEqual({
         collateral: MathLib.WAD,
         debt: 0n,
-        bond: 8n * MathLib.WAD,
+        bond: 5n * MathLib.WAD,
         bondRequirement: 0n,
-        fixedLeg: 5n * MathLib.WAD,
+        fixedLeg: 0n,
         floatingLeg: 2n * MathLib.WAD,
         surplus: 0n,
-        bondSlashed: 0n,
+        bondSlashed: 3n * MathLib.WAD,
       });
     });
 
-    test("should net nothing when the venue is wiped", () => {
+    test("should net on the wipe that resolves the loan", () => {
+      // The wipe retired the 100 principal plus the 10 floating: 5 nets the fixed leg and 5
+      // is slashed, as on any resolving rebase.
       expect(
         PositionUtils.getRebasedPosition(crossing, {
           collateral: 0n,
@@ -686,12 +709,33 @@ describe("PositionUtils", () => {
       ).toEqual({
         collateral: 0n,
         debt: 0n,
-        bond: 8n * MathLib.WAD,
+        bond: 3n * MathLib.WAD,
         bondRequirement: 0n,
-        fixedLeg: 5n * MathLib.WAD,
+        fixedLeg: 0n,
         floatingLeg: 0n,
         surplus: 0n,
-        bondSlashed: 0n,
+        bondSlashed: 5n * MathLib.WAD,
+      });
+    });
+
+    test("should net the same on a wipe with dust re-supplied", () => {
+      // 1 wei supplied on the pod's behalf inside the liquidation reads (dust, 0) instead of
+      // (0, 0): the refund is the same.
+      expect(
+        PositionUtils.getRebasedPosition(crossing, {
+          collateral: 1n,
+          debt: 0n,
+          price: ORACLE_PRICE_SCALE,
+        }),
+      ).toEqual({
+        collateral: 1n,
+        debt: 0n,
+        bond: 3n * MathLib.WAD,
+        bondRequirement: 0n,
+        fixedLeg: 0n,
+        floatingLeg: 0n,
+        surplus: 0n,
+        bondSlashed: 5n * MathLib.WAD,
       });
     });
 

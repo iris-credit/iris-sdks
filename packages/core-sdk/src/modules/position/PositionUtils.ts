@@ -145,16 +145,17 @@ export namespace PositionUtils {
    * tracked as the borrower's collateral. Otherwise the tracked collateral is reduced by the
    * liquidated amount and the tracked debt by the repaid amount, capped at the liquidated
    * amount's value in debt assets. The surplus and floating leg are clamped to the venue's
-   * actuals, and the bond requirement is zeroed (resolving the loan) on bad debt or when the
-   * venue position is emptied.
+   * actuals, and the bond requirement is zeroed (resolving the loan) on bad debt or once the
+   * venue debt is fully retired.
    *
    * Repayment recognized over the principal is floating interest the borrower's collateral
    * paid. it nets against the fixed leg, and the excess is slashed from the bond to the
    * borrower's claimable (`bondSlashed`), so the borrower does not pay both legs on the
    * recognized portion. The borrower is credited at most the value of the collateral they
-   * lost — repayment a seized surplus funded is not netted — and a resolved loan (bad debt,
-   * wipe or bond requirement already zero) nets nothing. A slash that exhausts the bond
-   * resolves the loan, forfeiting the surplus, as a bond liquidation would.
+   * lost — repayment a seized surplus funded is not netted. The rebase that resolves the loan
+   * nets like any other, a wipe included. a loan already resolved (bond requirement zero on
+   * input) nets nothing. A slash that exhausts the bond resolves the loan, forfeiting the
+   * surplus, as a bond liquidation would.
    *
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand, as the rebase
    * runs after accrual onchain (and before every other state change).
@@ -162,7 +163,7 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the loan is resolved).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param position.surplus The position's surplus.
@@ -176,7 +177,8 @@ export namespace PositionUtils {
    * ```ts
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
-   * // A venue liquidation retired the 5 principal plus 1 floating out of 7 collateral.
+   * // A venue liquidation retired the 5 principal plus 1 floating out of 7 collateral, and
+   * // with it the whole venue debt.
    * const rebased = PositionUtils.getRebasedPosition(
    *   {
    *     collateral: 10n * MathLib.WAD,
@@ -191,6 +193,7 @@ export namespace PositionUtils {
    * );
    * // rebased.collateral === 3000000000000000000n
    * // rebased.debt === 0n
+   * // rebased.bondRequirement === 0n
    * // rebased.fixedLeg === 0n
    * // rebased.bond === 1500000000000000000n
    * // rebased.bondSlashed === 500000000000000000n
@@ -249,13 +252,6 @@ export namespace PositionUtils {
     );
     repaid = MathLib.min(repaid, maxRepaid);
 
-    let surplus = MathLib.min(position.surplus, venue.collateral);
-    const floatingLeg = MathLib.min(position.floatingLeg, venue.debt);
-    let bondRequirement =
-      badDebt !== 0n || (venue.debt === 0n && venue.collateral === 0n)
-        ? 0n
-        : position.bondRequirement;
-
     const borrowerRepaid = MathLib.min(
       repaid,
       MathLib.mulDivDown(
@@ -265,11 +261,15 @@ export namespace PositionUtils {
       ),
     );
     const overpaid =
-      bondRequirement === 0n ? 0n : MathLib.zeroFloorSub(borrowerRepaid, position.debt);
+      position.bondRequirement === 0n ? 0n : MathLib.zeroFloorSub(borrowerRepaid, position.debt);
     const bondSlashed = MathLib.min(
       MathLib.zeroFloorSub(overpaid, position.fixedLeg),
       position.bond,
     );
+
+    let surplus = MathLib.min(position.surplus, venue.collateral);
+    const floatingLeg = MathLib.min(position.floatingLeg, venue.debt);
+    let bondRequirement = badDebt !== 0n || venue.debt === 0n ? 0n : position.bondRequirement;
 
     let bond = position.bond;
     if (bondSlashed !== 0n) {
