@@ -792,7 +792,7 @@ export namespace BundlerAction {
     ];
   }
 
-  /** Encodes a GeneralAdapter1 Iris escape exiting the resolved loan of `pod` (initiator must be the borrower). */
+  /** Encodes a GeneralAdapter1 Iris escape exiting the closed loan of `pod` (initiator must be the borrower). */
   export function irisEscape(
     chainId: ChainId,
     pod: Address,
