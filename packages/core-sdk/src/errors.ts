@@ -196,7 +196,7 @@ export namespace IrisCoreErrors {
     }
   }
 
-  /** Error thrown when a refinance is requested after the loan became liquidatable. */
+  /** Error thrown when a refinance or a collateral withdrawal is requested after the loan became liquidatable. */
   export class LiquidatableLoan extends Error {
     constructor(public readonly pod: Address) {
       super(`liquidatable loan for pod ${pod}: past maturity and overdue period`);

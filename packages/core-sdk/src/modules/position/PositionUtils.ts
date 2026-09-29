@@ -376,11 +376,13 @@ export namespace PositionUtils {
    * Two limits bind, and the lower one is returned. Iris's own check reserves the worst-case
    * payoff (see `getRequiredCollateralValue`) against the venue LLTV limit on the remaining
    * collateral's value. The venue's, which the withdrawal exits through, does not follow from it:
-   * Iris never reserves the floating leg, so a solver deep enough underwater makes it the tighter.
+   * Iris reserves the floating leg only beyond the bond, so a solver deep enough underwater makes
+   * it the tighter.
    *
-   * Returns `undefined` when the collateral price is unknown, zero once either payoff reaches the
-   * LLTV limit of its collateral's value (notably on a zero price or LLTV), and the full
-   * collateral when nothing is owed.
+   * Returns zero once the loan is liquidatable (Iris rejects the withdrawal outright),
+   * `undefined` when the collateral price is unknown, zero once either payoff reaches the LLTV
+   * limit of its collateral's value (notably on a zero price or LLTV), and the full collateral
+   * when nothing is owed.
    *
    * Iris accepts `withdrawCollateral(pod, amount, receiver)` iff `amount` does not exceed
    * this limit.
@@ -390,6 +392,8 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
    * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param position.bond The position's bond.
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
@@ -405,7 +409,7 @@ export namespace PositionUtils {
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
    * const withdrawable = PositionUtils.getWithdrawableCollateral(
-   *   { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n },
+   *   { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
    *   { maturity: 1_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
    *   {
    *     collateral: 5n * MathLib.WAD,
@@ -419,7 +423,13 @@ export namespace PositionUtils {
    * ```
    */
   export const getWithdrawableCollateral = (
-    position: { collateral: BigIntish; debt: BigIntish; fixedLeg: BigIntish },
+    position: {
+      collateral: BigIntish;
+      debt: BigIntish;
+      fixedLeg: BigIntish;
+      floatingLeg: BigIntish;
+      bond: BigIntish;
+    },
     loan: {
       maturity: BigIntish;
       overduePeriod: BigIntish;
@@ -433,6 +443,7 @@ export namespace PositionUtils {
     venue.collateral = BigInt(venue.collateral);
     venue.debt = BigInt(venue.debt);
 
+    if (LoanUtils.isLiquidatable(loan, timestamp)) return 0n;
     if (venue.price == null) return;
 
     const price = BigInt(venue.price);
@@ -571,13 +582,17 @@ export namespace PositionUtils {
   };
 
   /**
-   * Returns the worst-case payoff reserved by Iris's collateralization checks: the debt,
-   * the fixed leg and the interest still accruing until `maturity + overduePeriod` (both
-   * rates over the overdue window), as the loan cannot be liquidated before the deadline
+   * Returns the worst-case payoff reserved by Iris's collateralization checks: the debt plus
+   * the projected liquidation exposure — the fixed leg and the interest still accruing until
+   * `maturity + overduePeriod` (both rates over the overdue window), as the loan cannot be
+   * liquidated before the deadline, or the floating leg beyond the bond if that is larger.
+   * Fixed interest accruing shrinks the bad bond one-for-one, so the two are never summed
    * (see `getWithdrawableCollateral`, `isHealthy`).
    *
    * @param position.debt The position's debt (principal).
    * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param position.bond The position's bond.
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
@@ -589,7 +604,7 @@ export namespace PositionUtils {
    * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";
    *
    * const value = PositionUtils.getRequiredCollateralValue(
-   *   { debt: MathLib.WAD, fixedLeg: 0n },
+   *   { debt: MathLib.WAD, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
    *   { maturity: 40_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
    *   40_086_400n - 31_536_000n,
    * );
@@ -597,7 +612,7 @@ export namespace PositionUtils {
    * ```
    */
   export const getRequiredCollateralValue = (
-    position: { debt: BigIntish; fixedLeg: BigIntish },
+    position: { debt: BigIntish; fixedLeg: BigIntish; floatingLeg: BigIntish; bond: BigIntish },
     loan: {
       maturity: BigIntish;
       overduePeriod: BigIntish;
@@ -608,6 +623,8 @@ export namespace PositionUtils {
   ) => {
     position.debt = BigInt(position.debt);
     position.fixedLeg = BigInt(position.fixedLeg);
+    position.floatingLeg = BigInt(position.floatingLeg);
+    position.bond = BigInt(position.bond);
     loan.maturity = BigInt(loan.maturity);
     loan.overduePeriod = BigInt(loan.overduePeriod);
     loan.fixedRate = BigInt(loan.fixedRate);
@@ -620,8 +637,12 @@ export namespace PositionUtils {
         MathLib.min(timeToLiquidation, loan.overduePeriod) * loan.overdueRate,
       SECONDS_PER_YEAR * MathLib.WAD,
     );
+    const exposure = MathLib.max(
+      position.fixedLeg + residual,
+      MathLib.zeroFloorSub(position.floatingLeg, position.bond),
+    );
 
-    return position.debt + position.fixedLeg + residual;
+    return position.debt + exposure;
   };
 
   /**
@@ -633,6 +654,8 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
    * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param position.bond The position's bond.
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
@@ -647,7 +670,7 @@ export namespace PositionUtils {
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
    * const healthy = PositionUtils.isHealthy(
-   *   { collateral: 2n * MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n },
+   *   { collateral: 2n * MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
    *   { maturity: 1_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
    *   { price: ORACLE_PRICE_SCALE, lltv: 80_0000000000000000n },
    *   1_086_400n,
@@ -656,7 +679,13 @@ export namespace PositionUtils {
    * ```
    */
   export const isHealthy = (
-    position: { collateral: BigIntish; debt: BigIntish; fixedLeg: BigIntish },
+    position: {
+      collateral: BigIntish;
+      debt: BigIntish;
+      fixedLeg: BigIntish;
+      floatingLeg: BigIntish;
+      bond: BigIntish;
+    },
     loan: {
       maturity: BigIntish;
       overduePeriod: BigIntish;
