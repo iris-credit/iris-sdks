@@ -40,8 +40,7 @@
   },
   "dependencies": {
     "@iris-credit/core-sdk": "workspace:^",
-    "@iris-credit/iris-ts": "workspace:^",
-    "zod": "^4.4.3"
+    "@iris-credit/iris-ts": "workspace:^"
   },
   "devDependencies": {
     "@iris-credit/test": "workspace:^",
