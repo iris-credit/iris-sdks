@@ -21,7 +21,7 @@ export namespace PositionUtils {
    *
    * @param position.collateral The position's collateral before accrual.
    * @param position.debt The position's debt (principal).
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed, which skips the surplus accrual).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over, which skips the surplus accrual).
    * @param position.collateralIndex The venue's collateral index at the last update (scaled by RAY).
    * @param position.debtIndex The venue's debt index at the last update (scaled by RAY).
    * @param position.floatingLeg The position's floating leg before accrual.
@@ -145,17 +145,17 @@ export namespace PositionUtils {
    * tracked as the borrower's collateral. Otherwise the tracked collateral is reduced by the
    * liquidated amount and the tracked debt by the repaid amount, capped at the liquidated
    * amount's value in debt assets. The surplus and floating leg are clamped to the venue's
-   * actuals, and the bond requirement is zeroed (resolving the loan) on bad debt or once the
-   * venue debt is fully retired.
+   * actuals, and the bond requirement is zeroed on bad debt or once the venue debt is fully
+   * retired.
    *
    * Repayment recognized over the principal is floating interest the borrower's collateral
    * paid. it nets against the fixed leg, and the excess is slashed from the bond to the
    * borrower's claimable (`bondSlashed`), so the borrower does not pay both legs on the
    * recognized portion. The borrower is credited at most the value of the collateral they
-   * lost — repayment a seized surplus funded is not netted. The rebase that resolves the loan
-   * nets like any other, a wipe included. a loan already resolved (bond requirement zero on
-   * input) nets nothing. A slash that exhausts the bond resolves the loan, forfeiting the
-   * surplus, as a bond liquidation would.
+   * lost — repayment a seized surplus funded is not netted. The rebase that zeroes the bond
+   * requirement nets like any other, a wipe included. a loan whose bond requirement is already
+   * zero on input nets nothing. A slash that exhausts the bond zeroes the bond requirement,
+   * forfeiting the surplus, as a bond liquidation would.
    *
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand, as the rebase
    * runs after accrual onchain (and before every other state change).
@@ -163,7 +163,7 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is resolved).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param position.surplus The position's surplus.
@@ -770,10 +770,9 @@ export namespace PositionUtils {
    * withdrawal floor the health check does not enforce.
    *
    * The remaining bond must cover the bond requirement and keep the drawdown within the
-   * loan's bond LLTV. Returns zero on a zero bond LLTV; otherwise, once the loan is closed
-   * (zero bond requirement), the full bond is withdrawable. Returns zero when no
-   * withdrawal can pass the checks, including when the bond is already below the
-   * requirement or unhealthy.
+   * loan's bond LLTV. Returns zero on a zero bond LLTV; otherwise, once the bond requirement
+   * is zero, the full bond is withdrawable. Returns zero when no withdrawal can pass the
+   * checks, including when the bond is already below the requirement or unhealthy.
    *
    * Iris accepts `withdrawBond(pod, amount, receiver)` iff `amount` does not exceed this
    * limit.
@@ -781,7 +780,7 @@ export namespace PositionUtils {
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
@@ -828,14 +827,14 @@ export namespace PositionUtils {
    *
    * The seized bond is the position's bond times the bond liquidation incentive factor
    * (see `LoanUtils.getBondLif`). Returns zero while the bond is healthy (where Iris
-   * reverts with `HealthyBond` instead), including once the loan is closed.
+   * reverts with `HealthyBond` instead), including once the bond requirement is zero.
    *
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand, as the health
    * check runs after accrual onchain. Bond liquidation does not settle: no residual is
    * credited.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
@@ -867,11 +866,11 @@ export namespace PositionUtils {
 
   /**
    * Returns whether the position's bond is healthy: the drawdown of the floating leg over the
-   * fixed leg, relative to the bond, does not exceed the loan's bond LLTV. A closed loan (zero
-   * bond requirement) is always healthy.
+   * fixed leg, relative to the bond, does not exceed the loan's bond LLTV. A zero bond
+   * requirement is always healthy.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
@@ -912,11 +911,10 @@ export namespace PositionUtils {
    * Returns the position's drawdown: the floating leg over the fixed leg, relative to the
    * bond (scaled by WAD), rounded up — the ratio the bond health check compares to the
    * loan's bond LLTV (see `isHealthyBond`). Zero when the net is not negative or once the
-   * loan is closed (zero bond requirement); `MAX_UINT_256` on a zero bond with a negative
-   * net.
+   * bond requirement is zero; `MAX_UINT_256` on a zero bond with a negative net.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @returns The drawdown, scaled by WAD.

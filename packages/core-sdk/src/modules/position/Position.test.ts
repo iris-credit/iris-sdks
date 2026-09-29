@@ -640,10 +640,10 @@ describe("AccrualPosition", () => {
       ).toThrow(IrisCoreErrors.InsufficientVenueCollateral);
     });
 
-    test("should throw once the loan is resolved", () => {
+    test("should throw once the bond requirement is zero", () => {
       expect(() =>
         new AccrualPosition({ ...position, bondRequirement: 0n }, loan, venue).refinance(target),
-      ).toThrow(IrisCoreErrors.LoanResolved);
+      ).toThrow(IrisCoreErrors.UnbondedLoan);
     });
 
     test("should throw once the loan is liquidatable", () => {

@@ -46,7 +46,7 @@ export class Position implements IPosition {
    */
   public bond: bigint;
   /**
-   * The required bond (zero once the loan is resolved).
+   * The required bond (zero once the solver's bond obligation is over).
    */
   public bondRequirement: bigint;
   /**
@@ -655,7 +655,7 @@ export class AccrualPosition extends Position {
    * @param venue The venue to migrate to.
    * @param timestamp The refinancing timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the current venue price is unknown.
-   * @throws {IrisCoreErrors.LoanResolved} When the loan is already resolved.
+   * @throws {IrisCoreErrors.UnbondedLoan} When the bond requirement is already zero.
    * @throws {IrisCoreErrors.NotAllowedVenue} When the loan's venue bitmap disallows the
    *   venue.
    * @throws {IrisCoreErrors.LiquidatableLoan} When the loan is liquidatable once accrued.
@@ -666,7 +666,7 @@ export class AccrualPosition extends Position {
     if (this.venue.price == null) {
       throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
     }
-    if (this.bondRequirement === 0n) throw new IrisCoreErrors.LoanResolved(this.pod);
+    if (this.bondRequirement === 0n) throw new IrisCoreErrors.UnbondedLoan(this.pod);
     if (!this._loan.isVenueAllowed(venue.id)) {
       throw new IrisCoreErrors.NotAllowedVenue(this.pod, venue.id);
     }

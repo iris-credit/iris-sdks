@@ -424,7 +424,7 @@ describe("PositionUtils", () => {
           loan,
         ),
       ).toBe(0n);
-      // A closed loan (zero bond requirement) is always healthy.
+      // A zero bond requirement is always healthy.
       expect(
         PositionUtils.getBondLiquidationSeizedAmount({ ...position, bondRequirement: 0n }, loan),
       ).toBe(0n);
@@ -592,7 +592,7 @@ describe("PositionUtils", () => {
     test("should slash the paid floating beyond the fixed leg from the bond", () => {
       // The liquidation retired the 100 principal plus the 10 floating: 5 nets against the
       // fixed leg, and the other 5 is slashed off the 8 bond to the borrower. Retiring the
-      // whole venue debt also resolves the loan.
+      // whole venue debt also zeroes the bond requirement.
       expect(
         PositionUtils.getRebasedPosition(crossing, {
           collateral: 80n * MathLib.WAD,
@@ -611,9 +611,9 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should resolve the loan and forfeit the surplus when the slash exhausts the bond", () => {
+    test("should zero the bond requirement and forfeit the surplus when the slash exhausts the bond", () => {
       // 20 floating, the liquidation retired 115: the 10 beyond the fixed leg exceeds the 8
-      // bond, so the bond is refunded whole and the loan resolves.
+      // bond, so the bond is refunded whole and the bond requirement is zeroed.
       expect(
         PositionUtils.getRebasedPosition(
           { ...crossing, floatingLeg: 20n * MathLib.WAD, surplus: MathLib.WAD },
@@ -634,7 +634,7 @@ describe("PositionUtils", () => {
     test("should not net the repayment a seized surplus funded", () => {
       // 115 of the 100 collateral + 20 surplus was seized to retire 110: only the 100 the
       // borrower's collateral paid is credited, which the principal absorbs whole. The
-      // retired venue debt resolves the loan.
+      // retired venue debt zeroes the bond requirement.
       expect(
         PositionUtils.getRebasedPosition(
           { ...crossing, collateral: 100n * MathLib.WAD, surplus: 20n * MathLib.WAD },
@@ -652,7 +652,7 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should resolve the loan on bad debt", () => {
+    test("should zero the bond requirement on bad debt", () => {
       // badDebt = 2 - 1: the bond requirement is zeroed.
       expect(
         PositionUtils.getRebasedPosition(position, {
@@ -669,9 +669,9 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should resolve the loan once the venue debt is retired, collateral remaining", () => {
-      // liquidated = 2 and repaid = 5, capped at 2: the venue holds no debt, so the loan
-      // resolves with 3 principal still tracked.
+    test("should zero the bond requirement once the venue debt is retired, collateral remaining", () => {
+      // liquidated = 2 and repaid = 5, capped at 2: the venue holds no debt, so the bond
+      // requirement is zeroed with 3 principal still tracked.
       expect(
         PositionUtils.getRebasedPosition(position, {
           collateral: 8n * MathLib.WAD,
@@ -687,9 +687,9 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should net on the rebase that resolves the loan on bad debt", () => {
-      // badDebt = 2 - 1 resolves the loan, and the 8 retired over the principal still nets
-      // the 5 fixed leg, the other 3 slashed off the bond.
+    test("should net on the rebase that zeroes the bond requirement on bad debt", () => {
+      // badDebt = 2 - 1 zeroes the bond requirement, and the 8 retired over the principal
+      // still nets the 5 fixed leg, the other 3 slashed off the bond.
       expect(
         PositionUtils.getRebasedPosition(crossing, {
           collateral: MathLib.WAD,
@@ -708,9 +708,9 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should net on the wipe that resolves the loan", () => {
+    test("should net on the wipe that zeroes the bond requirement", () => {
       // The wipe retired the 100 principal plus the 10 floating: 5 nets the fixed leg and 5
-      // is slashed, as on any resolving rebase.
+      // is slashed, as on any rebase that zeroes the bond requirement.
       expect(
         PositionUtils.getRebasedPosition(crossing, {
           collateral: 0n,
@@ -750,7 +750,7 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should net nothing on a resolved loan", () => {
+    test("should net nothing once the bond requirement is zero", () => {
       expect(
         PositionUtils.getRebasedPosition(
           { ...crossing, bondRequirement: 0n },
@@ -768,7 +768,7 @@ describe("PositionUtils", () => {
       });
     });
 
-    test("should resolve the loan and clamp the legs when the venue is emptied", () => {
+    test("should zero the bond requirement and clamp the legs when the venue is emptied", () => {
       expect(
         PositionUtils.getRebasedPosition(
           {
@@ -795,7 +795,7 @@ describe("PositionUtils", () => {
     });
 
     test("should clamp the floating leg and surplus to the venue's actuals", () => {
-      // badDebt = 3 - 2 also resolves the loan.
+      // badDebt = 3 - 2 also zeroes the bond requirement.
       expect(
         PositionUtils.getRebasedPosition(
           {
@@ -1131,8 +1131,8 @@ describe("PositionUtils", () => {
       ).toBe(0n);
     });
 
-    test("should return zero once the loan is closed", () => {
-      // A bad-debt rebase can resolve the loan with skewed legs left over.
+    test("should return zero once the bond requirement is zero", () => {
+      // A bad-debt rebase can zero the bond requirement with skewed legs left over.
       expect(
         PositionUtils.getDrawdown({
           bond: 1_000n,
@@ -1173,7 +1173,7 @@ describe("PositionUtils", () => {
       ).toBe(700n);
     });
 
-    test("should return the full bond once the loan is closed", () => {
+    test("should return the full bond once the bond requirement is zero", () => {
       expect(
         PositionUtils.getWithdrawableBond(
           { bond: 1_000n, bondRequirement: 0n, fixedLeg: 0n, floatingLeg: MathLib.WAD },
@@ -1209,7 +1209,7 @@ describe("PositionUtils", () => {
           { bondLltv: 0n },
         ),
       ).toBe(0n);
-      // The zero-LLTV guard precedes the closed-loan one.
+      // The zero-LLTV guard precedes the zero-bond-requirement one.
       expect(
         PositionUtils.getWithdrawableBond(
           { bond: 1_000n, bondRequirement: 0n, fixedLeg: 0n, floatingLeg: 0n },
@@ -1280,7 +1280,7 @@ describe("PositionUtils", () => {
   });
 
   describe("isHealthyBond", () => {
-    test("should be healthy when the loan is closed", () => {
+    test("should be healthy when the bond requirement is zero", () => {
       expect(
         PositionUtils.isHealthyBond(
           { bond: 0n, bondRequirement: 0n, fixedLeg: 0n, floatingLeg: MathLib.WAD },
