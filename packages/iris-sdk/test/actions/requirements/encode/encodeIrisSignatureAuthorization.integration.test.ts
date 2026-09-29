@@ -77,19 +77,31 @@ describe("encodeIrisSignatureAuthorization", () => {
     expect(requirement.action.args.isAuthorized).toBe(false);
   });
 
-  test("behavior: defaults to a random nonce because Iris nonces are unordered", async ({
-    client,
-  }) => {
-    const sign = async () => {
-      const requirement = encodeIrisSignatureAuthorization(client, {
-        authorized: generalAdapter1,
-        chainId: CHAIN_ID,
-      });
+  test("behavior: signs the supplied sequential nonce", async ({ client }) => {
+    const requirement = encodeIrisSignatureAuthorization(client, {
+      authorized: generalAdapter1,
+      chainId: CHAIN_ID,
+      nonce: 7n,
+    });
 
-      return (await requirement.sign(client, client.account.address)).args.nonce;
-    };
+    const signed = await requirement.sign(client, client.account.address);
 
-    expect(await sign()).not.toBe(await sign());
+    expect(signed.args.nonce).toBe(7n);
+
+    const typedData = getAuthorizationTypedData(CHAIN_ID, {
+      authorizer: client.account.address,
+      authorized: generalAdapter1,
+      isAuthorized: true,
+      nonce: 7n,
+      deadline: signed.args.deadline,
+    });
+    await expect(
+      verifyTypedData({
+        ...typedData,
+        address: client.account.address,
+        signature: signed.args.signature,
+      }),
+    ).resolves.toBe(true);
   });
 
   test("error: AddressMismatchError when signer differs from userAddress", async ({ client }) => {

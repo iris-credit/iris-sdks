@@ -8,7 +8,7 @@ import type {
 
 import { maxUint256 } from "viem";
 import { signTypedData, verifyTypedData } from "viem/actions";
-import { getAuthorizationTypedData, randomNonce } from "@iris-credit/core-sdk";
+import { getAuthorizationTypedData } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
 import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
 import {
@@ -24,8 +24,8 @@ interface EncodeIrisSignatureAuthorizationParams {
   authorized: Address;
   /** Target chain id; must match `viemClient.chain.id`. */
   chainId: ChainId;
-  /** Authorization nonce. Defaults to a random value. */
-  nonce?: bigint;
+  /** Authorization nonce: the signer's current `Iris.nonce(authorizer)`. */
+  nonce: bigint;
   /** Whether to grant (`true`, default) or revoke (`false`) the authorization. */
   isAuthorized?: boolean;
   /** Signature deadline in seconds. Defaults to two hours from now. */
@@ -40,15 +40,16 @@ interface EncodeIrisSignatureAuthorizationParams {
  * The returned `Requirement.sign()` produces the EIP-712 signature over Iris's `Authorization`
  * typed data, verifies it against the connected account (via the client, so ERC-1271
  * smart-contract wallets are supported), and returns a deep-frozen `RequirementSignature` the
- * bundler action helpers consume. Iris nonces are unordered, so the nonce defaults to a random
- * value instead of a fetched sequential one. Deadline defaults to two hours from
- * `Time.timestamp()`.
+ * bundler action helpers consume. Iris authorization nonces are sequential per authorizer:
+ * `setAuthorizationWithSig` accepts exactly `Iris.nonce(authorizer)` and increments it, so the
+ * caller reads that value when building the requirement and at most one outstanding signature
+ * per account is valid. Deadline defaults to two hours from `Time.timestamp()`.
  *
  * @param viemClient - Connected viem `Client` whose `chain.id` matches `params.chainId`.
  * @param params - Authorization encoding parameters.
  * @param params.authorized - Account to authorize (GeneralAdapter1).
  * @param params.chainId - Target chain id.
- * @param params.nonce - Optional authorization nonce; defaults to a random value.
+ * @param params.nonce - Authorization nonce; the signer's current `Iris.nonce(authorizer)`.
  * @param params.isAuthorized - Grant (`true`, default) or revoke (`false`).
  * @param params.deadline - Optional signature deadline in seconds.
  * @returns A `Requirement` whose `sign(client, userAddress)` produces the deep-frozen signature.
@@ -69,6 +70,7 @@ interface EncodeIrisSignatureAuthorizationParams {
  * const requirement = encodeIrisSignatureAuthorization(client, {
  *   authorized: generalAdapter1,
  *   chainId: 1,
+ *   nonce: user.nonce, // from `fetchUser`
  * });
  * // requirement satisfies Requirement
  * ```
@@ -77,7 +79,7 @@ export const encodeIrisSignatureAuthorization = (
   viemClient: Client,
   params: EncodeIrisSignatureAuthorizationParams,
 ): Requirement<AuthorizationRequirementSignature> => {
-  const { authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
+  const { authorized, chainId, nonce, isAuthorized = true } = params;
 
   validateChainId(viemClient.chain?.id, chainId);
 

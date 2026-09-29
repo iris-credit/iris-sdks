@@ -115,6 +115,12 @@ describe("Iris.take", () => {
       functionName: "isAuthorized",
       result: reads.isAuthorized ?? false,
     });
+    mockRead(handle, {
+      address: iris,
+      abi: irisAbi,
+      functionName: "nonce",
+      result: 0n,
+    });
     if (reads.permit2Allowance != null) {
       mockRead(handle, {
         address: permit2,
@@ -876,6 +882,12 @@ describe("Iris.close", () => {
       abi: irisAbi,
       functionName: "isAuthorized",
       result: false,
+    });
+    mockRead(handle, {
+      address: iris,
+      abi: irisAbi,
+      functionName: "nonce",
+      result: 0n,
     });
 
     const requirements = await makeIris()
