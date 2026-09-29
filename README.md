@@ -23,7 +23,7 @@ The packages below are lower-level building blocks. Use them only if `@iris-cred
 
 - [**`@iris-credit/iris-ts`**](./packages/iris-ts/): TypeScript package to handle all things time & format-related
 
-- [**`@iris-credit/evm-simulation`**](./packages/evm-simulation/): EVM bundle simulation engine — execution preview via Tenderly RPC or `eth_simulateV1`, transfer parsing, per-account asset changes, and a bundler3 retention guard — a fork of Morpho's `evm-simulation`
+- [**`@iris-credit/evm-simulation`**](./packages/evm-simulation/): EVM bundle simulation engine — execution preview via `eth_simulateV1`, transfer parsing, per-account asset changes, and a bundler3 retention guard — a fork of Morpho's `evm-simulation`
 
 ### Testing
 
