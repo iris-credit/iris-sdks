@@ -388,7 +388,7 @@ describe("AccrualPosition", () => {
       expect(value.fixedLeg).toBe(25_000_000_000_000_000n);
       // (1 + 0) * (1.1 - 1) / 1.
       expect(value.floatingLeg).toBe(100_000_000_000_000_000n);
-      // (2 + 0) * (1.05 - 1) / 1, accrued while the loan is open (bondRequirement != 0).
+      // (2 + 0) * (1.05 - 1) / 1, accrued while the loan is bonded (bondRequirement != 0).
       expect(value.surplus).toBe(100_000_000_000_000_000n);
       expect(value.collateralIndex).toBe(1_050_000_000_000_000_000n);
       expect(value.debtIndex).toBe(1_100_000_000_000_000_000n);

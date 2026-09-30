@@ -1318,9 +1318,9 @@ export class Iris implements IrisActions {
    * @throws {ChainIdMismatchError} when the client's chain differs from the entity's chain.
    * @throws {AddressMismatchError} when `userAddress` is not the loan's borrower.
    * @throws {LoanNotCreatedError} when the pod carries no Iris loan.
-   * @throws {LoanNotResolvedError} when the loan is not resolved: still open (non-zero bond
-   *   requirement), or its bond requirement zero with debt, fixed leg or surplus outstanding,
-   *   which `repay` settles first.
+   * @throws {LoanNotResolvedError} when the loan is not resolved: still bonded (non-zero bond
+   *   requirement), or unbonded with debt, fixed leg or surplus outstanding, which `repay`
+   *   settles first.
    * @throws {NegativeInputError} when `nativeAmount` is negative.
    * @throws {NativeAmountOnNonWNativeAssetError} when `nativeAmount > 0n` but the loan's debt token
    *   is not the chain's wNative.

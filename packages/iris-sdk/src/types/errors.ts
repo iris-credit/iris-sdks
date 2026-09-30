@@ -185,7 +185,7 @@ export class LoanResolvedError extends Error {
 
 /**
  * Thrown when a pod's loan is not resolved, which `escape` requires: either its bond requirement
- * is still non-zero (the venue position backs an open loan), or it is zero but debt, fixed leg or
+ * is still non-zero (the venue position backs a bonded loan), or it is zero but debt, fixed leg or
  * surplus is still outstanding (Iris's `LoanNotResolved`).
  */
 export class LoanNotResolvedError extends Error {
