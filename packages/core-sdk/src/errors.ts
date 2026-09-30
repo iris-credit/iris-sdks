@@ -179,10 +179,13 @@ export namespace IrisCoreErrors {
     }
   }
 
-  /** Error thrown when an operation requires an open loan but the loan is resolved. */
-  export class LoanResolved extends Error {
+  /**
+   * Error thrown when an operation requires a bonded loan but the bond requirement is zero: the
+   * solver's bond obligation is over (Iris rejects it with `ZeroAmount`).
+   */
+  export class UnbondedLoan extends Error {
     constructor(public readonly pod: Address) {
-      super(`loan resolved for pod ${pod}`);
+      super(`unbonded loan for pod ${pod}: bond requirement is zero`);
     }
   }
 

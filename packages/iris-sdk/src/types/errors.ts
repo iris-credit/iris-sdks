@@ -163,7 +163,7 @@ export class LoanNotCreatedError extends Error {
 }
 
 /**
- * Thrown when a closing operation finds the pod's loan already closed — its bond requirement,
+ * Thrown when a closing operation finds the pod's loan already resolved — its bond requirement,
  * debt, fixed leg and surplus are all zero, so nothing is left to settle (Iris's `ZeroAmount`).
  */
 export class LoanResolvedError extends Error {
@@ -175,9 +175,9 @@ export class LoanResolvedError extends Error {
 }
 
 /**
- * Thrown when a pod's loan is not closed, which `escape` requires: either its bond requirement is
- * still non-zero (the venue position backs an open loan), or the loan is resolved but debt, fixed
- * leg or surplus is still outstanding (Iris's `LoanNotResolved`).
+ * Thrown when a pod's loan is not resolved, which `escape` requires: either its bond requirement
+ * is still non-zero (the venue position backs an open loan), or it is zero but debt, fixed leg or
+ * surplus is still outstanding (Iris's `LoanNotResolved`).
  */
 export class LoanNotResolvedError extends Error {
   constructor(pod: Address) {

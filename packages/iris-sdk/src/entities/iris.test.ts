@@ -860,7 +860,7 @@ describe("Iris.repay", () => {
     expect(maxRepaid).toBe(transferAmount);
   });
 
-  test("error: LoanResolvedError when the loan is closed and carries nothing to repay", () => {
+  test("error: LoanResolvedError when the loan is resolved and carries nothing to repay", () => {
     expect(() =>
       makeIris().repay({
         userAddress: BORROWER,
@@ -869,8 +869,8 @@ describe("Iris.repay", () => {
     ).toThrow(LoanResolvedError);
   });
 
-  // `Iris.repay` admits a resolved loan while surplus is outstanding: it settles to the solver.
-  test("behavior: still builds for a resolved loan with surplus outstanding", () => {
+  // `Iris.repay` admits a zero bond requirement while surplus is outstanding: it settles to the solver.
+  test("behavior: still builds with the bond requirement zero and surplus outstanding", () => {
     const tx = makeIris()
       .repay({
         userAddress: BORROWER,
@@ -981,7 +981,7 @@ describe("Iris.close", () => {
     );
   });
 
-  test("error: LoanResolvedError when the loan is closed and carries nothing to repay", () => {
+  test("error: LoanResolvedError when the loan is resolved and carries nothing to repay", () => {
     expect(() =>
       makeIris().close({
         userAddress: BORROWER,
@@ -990,8 +990,8 @@ describe("Iris.close", () => {
     ).toThrow(LoanResolvedError);
   });
 
-  // `Iris.repay` admits a resolved loan while surplus is outstanding, so close settles it and exits.
-  test("behavior: still builds for a resolved loan with surplus outstanding", () => {
+  // `Iris.repay` admits a zero bond requirement while surplus is outstanding, so close settles it and exits.
+  test("behavior: still builds with the bond requirement zero and surplus outstanding", () => {
     const tx = makeIris()
       .close({
         userAddress: BORROWER,
@@ -1085,7 +1085,7 @@ describe("Iris.escape", () => {
     { borrowShares: 10n ** 24n, collateral: 2n * MathLib.WAD },
   );
 
-  /** A closed loan by default: bond requirement, debt, fixed leg and surplus all zero. */
+  /** A resolved loan by default: bond requirement, debt, fixed leg and surplus all zero. */
   const positionData = (
     overrides: {
       bondRequirement?: bigint;
@@ -1129,7 +1129,7 @@ describe("Iris.escape", () => {
     );
   });
 
-  // `Iris.escape` requires the loan closed: bond requirement zero and debt, fixed leg and surplus
+  // `Iris.escape` requires the loan resolved: bond requirement zero and debt, fixed leg and surplus
   // zero.
   test("error: LoanNotResolvedError while the loan is open", () => {
     expect(() =>
@@ -1140,7 +1140,7 @@ describe("Iris.escape", () => {
     ).toThrow(LoanNotResolvedError);
   });
 
-  test("error: LoanNotResolvedError for a resolved loan with the fixed leg or surplus outstanding", () => {
+  test("error: LoanNotResolvedError for a zero bond requirement with the fixed leg or surplus outstanding", () => {
     expect(() =>
       makeIris().escape({ userAddress: BORROWER, positionData: positionData({ fixedLeg: 1n }) }),
     ).toThrow(LoanNotResolvedError);

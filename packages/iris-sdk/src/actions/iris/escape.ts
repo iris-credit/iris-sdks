@@ -21,7 +21,7 @@ export interface IrisEscapeParams {
   /** The chain the bundle targets. */
   readonly chainId: ChainId;
   readonly args: {
-    /** Pod identifying the closed loan whose venue position is exited. */
+    /** Pod identifying the resolved loan whose venue position is exited. */
     readonly pod: Address;
     /** The loan's debt token — the asset the venue debt is settled in. */
     readonly token: Address;
@@ -46,7 +46,7 @@ export interface IrisEscapeParams {
 }
 
 /**
- * Prepares an escape transaction exiting the venue position of a closed Iris loan.
+ * Prepares an escape transaction exiting the venue position of a resolved Iris loan.
  *
  * Routed through bundler3 via `GeneralAdapter1`, composing the bundle in on-chain execution order:
  *
@@ -69,7 +69,7 @@ export interface IrisEscapeParams {
  * until they do.
  *
  * @param params.chainId - The chain the bundle targets.
- * @param params.args.pod - Pod identifying the closed loan to exit.
+ * @param params.args.pod - Pod identifying the resolved loan to exit.
  * @param params.args.token - The loan's debt token.
  * @param params.args.receiver - The account receiving the venue collateral and the residual.
  * @param params.args.amount - ERC-20 debt token to pull from the payer. Defaults to `0n`.
