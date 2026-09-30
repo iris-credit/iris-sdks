@@ -4,7 +4,7 @@ import type { AuthorizationRequirementSignature, Requirement } from "../../../ty
 
 import { isAddressEqual, maxUint256 } from "viem";
 import { signTypedData, verifyTypedData } from "viem/actions";
-import { getAuthorizationTypedData, getChainAddresses, randomNonce } from "@iris-credit/core-sdk";
+import { getAuthorizationTypedData, getChainAddresses } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
 import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
 import {
@@ -23,8 +23,8 @@ interface EncodeIrisSignatureAuthorizationParams {
   authorized: Address;
   /** Target chain id; must match `viemClient.chain.id`. */
   chainId: ChainId;
-  /** Authorization nonce. Defaults to a random value. */
-  nonce?: bigint;
+  /** Authorization nonce: the signer's current `Iris.nonce(authorizer)`. */
+  nonce: bigint;
   /** Whether to grant (`true`, default) or revoke (`false`) the authorization. */
   isAuthorized?: boolean;
   /** Signature deadline in seconds. Defaults to two hours from now. */
@@ -39,9 +39,11 @@ interface EncodeIrisSignatureAuthorizationParams {
  * The returned `Requirement.sign()` produces the EIP-712 signature over Iris's `Authorization`
  * typed data, verifies it against the connected account (via the client, so ERC-1271
  * smart-contract wallets are supported), and returns a deep-frozen `RequirementSignature` the
- * bundler action helpers consume. Iris nonces are unordered, so the nonce defaults to a random
- * value instead of a fetched sequential one. The requirement's `action.typedData` holds that EIP-712
- * payload so it can be inspected or displayed before signing. Deadline defaults to two hours from
+ * bundler action helpers consume. Iris authorization nonces are sequential per authorizer:
+ * `setAuthorizationWithSig` accepts exactly `Iris.nonce(authorizer)` and increments it, so the
+ * caller reads that value when building the requirement and at most one outstanding signature
+ * per account is valid. The requirement's `action.typedData` holds the EIP-712 payload so it can
+ * be inspected or displayed before signing. Deadline defaults to two hours from
  * `Time.timestamp()`.
  * The operator pin applies to grants and revocations alike: revoking a previously registered
  * operator is outside this helper's scope.
@@ -53,7 +55,7 @@ interface EncodeIrisSignatureAuthorizationParams {
  *   GeneralAdapter1, so a misconfigured `authorized` cannot grant an arbitrary address operator
  *   rights over the signer's Iris positions.
  * @param params.chainId - Target chain id.
- * @param params.nonce - Optional authorization nonce; defaults to a random value.
+ * @param params.nonce - Authorization nonce; the signer's current `Iris.nonce(authorizer)`.
  * @param params.isAuthorized - Grant (`true`, default) or revoke (`false`).
  * @param params.deadline - Optional signature deadline in seconds.
  * @returns A `Requirement` whose `action.typedData` is the EIP-712 payload and whose
@@ -80,6 +82,7 @@ interface EncodeIrisSignatureAuthorizationParams {
  *   owner,
  *   authorized: generalAdapter1,
  *   chainId: 1,
+ *   nonce: user.nonce, // from `fetchUser`
  * });
  * // Inspect the EIP-712 payload (requirement.action.typedData) or sign via requirement.sign(...).
  * ```
@@ -88,7 +91,7 @@ export const encodeIrisSignatureAuthorization = (
   viemClient: Client,
   params: EncodeIrisSignatureAuthorizationParams,
 ): Requirement<AuthorizationRequirementSignature> => {
-  const { owner, authorized, chainId, nonce = randomNonce(), isAuthorized = true } = params;
+  const { owner, authorized, chainId, nonce, isAuthorized = true } = params;
 
   validateChainId(viemClient.chain?.id, chainId);
 

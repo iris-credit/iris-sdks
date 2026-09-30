@@ -11,7 +11,7 @@ import { User } from "./User.js";
 
 const { iris, bundler3 } = getChainAddresses(ChainId.EthMainnet);
 
-const mockUserClient = (isAuthorized: boolean) => {
+const mockUserClient = (isAuthorized: boolean, nonce = 0n) => {
   const handle = createMockClient(mainnet);
   mockRead(handle, {
     address: iris,
@@ -19,16 +19,22 @@ const mockUserClient = (isAuthorized: boolean) => {
     functionName: "isAuthorized",
     result: isAuthorized,
   });
+  mockRead(handle, {
+    address: iris,
+    abi: irisAbi,
+    functionName: "nonce",
+    result: nonce,
+  });
 
   return handle;
 };
 
 describe("fetchUser", () => {
   test("default", async () => {
-    const { client } = mockUserClient(true);
+    const { client } = mockUserClient(true, 2n);
 
     expect(await fetchUser(USER, client)).toStrictEqual(
-      new User({ address: USER, isBundlerAuthorized: true }),
+      new User({ address: USER, isBundlerAuthorized: true, nonce: 2n }),
     );
   });
 
@@ -46,6 +52,16 @@ describe("fetchUser", () => {
     expect(
       expectReadCall(handle, { address: iris, abi: irisAbi, functionName: "isAuthorized" }),
     ).toStrictEqual([{ functionName: "isAuthorized", args: [USER, bundler3.generalAdapter1] }]);
+  });
+
+  test("behavior: queries the user's authorization nonce", async () => {
+    const handle = mockUserClient(true);
+
+    await fetchUser(USER, handle.client);
+
+    expect(
+      expectReadCall(handle, { address: iris, abi: irisAbi, functionName: "nonce" }),
+    ).toStrictEqual([{ functionName: "nonce", args: [USER] }]);
   });
 
   test("behavior: skips the chain id read when supplied", async () => {

@@ -188,7 +188,8 @@ describe("AccrualPosition", () => {
   });
 
   describe("isHealthyBond", () => {
-    test("should be unhealthy when the bond does not cover the requirement", () => {
+    test("should stay healthy below the requirement while the drawdown holds", () => {
+      // The requirement is a withdrawal floor, not a liquidation trigger.
       const value = new AccrualPosition(
         { ...position, bondRequirement: position.bond + 1n },
         loan,
@@ -196,6 +197,17 @@ describe("AccrualPosition", () => {
       );
 
       expect(accrualPosition.isHealthyBond).toBe(true);
+      expect(value.isHealthyBond).toBe(true);
+    });
+
+    test("should be unhealthy when the drawdown exceeds the bond lltv", () => {
+      // 0.06 floating over 0.1 bond > 0.5 bondLltv.
+      const value = new AccrualPosition(
+        { ...position, floatingLeg: 60_000_000_000_000_000n },
+        loan,
+        venue,
+      );
+
       expect(value.isHealthyBond).toBe(false);
     });
   });
@@ -437,6 +449,29 @@ describe("AccrualPosition", () => {
       expect(value?.bondRequirement).toBe(position.bondRequirement);
     });
 
+    test("should net the paid floating against the fixed leg and slash the excess from the bond", () => {
+      // liquidated = 2 - 0.8 and repaid = 1.1 - 0.02: 0.08 over the principal nets the 0.05
+      // fixed leg, and the other 0.03 is slashed off the 0.1 bond.
+      const value = new AccrualPosition(
+        { ...position, fixedLeg: 50_000_000_000_000_000n, floatingLeg: 100_000_000_000_000_000n },
+        loan,
+        new TestVenue({
+          ...venue,
+          collateral: 800_000_000_000_000_000n,
+          debt: 20_000_000_000_000_000n,
+        }),
+      ).rebase();
+
+      expect(value.collateral).toBe(800_000_000_000_000_000n);
+      expect(value.debt).toBe(0n);
+      expect(value.fixedLeg).toBe(0n);
+      expect(value.floatingLeg).toBe(20_000_000_000_000_000n);
+      expect(value.bond).toBe(70_000_000_000_000_000n);
+      expect(value.bondRequirement).toBe(position.bondRequirement);
+      // The slashed amount goes to the borrower's claimable, not to the position.
+      expect(value).not.toHaveProperty("bondSlashed");
+    });
+
     test("should throw when the price is unknown", () => {
       expect(() =>
         new AccrualPosition(
@@ -521,6 +556,39 @@ describe("AccrualPosition", () => {
       expect(value.venue.collateral).toBe(850_000_000_000_000_000n);
     });
 
+    test("should repay the fixed leg the rebase netted", () => {
+      // A venue liquidation retired the principal plus 0.1 floating out of 1.2 collateral:
+      // the 0.1 nets the 0.15 fixed leg down to 0.05, which is all the liquidator repays
+      // (0.02 floating is left on the venue, within the bond), seized at the max lif.
+      const {
+        position: value,
+        repaid,
+        seized,
+      } = new AccrualPosition(
+        {
+          ...liquidatable,
+          fixedLeg: 150_000_000_000_000_000n,
+          floatingLeg: 120_000_000_000_000_000n,
+        },
+        loan,
+        new TestVenue({
+          ...venue,
+          collateral: 800_000_000_000_000_000n,
+          debt: 20_000_000_000_000_000n,
+        }),
+      ).liquidate();
+
+      expect(repaid).toBe(50_000_000_000_000_000n);
+      expect(seized).toBe(57_500_000_000_000_000n);
+      expect(value.collateral).toBe(742_500_000_000_000_000n);
+      expect(value.debt).toBe(0n);
+      expect(value.fixedLeg).toBe(0n);
+      expect(value.bond).toBe(position.bond);
+      expect(value.bondRequirement).toBe(0n);
+      expect(value.venue.debt).toBe(0n);
+      expect(value.venue.collateral).toBe(742_500_000_000_000_000n);
+    });
+
     test("should throw when the price is unknown", () => {
       expect(() =>
         new AccrualPosition(
@@ -572,10 +640,10 @@ describe("AccrualPosition", () => {
       ).toThrow(IrisCoreErrors.InsufficientVenueCollateral);
     });
 
-    test("should throw once the loan is resolved", () => {
+    test("should throw once the bond requirement is zero", () => {
       expect(() =>
         new AccrualPosition({ ...position, bondRequirement: 0n }, loan, venue).refinance(target),
-      ).toThrow(IrisCoreErrors.LoanResolved);
+      ).toThrow(IrisCoreErrors.UnbondedLoan);
     });
 
     test("should throw once the loan is liquidatable", () => {
@@ -636,6 +704,14 @@ describe("AccrualPosition", () => {
       );
     });
 
+    test("should throw once the loan is liquidatable", () => {
+      const liquidatable = { ...position, lastUpdate: loan.maturity + loan.overduePeriod + 1n };
+
+      expect(() => new AccrualPosition(liquidatable, loan, venue).withdrawCollateral(1n)).toThrow(
+        IrisCoreErrors.LiquidatableLoan,
+      );
+    });
+
     test("should throw when the price is unknown", () => {
       expect(() =>
         new AccrualPosition(
@@ -666,6 +742,20 @@ describe("AccrualPosition", () => {
       );
     });
 
+    test("should keep the bond requirement floor while the bond is healthy", () => {
+      // No drawdown: only the 0.05 requirement binds, which the health check does not enforce.
+      const value = new AccrualPosition(
+        { ...position, bondRequirement: 50_000_000_000_000_000n },
+        loan,
+        venue,
+      );
+
+      expect(value.withdrawBond(50_000_000_000_000_000n).bond).toBe(50_000_000_000_000_000n);
+      expect(() => value.withdrawBond(50_000_000_000_000_000n + 1n)).toThrow(
+        IrisCoreErrors.InsufficientBond,
+      );
+    });
+
     test("should keep the drawdown allowance", () => {
       // Any withdrawal pushes the 0.05 / 0.1 drawdown over the 0.5 bondLltv.
       const value = new AccrualPosition(
@@ -691,6 +781,14 @@ describe("AccrualPosition", () => {
   describe("liquidateBond", () => {
     test("should throw while the bond is healthy", () => {
       expect(() => accrualPosition.liquidateBond()).toThrow(IrisCoreErrors.HealthyBond);
+      // A bond below the requirement is not liquidatable while the drawdown holds.
+      expect(() =>
+        new AccrualPosition(
+          { ...position, bondRequirement: position.bond + 1n },
+          loan,
+          venue,
+        ).liquidateBond(),
+      ).toThrow(IrisCoreErrors.HealthyBond);
     });
 
     test("should slash the negative net plus the seized incentive", () => {
@@ -707,13 +805,13 @@ describe("AccrualPosition", () => {
 
       expect(seized).toBe(5_000_000_000_000_000n);
       expect(value.bond).toBe(35_000_000_000_000_000n);
-      expect(value.collateral).toBe(0n);
       expect(value.debt).toBe(0n);
       expect(value.bondRequirement).toBe(0n);
       // The slashed bond beyond the seized cut repays the venue debt: 0.065 - 0.005.
       expect(repaid).toBe(60_000_000_000_000_000n);
       expect(value.venue.debt).toBe(MathLib.WAD - 60_000_000_000_000_000n);
-      // Iris stops tracking the collateral without withdrawing it from the venue.
+      // The collateral stays tracked for the borrower and stays on the venue.
+      expect(value.collateral).toBe(position.collateral);
       expect(value.venue.collateral).toBe(venue.collateral);
     });
 

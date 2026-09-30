@@ -10,9 +10,11 @@ describe("User", () => {
     const user = new User({
       address: ADDR,
       isBundlerAuthorized: true,
+      nonce: 3n,
     });
 
     expect(user.address).toBe(ADDR);
     expect(user.isBundlerAuthorized).toBe(true);
+    expect(user.nonce).toBe(3n);
   });
 });

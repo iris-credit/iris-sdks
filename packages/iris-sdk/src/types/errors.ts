@@ -172,25 +172,26 @@ export class LoanNotCreatedError extends Error {
 }
 
 /**
- * Thrown when an operation needs an open loan but the pod's loan is already resolved — its debt,
- * legs and bond requirement are cleared, which every closing operation rejects.
+ * Thrown when a closing operation finds the pod's loan already resolved — its bond requirement,
+ * debt, fixed leg and surplus are all zero, so nothing is left to settle (Iris's `ZeroAmount`).
  */
 export class LoanResolvedError extends Error {
   constructor(pod: Address) {
     super(
-      `The Iris loan of pod "${pod}" is already resolved and owes nothing. Withdraw its collateral instead.`,
+      `The Iris loan of pod "${pod}" is already resolved and owes nothing. Escape or withdraw its collateral instead.`,
     );
   }
 }
 
 /**
- * Thrown when a pod's loan is not resolved — its bond requirement is still non-zero, so the venue
- * position is backing an open loan and cannot be exited.
+ * Thrown when a pod's loan is not resolved, which `escape` requires: either its bond requirement
+ * is still non-zero (the venue position backs an open loan), or it is zero but debt, fixed leg or
+ * surplus is still outstanding (Iris's `LoanNotResolved`).
  */
 export class LoanNotResolvedError extends Error {
   constructor(pod: Address) {
     super(
-      `The Iris loan of pod "${pod}" is not resolved. Repay or liquidate it before escaping its venue position.`,
+      `The Iris loan of pod "${pod}" is not resolved. Repay or liquidate it, settling any fixed leg and surplus, before escaping its venue position.`,
     );
   }
 }

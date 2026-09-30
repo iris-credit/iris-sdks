@@ -88,7 +88,7 @@ describe("IrisCoreErrors namespace", () => {
     ["HealthyBond", IrisCoreErrors.HealthyBond],
     ["InsufficientCollateral", IrisCoreErrors.InsufficientCollateral],
     ["InsufficientBond", IrisCoreErrors.InsufficientBond],
-    ["LoanResolved", IrisCoreErrors.LoanResolved],
+    ["UnbondedLoan", IrisCoreErrors.UnbondedLoan],
     ["LiquidatableLoan", IrisCoreErrors.LiquidatableLoan],
   ])("%s preserves pod", (_name, Ctor) => {
     const err = new Ctor(POD);

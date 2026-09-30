@@ -18,6 +18,7 @@ describe("encodeIrisSignatureAuthorization", () => {
       owner: USER_A,
       authorized: generalAdapter1,
       chainId: CHAIN_ID,
+      nonce: 0n,
     });
 
     expect(requirement.action.type).toBe("authorization");
@@ -30,6 +31,7 @@ describe("encodeIrisSignatureAuthorization", () => {
         owner: USER_A,
         authorized: ROGUE,
         chainId: CHAIN_ID,
+        nonce: 0n,
       }),
     ).toThrow(UnsupportedAuthorizationOperatorError);
   });
@@ -40,6 +42,7 @@ describe("encodeIrisSignatureAuthorization", () => {
         owner: USER_A,
         authorized: ROGUE,
         chainId: CHAIN_ID,
+        nonce: 0n,
         isAuthorized: false,
       }),
     ).toThrow(UnsupportedAuthorizationOperatorError);

@@ -46,7 +46,7 @@ export class Position implements IPosition {
    */
   public bond: bigint;
   /**
-   * The required bond (zero once the loan is resolved).
+   * The required bond (zero once the solver's bond obligation is over).
    */
   public bondRequirement: bigint;
   /**
@@ -225,9 +225,9 @@ export class AccrualPosition extends Position {
   }
 
   /**
-   * The maximum bond withdrawable while keeping the bond healthy (see
-   * `PositionUtils.getWithdrawableBond`). Evaluated on the legs as stored on this
-   * instance — accrue first for an up-to-date answer.
+   * The maximum bond withdrawable while keeping the bond at or above the bond requirement
+   * and healthy (see `PositionUtils.getWithdrawableBond`). Evaluated on the legs as stored
+   * on this instance — accrue first for an up-to-date answer.
    */
   get withdrawableBond() {
     return PositionUtils.getWithdrawableBond(this, this._loan);
@@ -366,7 +366,10 @@ export class AccrualPosition extends Position {
 
   /**
    * Returns a new position rebased against the venue's view of the pod, matching Iris's
-   * onchain rebase (see `PositionUtils.getRebasedPosition`).
+   * onchain rebase (see `PositionUtils.getRebasedPosition`): a venue liquidation writes
+   * down the collateral and debt, nets the floating interest it paid against the fixed leg
+   * and slashes the excess from the bond to the borrower's claimable. The slashed amount is
+   * not carried on the position — see `PositionUtils.getRebasedPosition` for it.
    *
    * Expects accrued legs: call `accrueLegs` beforehand, as the rebase runs after accrual
    * onchain.
@@ -524,10 +527,12 @@ export class AccrualPosition extends Position {
    * `withdrawCollateral`: the legs are accrued to `timestamp` and rebased, the withdrawal
    * is applied on the venue too (see `Venue.withdrawCollateral`), and it must keep the
    * position healthy through the liquidation deadline (see `PositionUtils.isHealthy`).
+   * Withdrawals close once the loan is liquidatable.
    *
    * @param amount The collateral amount to withdraw.
    * @param timestamp The withdrawal timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
+   * @throws {IrisCoreErrors.LiquidatableLoan} When the loan is liquidatable once accrued.
    * @throws {IrisCoreErrors.InsufficientVenueCollateral} When the withdrawal would leave
    *   the venue position unhealthy (see `Venue.withdrawCollateral`).
    * @throws {IrisCoreErrors.InsufficientCollateral} When the withdrawal would leave the
@@ -539,6 +544,9 @@ export class AccrualPosition extends Position {
     }
 
     const position = this.accrueLegs(timestamp).rebase();
+
+    if (position.isLiquidatable) throw new IrisCoreErrors.LiquidatableLoan(position.pod);
+
     const venue = position.venue.withdrawCollateral(amount, timestamp);
 
     position.collateral -= amount;
@@ -567,14 +575,15 @@ export class AccrualPosition extends Position {
 
   /**
    * Returns a new position with the bond withdrawn, matching Iris's `withdrawBond`: the
-   * legs are accrued to `timestamp` and rebased, and the withdrawal must keep the bond
-   * healthy (see `PositionUtils.getWithdrawableBond`).
+   * legs are accrued to `timestamp` and rebased, and the remaining bond must cover the
+   * bond requirement — a withdrawal floor the bond health check does not enforce — and
+   * stay healthy (see `PositionUtils.getWithdrawableBond`).
    *
    * @param amount The bond amount to withdraw.
    * @param timestamp The withdrawal timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
-   * @throws {IrisCoreErrors.InsufficientBond} When the withdrawal exceeds the bond or
-   *   leaves it unhealthy.
+   * @throws {IrisCoreErrors.InsufficientBond} When the withdrawal exceeds the bond, or
+   *   leaves it below the bond requirement or unhealthy.
    */
   public withdrawBond(amount: bigint, timestamp?: BigIntish) {
     if (this.venue.price == null) {
@@ -585,7 +594,7 @@ export class AccrualPosition extends Position {
 
     position.bond -= amount;
 
-    if (position.bond < 0n || !position.isHealthyBond) {
+    if (position.bond < 0n || position.bond < position.bondRequirement || !position.isHealthyBond) {
       throw new IrisCoreErrors.InsufficientBond(position.pod);
     }
 
@@ -599,8 +608,9 @@ export class AccrualPosition extends Position {
    * and the debt assets repaid to the venue, matching Iris's `liquidateBond` (bond
    * liquidation does not settle; see `PositionUtils.getBondLiquidationSeizedAmount`).
    *
-   * The returned venue is repaid alongside the position, but keeps its collateral: Iris
-   * stops tracking the pod's collateral without withdrawing it from the venue.
+   * The returned venue is repaid alongside the position, but keeps its collateral: it
+   * stays tracked as the borrower's collateral, recoverable with `withdrawCollateral` or
+   * `escape`.
    *
    * @param timestamp The liquidation timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the venue price is unknown.
@@ -624,7 +634,6 @@ export class AccrualPosition extends Position {
 
     const venue = position.venue.repay(repaid, timestamp);
 
-    position.collateral = 0n;
     position.debt = 0n;
     position.bond -= bondSlashed;
     position.bondRequirement = 0n;
@@ -646,7 +655,7 @@ export class AccrualPosition extends Position {
    * @param venue The venue to migrate to.
    * @param timestamp The refinancing timestamp (in seconds). Defaults to `lastUpdate`.
    * @throws {IrisCoreErrors.UnknownVenuePrice} When the current venue price is unknown.
-   * @throws {IrisCoreErrors.LoanResolved} When the loan is already resolved.
+   * @throws {IrisCoreErrors.UnbondedLoan} When the bond requirement is already zero.
    * @throws {IrisCoreErrors.NotAllowedVenue} When the loan's venue bitmap disallows the
    *   venue.
    * @throws {IrisCoreErrors.LiquidatableLoan} When the loan is liquidatable once accrued.
@@ -657,7 +666,7 @@ export class AccrualPosition extends Position {
     if (this.venue.price == null) {
       throw new IrisCoreErrors.UnknownVenuePrice(this.pod, this.venueId);
     }
-    if (this.bondRequirement === 0n) throw new IrisCoreErrors.LoanResolved(this.pod);
+    if (this.bondRequirement === 0n) throw new IrisCoreErrors.UnbondedLoan(this.pod);
     if (!this._loan.isVenueAllowed(venue.id)) {
       throw new IrisCoreErrors.NotAllowedVenue(this.pod, venue.id);
     }

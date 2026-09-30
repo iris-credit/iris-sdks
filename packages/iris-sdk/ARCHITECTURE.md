@@ -47,8 +47,8 @@ Iris is fixed-rate, fixed-term lending overlaid on variable-rate venues. The SDK
 
 - **Take.** A borrower and a solver agree terms off-chain as an EIP-712 signed `Quote`, delivered through the RFQ. `take` opens the loan: the borrower's collateral enters a single-use **pod** on the quoted venue, the debt is borrowed against it, and the solver posts a **bond** in the debt token covering the spread between the fixed rate the borrower pays and the floating rate the venue charges.
 - **Servicing.** While the loan is open, collateral and bond can be topped up permissionlessly (`supplyCollateral`, `supplyBond` — anyone can fund them), and withdrawn by their owners (`withdrawCollateral` by the borrower, `withdrawBond` by the solver) down to health ceilings Iris re-checks on-chain.
-- **Resolution.** `repay` closes the loan — always in full, priced at execution as the legs accrue per second, permissionless. Past `maturity + overduePeriod` the loan is instead liquidatable. Either way the loan becomes **resolved**: settlement credits the solver's net and surplus, and the protocol's fees, to claimable balances drawn down with `claim`.
-- **After resolution.** The pod may still hold a venue position (repay leaves the collateral with it). `escape` exits it: the borrower settles any remaining venue debt and withdraws the venue collateral, yield included. `close` fuses the two legs into one bundle.
+- **Closing.** `repay` closes the loan — always in full, priced at execution as the legs accrue per second, permissionless. Past `maturity + overduePeriod` the loan is instead liquidatable. Either way the loan becomes **resolved** (bond requirement, debt, fixed leg and surplus all zero): settlement credits the solver's net and surplus, and the protocol's fees, to claimable balances drawn down with `claim`. A venue liquidation can instead zero the bond requirement alone (the solver's bond obligation is over) with debt, fixed leg or surplus still outstanding; `repay` closes such a loan too, and `escape` waits for it.
+- **After closing.** The pod may still hold a venue position (repay leaves the collateral with it). `escape` exits it: the borrower settles any remaining venue debt and withdraws the venue collateral, yield included. `close` fuses the two legs into one bundle.
 - **Refinance.** Until the loan becomes liquidatable, the solver can move the position to another venue enabled in the loan's `venueBitmap` — `refinance` clears the current venue's debt and re-enters the new one atomically.
 
 Two facts shape the SDK's flows:
@@ -97,7 +97,7 @@ The withdrawals are validated locally against the ceiling Iris re-checks on-chai
 | `supplyBond`         | Bundler3 (general adapter) | `erc20TransferFrom` + `irisSupplyBond` in the debt token. Optional native wrapping. Permissionless.              |
 | `escape`             | Bundler3 (general adapter) | Funds residual venue debt (2h upper bound), settles, withdraws venue collateral + yield. Borrower only.          |
 | `refinance`          | Bundler3 (general adapter) | Funds current venue debt (2h upper bound), re-enters the new venue, returns proceeds. Solver only.               |
-| `withdrawCollateral` | Direct Iris call           | Nothing flows in. Ceiling = min(Iris check, venue check) against the buffered venue LLTV. Borrower only.         |
+| `withdrawCollateral` | Direct Iris call           | Nothing flows in. Ceiling = min(Iris check, venue check) against the buffered venue LLTV. Unavailable once liquidatable. Borrower only. |
 | `withdrawBond`       | Direct Iris call           | Nothing flows in. Post-withdrawal bond health against the buffered bond LLTV. Solver only.                       |
 | `claim`              | Direct Iris call           | Nothing flows in. Validated against the claimable balance; defaults to claiming it all.                          |
 
@@ -186,10 +186,10 @@ The simple-permit gate has two halves: the token must be verified in core-sdk's 
 
 ### The Iris authorization requirement
 
-`getIrisAuthorizationRequirement` reads `Iris.isAuthorized(user, generalAdapter1)` and returns `null` when authorization is already in place — which a previous bundled `take` leaves behind. Otherwise:
+`getIrisAuthorizationRequirement` reads the user's `Iris.isAuthorized(user, generalAdapter1)` (and, on the signable path, `Iris.nonce(user)`) and returns `null` when authorization is already in place — which a previous bundled `take` leaves behind. Otherwise:
 
 - **Default** — the `setAuthorization(generalAdapter1, true)` transaction the user sends before the bundle.
-- **`supportSignature: true`** — a signable `Requirement`; the signed authorization is folded into the bundle via `irisSetAuthorizationWithSig`, removing the standalone transaction. Iris authorization nonces are unordered, so no nonce read is needed — the requirement signs with a random nonce.
+- **`supportSignature: true`** — a signable `Requirement`; the signed authorization is folded into the bundle via `irisSetAuthorizationWithSig`, removing the standalone transaction. Iris authorization nonces are sequential per authorizer, so the requirement signs the fetched `Iris.nonce(user)` and only one outstanding signed authorization per account is valid — a second flow signing concurrently for the same account reverts with `InvalidNonce`.
 
 The encoder (`getIrisAuthorizationAction`) rejects any signed authorization whose `authorized` account is not the chain's general adapter (`BundlerErrors.UnexpectedSignature`), so a stray signature can never grant operator rights to an unintended address.
 

@@ -21,7 +21,7 @@ export namespace PositionUtils {
    *
    * @param position.collateral The position's collateral before accrual.
    * @param position.debt The position's debt (principal).
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed, which skips the surplus accrual).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over, which skips the surplus accrual).
    * @param position.collateralIndex The venue's collateral index at the last update (scaled by RAY).
    * @param position.debtIndex The venue's debt index at the last update (scaled by RAY).
    * @param position.floatingLeg The position's floating leg before accrual.
@@ -135,54 +135,77 @@ export namespace PositionUtils {
   };
 
   /**
-   * Mirror of Iris's `_rebase`: detects venue-side liquidations or repayments on the pod's
-   * venue position and returns the rebased position fields.
+   * Mirror of Iris's `_rebase`: detects venue-side liquidations on the pod's venue position
+   * and returns the rebased position fields.
    *
    * `liquidated` collateral (tracked collateral + surplus above the venue's actual) and
    * `repaid` debt (tracked debt + floating leg above the venue's actual) are derived from
-   * the venue's view; when either is zero, the position is returned unchanged. Otherwise
-   * the tracked collateral is reduced by the liquidated amount and the tracked debt by the
-   * repaid amount, capped at the liquidated amount's value in debt assets. The surplus and
-   * floating leg are clamped to the venue's actuals, and the bond requirement is zeroed
-   * (resolving the loan) on bad debt or when the venue position is emptied.
+   * the venue's view. When either is zero, the position is returned unchanged, except that
+   * live collateral above the tracked collateral and surplus (a direct venue supply) is
+   * tracked as the borrower's collateral. Otherwise the tracked collateral is reduced by the
+   * liquidated amount and the tracked debt by the repaid amount, capped at the liquidated
+   * amount's value in debt assets. The surplus and floating leg are clamped to the venue's
+   * actuals, and the bond requirement is zeroed on bad debt or once the venue debt is fully
+   * retired.
+   *
+   * Repayment recognized over the principal is floating interest the borrower's collateral
+   * paid. it nets against the fixed leg, and the excess is slashed from the bond to the
+   * borrower's claimable (`bondSlashed`), so the borrower does not pay both legs on the
+   * recognized portion. The borrower is credited at most the value of the collateral they
+   * lost — repayment a seized surplus funded is not netted. The rebase that zeroes the bond
+   * requirement nets like any other, a wipe included. a loan whose bond requirement is already
+   * zero on input nets nothing. A slash that exhausts the bond zeroes the bond requirement,
+   * forfeiting the surplus, as a bond liquidation would.
    *
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand, as the rebase
    * runs after accrual onchain (and before every other state change).
    *
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bond The position's bond.
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
+   * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param position.surplus The position's surplus.
    * @param venue.collateral The pod's collateral on the venue, from `IVenueAdapter.positionAssets`.
    * @param venue.debt The pod's debt on the venue, from `IVenueAdapter.positionAssets`.
    * @param venue.price The collateral price quoted in debt assets, from `IVenueAdapter.price` (scaled by ORACLE_PRICE_SCALE), or `undefined` when unknown.
-   * @returns The rebased `collateral`, `debt`, `bondRequirement`, `floatingLeg` & `surplus`
-   * (the bond, fixed leg and indices are unaffected), or `undefined` when a rebase is
-   * needed but the price is unknown.
+   * @returns The rebased `collateral`, `debt`, `bond`, `bondRequirement`, `fixedLeg`,
+   * `floatingLeg` & `surplus` (the indices are unaffected) alongside the `bondSlashed` to the
+   * borrower's claimable, or `undefined` when a rebase is needed but the price is unknown.
    * @example
    * ```ts
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
+   * // A venue liquidation retired the 5 principal plus 1 floating out of 7 collateral, and
+   * // with it the whole venue debt.
    * const rebased = PositionUtils.getRebasedPosition(
    *   {
    *     collateral: 10n * MathLib.WAD,
    *     debt: 5n * MathLib.WAD,
+   *     bond: 2n * MathLib.WAD,
    *     bondRequirement: 1n,
-   *     floatingLeg: 0n,
+   *     fixedLeg: MathLib.WAD / 2n,
+   *     floatingLeg: MathLib.WAD,
    *     surplus: 0n,
    *   },
-   *   { collateral: 4n * MathLib.WAD, debt: 2n * MathLib.WAD, price: ORACLE_PRICE_SCALE },
+   *   { collateral: 3n * MathLib.WAD, debt: 0n, price: ORACLE_PRICE_SCALE },
    * );
-   * // rebased.collateral === 4000000000000000000n
-   * // rebased.debt === 2000000000000000000n
+   * // rebased.collateral === 3000000000000000000n
+   * // rebased.debt === 0n
+   * // rebased.bondRequirement === 0n
+   * // rebased.fixedLeg === 0n
+   * // rebased.bond === 1500000000000000000n
+   * // rebased.bondSlashed === 500000000000000000n
    * ```
    */
   export const getRebasedPosition = (
     position: {
       collateral: BigIntish;
       debt: BigIntish;
+      bond: BigIntish;
       bondRequirement: BigIntish;
+      fixedLeg: BigIntish;
       floatingLeg: BigIntish;
       surplus: BigIntish;
     },
@@ -190,7 +213,9 @@ export namespace PositionUtils {
   ) => {
     position.collateral = BigInt(position.collateral);
     position.debt = BigInt(position.debt);
+    position.bond = BigInt(position.bond);
     position.bondRequirement = BigInt(position.bondRequirement);
+    position.fixedLeg = BigInt(position.fixedLeg);
     position.floatingLeg = BigInt(position.floatingLeg);
     position.surplus = BigInt(position.surplus);
     venue.collateral = BigInt(venue.collateral);
@@ -200,15 +225,21 @@ export namespace PositionUtils {
       position.collateral + position.surplus,
       venue.collateral,
     );
-    const repaid = MathLib.zeroFloorSub(position.debt + position.floatingLeg, venue.debt);
+    let repaid = MathLib.zeroFloorSub(position.debt + position.floatingLeg, venue.debt);
 
     if (liquidated === 0n || repaid === 0n) {
       return {
-        collateral: position.collateral,
+        collateral:
+          venue.collateral > position.collateral + position.surplus
+            ? venue.collateral - position.surplus
+            : position.collateral,
         debt: position.debt,
+        bond: position.bond,
         bondRequirement: position.bondRequirement,
+        fixedLeg: position.fixedLeg,
         floatingLeg: position.floatingLeg,
         surplus: position.surplus,
+        bondSlashed: 0n,
       };
     }
 
@@ -219,16 +250,45 @@ export namespace PositionUtils {
       venue.debt,
       getCollateralValue({ collateral: venue.collateral }, { price: venue.price })!,
     );
+    repaid = MathLib.min(repaid, maxRepaid);
+
+    const borrowerRepaid = MathLib.min(
+      repaid,
+      MathLib.mulDivDown(
+        MathLib.min(liquidated, position.collateral),
+        venue.price,
+        ORACLE_PRICE_SCALE,
+      ),
+    );
+    const overpaid =
+      position.bondRequirement === 0n ? 0n : MathLib.zeroFloorSub(borrowerRepaid, position.debt);
+    const bondSlashed = MathLib.min(
+      MathLib.zeroFloorSub(overpaid, position.fixedLeg),
+      position.bond,
+    );
+
+    let surplus = MathLib.min(position.surplus, venue.collateral);
+    const floatingLeg = MathLib.min(position.floatingLeg, venue.debt);
+    let bondRequirement = badDebt !== 0n || venue.debt === 0n ? 0n : position.bondRequirement;
+
+    let bond = position.bond;
+    if (bondSlashed !== 0n) {
+      bond -= bondSlashed;
+      if (bond === 0n) {
+        bondRequirement = 0n;
+        surplus = 0n;
+      }
+    }
 
     return {
       collateral: MathLib.zeroFloorSub(position.collateral, liquidated),
-      debt: MathLib.zeroFloorSub(position.debt, MathLib.min(repaid, maxRepaid)),
-      bondRequirement:
-        badDebt !== 0n || (venue.debt === 0n && venue.collateral === 0n)
-          ? 0n
-          : position.bondRequirement,
-      floatingLeg: MathLib.min(position.floatingLeg, venue.debt),
-      surplus: MathLib.min(position.surplus, venue.collateral),
+      debt: MathLib.zeroFloorSub(position.debt, repaid),
+      bond,
+      bondRequirement,
+      fixedLeg: MathLib.zeroFloorSub(position.fixedLeg, overpaid),
+      floatingLeg,
+      surplus,
+      bondSlashed,
     };
   };
 
@@ -376,11 +436,13 @@ export namespace PositionUtils {
    * Two limits bind, and the lower one is returned. Iris's own check reserves the worst-case
    * payoff (see `getRequiredCollateralValue`) against the venue LLTV limit on the remaining
    * collateral's value. The venue's, which the withdrawal exits through, does not follow from it:
-   * Iris never reserves the floating leg, so a solver deep enough underwater makes it the tighter.
+   * Iris reserves the floating leg only beyond the bond, so a solver deep enough underwater makes
+   * it the tighter.
    *
-   * Returns `undefined` when the collateral price is unknown, zero once either payoff reaches the
-   * LLTV limit of its collateral's value (notably on a zero price or LLTV), and the full
-   * collateral when nothing is owed.
+   * Returns zero once the loan is liquidatable (Iris rejects the withdrawal outright),
+   * `undefined` when the collateral price is unknown, zero once either payoff reaches the LLTV
+   * limit of its collateral's value (notably on a zero price or LLTV), and the full collateral
+   * when nothing is owed.
    *
    * Iris accepts `withdrawCollateral(pod, amount, receiver)` iff `amount` does not exceed
    * this limit.
@@ -390,6 +452,8 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
    * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param position.bond The position's bond.
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
@@ -405,7 +469,7 @@ export namespace PositionUtils {
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
    * const withdrawable = PositionUtils.getWithdrawableCollateral(
-   *   { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n },
+   *   { collateral: 5n * MathLib.WAD, debt: 2n * MathLib.WAD, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
    *   { maturity: 1_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
    *   {
    *     collateral: 5n * MathLib.WAD,
@@ -419,7 +483,13 @@ export namespace PositionUtils {
    * ```
    */
   export const getWithdrawableCollateral = (
-    position: { collateral: BigIntish; debt: BigIntish; fixedLeg: BigIntish },
+    position: {
+      collateral: BigIntish;
+      debt: BigIntish;
+      fixedLeg: BigIntish;
+      floatingLeg: BigIntish;
+      bond: BigIntish;
+    },
     loan: {
       maturity: BigIntish;
       overduePeriod: BigIntish;
@@ -433,6 +503,7 @@ export namespace PositionUtils {
     venue.collateral = BigInt(venue.collateral);
     venue.debt = BigInt(venue.debt);
 
+    if (LoanUtils.isLiquidatable(loan, timestamp)) return 0n;
     if (venue.price == null) return;
 
     const price = BigInt(venue.price);
@@ -571,13 +642,17 @@ export namespace PositionUtils {
   };
 
   /**
-   * Returns the worst-case payoff reserved by Iris's collateralization checks: the debt,
-   * the fixed leg and the interest still accruing until `maturity + overduePeriod` (both
-   * rates over the overdue window), as the loan cannot be liquidated before the deadline
+   * Returns the worst-case payoff reserved by Iris's collateralization checks: the debt plus
+   * the projected liquidation exposure — the fixed leg and the interest still accruing until
+   * `maturity + overduePeriod` (both rates over the overdue window), as the loan cannot be
+   * liquidated before the deadline, or the floating leg beyond the bond if that is larger.
+   * Fixed interest accruing shrinks the bad bond one-for-one, so the two are never summed
    * (see `getWithdrawableCollateral`, `isHealthy`).
    *
    * @param position.debt The position's debt (principal).
    * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param position.bond The position's bond.
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
@@ -589,7 +664,7 @@ export namespace PositionUtils {
    * import { MathLib, PositionUtils } from "@iris-credit/core-sdk";
    *
    * const value = PositionUtils.getRequiredCollateralValue(
-   *   { debt: MathLib.WAD, fixedLeg: 0n },
+   *   { debt: MathLib.WAD, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
    *   { maturity: 40_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
    *   40_086_400n - 31_536_000n,
    * );
@@ -597,7 +672,7 @@ export namespace PositionUtils {
    * ```
    */
   export const getRequiredCollateralValue = (
-    position: { debt: BigIntish; fixedLeg: BigIntish },
+    position: { debt: BigIntish; fixedLeg: BigIntish; floatingLeg: BigIntish; bond: BigIntish },
     loan: {
       maturity: BigIntish;
       overduePeriod: BigIntish;
@@ -608,6 +683,8 @@ export namespace PositionUtils {
   ) => {
     position.debt = BigInt(position.debt);
     position.fixedLeg = BigInt(position.fixedLeg);
+    position.floatingLeg = BigInt(position.floatingLeg);
+    position.bond = BigInt(position.bond);
     loan.maturity = BigInt(loan.maturity);
     loan.overduePeriod = BigInt(loan.overduePeriod);
     loan.fixedRate = BigInt(loan.fixedRate);
@@ -620,8 +697,12 @@ export namespace PositionUtils {
         MathLib.min(timeToLiquidation, loan.overduePeriod) * loan.overdueRate,
       SECONDS_PER_YEAR * MathLib.WAD,
     );
+    const exposure = MathLib.max(
+      position.fixedLeg + residual,
+      MathLib.zeroFloorSub(position.floatingLeg, position.bond),
+    );
 
-    return position.debt + position.fixedLeg + residual;
+    return position.debt + exposure;
   };
 
   /**
@@ -633,6 +714,8 @@ export namespace PositionUtils {
    * @param position.collateral The position's collateral.
    * @param position.debt The position's debt (principal).
    * @param position.fixedLeg The position's fixed leg.
+   * @param position.floatingLeg The position's floating leg.
+   * @param position.bond The position's bond.
    * @param loan.maturity The loan's maturity timestamp (in seconds).
    * @param loan.overduePeriod The loan's overdue period (in seconds).
    * @param loan.fixedRate The loan's annual fixed rate (scaled by WAD).
@@ -647,7 +730,7 @@ export namespace PositionUtils {
    * import { MathLib, ORACLE_PRICE_SCALE, PositionUtils } from "@iris-credit/core-sdk";
    *
    * const healthy = PositionUtils.isHealthy(
-   *   { collateral: 2n * MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n },
+   *   { collateral: 2n * MathLib.WAD, debt: MathLib.WAD, fixedLeg: 0n, floatingLeg: 0n, bond: 0n },
    *   { maturity: 1_000_000n, overduePeriod: 86_400n, fixedRate: 10_0000000000000000n, overdueRate: 0n },
    *   { price: ORACLE_PRICE_SCALE, lltv: 80_0000000000000000n },
    *   1_086_400n,
@@ -656,7 +739,13 @@ export namespace PositionUtils {
    * ```
    */
   export const isHealthy = (
-    position: { collateral: BigIntish; debt: BigIntish; fixedLeg: BigIntish },
+    position: {
+      collateral: BigIntish;
+      debt: BigIntish;
+      fixedLeg: BigIntish;
+      floatingLeg: BigIntish;
+      bond: BigIntish;
+    },
     loan: {
       maturity: BigIntish;
       overduePeriod: BigIntish;
@@ -676,12 +765,14 @@ export namespace PositionUtils {
 
   /**
    * Mirror of Iris's `withdrawBond` limit: returns the maximum bond withdrawable while
-   * keeping the bond healthy (see `isHealthyBond`).
+   * keeping the remaining bond at or above the bond requirement and healthy (see
+   * `isHealthyBond`) — the two checks `withdrawBond` runs, as the requirement is a
+   * withdrawal floor the health check does not enforce.
    *
    * The remaining bond must cover the bond requirement and keep the drawdown within the
-   * loan's bond LLTV. Returns zero on a zero bond LLTV; otherwise, once the loan is closed
-   * (zero bond requirement), the full bond is withdrawable. Returns zero when no
-   * withdrawal can pass the check, including when the bond is already unhealthy.
+   * loan's bond LLTV. Returns zero on a zero bond LLTV; otherwise, once the bond requirement
+   * is zero, the full bond is withdrawable. Returns zero when no withdrawal can pass the
+   * checks, including when the bond is already below the requirement or unhealthy.
    *
    * Iris accepts `withdrawBond(pod, amount, receiver)` iff `amount` does not exceed this
    * limit.
@@ -689,7 +780,7 @@ export namespace PositionUtils {
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
@@ -736,14 +827,14 @@ export namespace PositionUtils {
    *
    * The seized bond is the position's bond times the bond liquidation incentive factor
    * (see `LoanUtils.getBondLif`). Returns zero while the bond is healthy (where Iris
-   * reverts with `HealthyBond` instead), including once the loan is closed.
+   * reverts with `HealthyBond` instead), including once the bond requirement is zero.
    *
    * Expects accrued legs: apply the `getAccruedLegs` increments beforehand, as the health
    * check runs after accrual onchain. Bond liquidation does not settle: no residual is
    * credited.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
@@ -774,12 +865,12 @@ export namespace PositionUtils {
   };
 
   /**
-   * Returns whether the position's bond is healthy: the bond covers the bond requirement, and
-   * the drawdown of the floating leg over the fixed leg, relative to the bond, does not exceed
-   * the loan's bond LLTV. A closed loan (zero bond requirement) is always healthy.
+   * Returns whether the position's bond is healthy: the drawdown of the floating leg over the
+   * fixed leg, relative to the bond, does not exceed the loan's bond LLTV. A zero bond
+   * requirement is always healthy.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @param loan.bondLltv The loan's bond LLTV (scaled by WAD).
@@ -811,7 +902,6 @@ export namespace PositionUtils {
     bondLltv = BigInt(bondLltv);
 
     if (position.bondRequirement === 0n) return true;
-    if (position.bond < position.bondRequirement) return false;
     if (position.floatingLeg <= position.fixedLeg) return true;
 
     return getDrawdown(position) <= bondLltv;
@@ -821,11 +911,10 @@ export namespace PositionUtils {
    * Returns the position's drawdown: the floating leg over the fixed leg, relative to the
    * bond (scaled by WAD), rounded up — the ratio the bond health check compares to the
    * loan's bond LLTV (see `isHealthyBond`). Zero when the net is not negative or once the
-   * loan is closed (zero bond requirement); `MAX_UINT_256` on a zero bond with a negative
-   * net.
+   * bond requirement is zero; `MAX_UINT_256` on a zero bond with a negative net.
    *
    * @param position.bond The position's bond.
-   * @param position.bondRequirement The position's bond requirement (zero once the loan is closed).
+   * @param position.bondRequirement The position's bond requirement (zero once the solver's bond obligation is over).
    * @param position.fixedLeg The position's fixed leg.
    * @param position.floatingLeg The position's floating leg.
    * @returns The drawdown, scaled by WAD.

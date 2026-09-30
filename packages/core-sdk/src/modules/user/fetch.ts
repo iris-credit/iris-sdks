@@ -9,8 +9,8 @@ import { UnsupportedChainIdError } from "../../errors.js";
 import { User } from "./User.js";
 
 /**
- * Fetches a user's Iris bundler authorization state. Returns `false` without a contract read when
- * the chain has no deployed general adapter configured.
+ * Fetches a user's Iris bundler authorization state and sequential authorization nonce. Both
+ * reads are issued concurrently, so they coalesce into the caller's multicall batch.
  *
  * @param address - User address to fetch.
  * @param client - Viem client used for the contract read.
@@ -30,34 +30,36 @@ export async function fetchUser(
 
   const chainAddresses = getChainAddresses(chainId);
 
-  const isBundlerAuthorized = await readContract(client, {
-    ...parameters,
-    address: chainAddresses.iris,
-    abi: irisAbi,
-    functionName: "isAuthorized",
-    args: [address, chainAddresses.bundler3.generalAdapter1],
-  });
+  const call = { ...parameters, address: chainAddresses.iris, abi: irisAbi } as const;
 
-  return new User({ address, isBundlerAuthorized });
+  const [isBundlerAuthorized, nonce] = await Promise.all([
+    readContract(client, {
+      ...call,
+      functionName: "isAuthorized",
+      args: [address, chainAddresses.bundler3.generalAdapter1],
+    }),
+    readContract(client, { ...call, functionName: "nonce", args: [address] }),
+  ]);
+
+  return new User({ address, isBundlerAuthorized, nonce });
 }
 
 /**
- * Fetches whether an account has used a nonce on Iris.
+ * Fetches whether a solver has used a quote nonce on Iris.
  *
- * `take` and `setAuthorizationWithSig` consume nonces, so a quote whose `(solver, nonce)` pair
- * is already used is unsubmittable.
+ * A quote whose `(solver, nonce)` pair is already used is unsubmittable.
  *
- * @param authorizer - Account owning the nonce (e.g. `quote.solver`).
+ * @param solver - Solver owning the nonce (e.g. `quote.solver`).
  * @param nonce - Nonce to look up.
  * @param client - Viem client used for the read.
  * @param parameters.blockNumber - Optional block number for historical reads.
  * @param parameters.blockTag - Optional block tag for historical reads.
  * @param parameters.stateOverride - Optional viem state override.
  * @param parameters.chainId - Optional chain id; defaults to `getChainId(client)`.
- * @returns Whether `authorizer` has used `nonce`.
+ * @returns Whether `solver` has used `nonce`.
  */
-export async function fetchIsNonceUsed(
-  authorizer: Address,
+export async function fetchIsQuoteNonceUsed(
+  solver: Address,
   nonce: BigIntish,
   client: Client,
   parameters: FetchParameters = {},
@@ -71,8 +73,8 @@ export async function fetchIsNonceUsed(
     ...parameters,
     address: iris,
     abi: irisAbi,
-    functionName: "isNonceUsed",
-    args: [authorizer, BigInt(nonce)],
+    functionName: "isQuoteNonceUsed",
+    args: [solver, BigInt(nonce)],
   });
 }
 
