@@ -1,14 +1,10 @@
 import type { Address, Client, WalletClient } from "viem";
 import type { ChainId } from "@iris-credit/core-sdk";
-import type {
-  AuthorizationAction,
-  AuthorizationRequirementSignature,
-  Requirement,
-} from "../../../types/index.js";
+import type { AuthorizationRequirementSignature, Requirement } from "../../../types/index.js";
 
-import { maxUint256 } from "viem";
+import { isAddressEqual, maxUint256 } from "viem";
 import { signTypedData, verifyTypedData } from "viem/actions";
-import { getAuthorizationTypedData } from "@iris-credit/core-sdk";
+import { getAuthorizationTypedData, getChainAddresses } from "@iris-credit/core-sdk";
 import { deepFreeze, Time } from "@iris-credit/iris-ts";
 import { validateChainId, validateUserAddress } from "../../../helpers/index.js";
 import {
@@ -16,11 +12,14 @@ import {
   InputExceedsMaxError,
   InvalidSignatureError,
   NonPositiveInputError,
+  UnsupportedAuthorizationOperatorError,
 } from "../../../types/index.js";
 
 /** Parameters for {@link encodeIrisSignatureAuthorization}. */
 interface EncodeIrisSignatureAuthorizationParams {
-  /** Account to authorize on Iris (GeneralAdapter1). */
+  /** Account granting the authorization and signing it (the Iris `authorizer`). */
+  owner: Address;
+  /** Account to authorize on Iris; must be the chain's registered GeneralAdapter1. */
   authorized: Address;
   /** Target chain id; must match `viemClient.chain.id`. */
   chainId: ChainId;
@@ -43,22 +42,34 @@ interface EncodeIrisSignatureAuthorizationParams {
  * bundler action helpers consume. Iris authorization nonces are sequential per authorizer:
  * `setAuthorizationWithSig` accepts exactly `Iris.nonce(authorizer)` and increments it, so the
  * caller reads that value when building the requirement and at most one outstanding signature
- * per account is valid. Deadline defaults to two hours from `Time.timestamp()`.
+ * per account is valid. The requirement's `action.typedData` holds the EIP-712 payload so it can
+ * be inspected or displayed before signing. Deadline defaults to two hours from
+ * `Time.timestamp()`.
+ * The operator pin applies to grants and revocations alike: revoking a previously registered
+ * operator is outside this helper's scope.
  *
  * @param viemClient - Connected viem `Client` whose `chain.id` matches `params.chainId`.
  * @param params - Authorization encoding parameters.
- * @param params.authorized - Account to authorize (GeneralAdapter1).
+ * @param params.owner - Account granting the authorization and signing it (the Iris `authorizer`).
+ * @param params.authorized - Account to authorize; must be the chain's registered
+ *   GeneralAdapter1, so a misconfigured `authorized` cannot grant an arbitrary address operator
+ *   rights over the signer's Iris positions.
  * @param params.chainId - Target chain id.
  * @param params.nonce - Authorization nonce; the signer's current `Iris.nonce(authorizer)`.
  * @param params.isAuthorized - Grant (`true`, default) or revoke (`false`).
  * @param params.deadline - Optional signature deadline in seconds.
- * @returns A `Requirement` whose `sign(client, userAddress)` produces the deep-frozen signature.
+ * @returns A `Requirement` whose `action.typedData` is the EIP-712 payload and whose
+ *   `sign(client, userAddress)` produces the deep-frozen signature.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
+ * @throws {UnsupportedChainIdError} when `params.chainId` is absent from the address registry.
+ * @throws {UnsupportedAuthorizationOperatorError} when `params.authorized` is not the chain's
+ *   registered GeneralAdapter1.
  * @throws {NonPositiveInputError} when a provided `deadline` is not positive.
  * @throws {InputExceedsMaxError} when a provided `deadline` exceeds `uint256`.
  * @throws {ExpiredDeadlineError} when a provided `deadline` is positive but not in the future.
  * @throws {MissingClientPropertyError} from `sign()` when the client has no `account.address`.
- * @throws {AddressMismatchError} from `sign()` when the client account differs from `userAddress`.
+ * @throws {AddressMismatchError} from `sign()` when `userAddress` differs from `owner`, or when the
+ *   client account differs from `userAddress`.
  * @throws {InvalidSignatureError} from `sign()` when EIP-712 verification fails.
  * @example
  * ```ts
@@ -68,20 +79,34 @@ interface EncodeIrisSignatureAuthorizationParams {
  *
  * const client = createWalletClient({ chain: mainnet, transport: http() });
  * const requirement = encodeIrisSignatureAuthorization(client, {
+ *   owner,
  *   authorized: generalAdapter1,
  *   chainId: 1,
  *   nonce: user.nonce, // from `fetchUser`
  * });
- * // requirement satisfies Requirement
+ * // Inspect the EIP-712 payload (requirement.action.typedData) or sign via requirement.sign(...).
  * ```
  */
 export const encodeIrisSignatureAuthorization = (
   viemClient: Client,
   params: EncodeIrisSignatureAuthorizationParams,
 ): Requirement<AuthorizationRequirementSignature> => {
-  const { authorized, chainId, nonce, isAuthorized = true } = params;
+  const { owner, authorized, chainId, nonce, isAuthorized = true } = params;
 
   validateChainId(viemClient.chain?.id, chainId);
+
+  // Pin the authorized operator to the chain's registered GeneralAdapter1 so a direct caller cannot
+  // be walked through signing an authorization that grants an arbitrary address operator rights
+  // over the signer's Iris positions. `getIrisAuthorizationAction` enforces the same invariant, but
+  // only once the signature is encoded into a bundle — after the wallet prompt. Applies to grant and
+  // revoke payloads alike: the registry is pinned per release, so revoking a rotated-out operator is
+  // outside this helper's scope.
+  const {
+    bundler3: { generalAdapter1 },
+  } = getChainAddresses(chainId);
+  if (!isAddressEqual(authorized, generalAdapter1)) {
+    throw new UnsupportedAuthorizationOperatorError(authorized, chainId);
+  }
 
   // Reject an invalid or already-expired caller-supplied deadline before signing, so a direct
   // caller is never walked through a wallet EIP-712 prompt for an authorization Iris would reject
@@ -105,24 +130,30 @@ export const encodeIrisSignatureAuthorization = (
 
   const deadline = params.deadline ?? Time.timestamp() + Time.s.from.h(2n);
 
-  const action: AuthorizationAction = {
+  const typedData = deepFreeze(
+    getAuthorizationTypedData(chainId, {
+      authorizer: owner,
+      authorized,
+      isAuthorized,
+      nonce,
+      deadline,
+    }),
+  );
+
+  const action: Requirement<AuthorizationRequirementSignature>["action"] = {
     type: "authorization",
     args: { authorized, isAuthorized, deadline },
+    typedData,
   };
 
   return {
     action,
     async sign(client: WalletClient, userAddress: Address) {
+      // The authorizer is fixed at build time and embedded in the signed payload, so a different
+      // signer cannot produce a valid authorization for it.
+      validateUserAddress(userAddress, owner);
       const account = client.account;
       validateUserAddress(account?.address, userAddress);
-
-      const typedData = getAuthorizationTypedData(chainId, {
-        authorizer: userAddress,
-        authorized,
-        isAuthorized,
-        nonce,
-        deadline,
-      });
 
       const signature = await signTypedData(client, {
         ...typedData,
@@ -141,7 +172,7 @@ export const encodeIrisSignatureAuthorization = (
 
       return deepFreeze({
         args: {
-          owner: userAddress,
+          owner,
           authorized,
           isAuthorized,
           nonce,

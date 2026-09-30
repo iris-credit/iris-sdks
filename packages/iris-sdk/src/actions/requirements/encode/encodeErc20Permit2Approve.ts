@@ -1,10 +1,6 @@
 import type { Address, Client, WalletClient } from "viem";
 import type { ChainId } from "@iris-credit/core-sdk";
-import type {
-  Permit2Action,
-  PermitRequirementSignature,
-  Requirement,
-} from "../../../types/index.js";
+import type { PermitRequirementSignature, Requirement } from "../../../types/index.js";
 
 import { signTypedData, verifyTypedData } from "viem/actions";
 import { getChainAddresses, getPermit2PermitTypedData, MathLib } from "@iris-credit/core-sdk";
@@ -27,7 +23,8 @@ interface EncodeErc20Permit2ApproveParams {
  *
  * The returned `Requirement.sign()` verifies the signature against the connected account through
  * the client, so ERC-1271 smart-contract wallets are supported — Permit2 itself accepts EIP-1271
- * signatures on-chain. Deadline defaults to two hours from `Time.timestamp()`.
+ * signatures on-chain. The requirement's `action.typedData` holds the EIP-712 payload so it can be
+ * inspected or displayed before signing. Deadline defaults to two hours from `Time.timestamp()`.
  *
  * @param viemClient - Connected viem `Client` whose `chain.id` matches `params.chainId` (used for
  *   ERC-1271-capable signature verification).
@@ -37,7 +34,8 @@ interface EncodeErc20Permit2ApproveParams {
  * @param params.chainId - Target chain id.
  * @param params.nonce - The user's current Permit2 nonce for `(token, GeneralAdapter1)`.
  * @param params.expiration - Permit2-managed allowance expiration timestamp.
- * @returns A `Requirement` whose `sign(client, userAddress)` produces the deep-frozen signature.
+ * @returns A `Requirement` whose `action.typedData` is the EIP-712 payload and whose
+ *   `sign(client, userAddress)` produces the deep-frozen signature.
  * @throws {ChainIdMismatchError} when `viemClient.chain?.id !== params.chainId`.
  * @throws {MissingClientPropertyError} from `sign()` when the client has no `account.address`.
  * @throws {AddressMismatchError} from `sign()` when the client account differs from `userAddress`.
@@ -74,7 +72,23 @@ export const encodeErc20Permit2Approve = (
   const now = Time.timestamp();
   const deadline = now + Time.s.from.h(2n);
 
-  const action: Permit2Action = {
+  // Permit2 AllowanceTransfer signs over `PermitSingle` (token, spender, expiration, nonce), which
+  // does not include the owner, so the payload is fully determined at build time.
+  const typedData = deepFreeze(
+    getPermit2PermitTypedData(
+      {
+        erc20: token,
+        allowance: amount,
+        nonce: Number(nonce),
+        deadline,
+        spender: generalAdapter1,
+        expiration: Number(expiration),
+      },
+      chainId,
+    ),
+  );
+
+  const action: Requirement<PermitRequirementSignature>["action"] = {
     type: "permit2",
     args: {
       spender: generalAdapter1,
@@ -82,6 +96,7 @@ export const encodeErc20Permit2Approve = (
       deadline,
       expiration,
     },
+    typedData,
   };
 
   return {
@@ -90,17 +105,6 @@ export const encodeErc20Permit2Approve = (
       const account = client.account;
       validateUserAddress(account?.address, userAddress);
 
-      const typedData = getPermit2PermitTypedData(
-        {
-          erc20: token,
-          allowance: amount,
-          nonce: Number(nonce),
-          deadline,
-          spender: generalAdapter1,
-          expiration: Number(expiration),
-        },
-        chainId,
-      );
       const signature = await signTypedData(client, {
         ...typedData,
         account,

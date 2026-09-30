@@ -1,4 +1,4 @@
-import type { Address, Hex, WalletClient } from "viem";
+import type { Address, Hex, TypedDataDefinition, WalletClient } from "viem";
 import type { Quote } from "@iris-credit/core-sdk";
 import type { Permit2PermitSingle } from "../bundler/type.js";
 
@@ -169,29 +169,55 @@ export interface AuthorizationSignatureArgs {
   signature: Hex;
 }
 
+/** EIP-712 payload carried by a signable requirement action. */
+export type RequirementTypedData = TypedDataDefinition<Record<string, unknown>, string>;
+
 /**
  * A signable approval / authorization requirement. `sign()` returns the matching
- * {@link RequirementSignature}; `action` describes the requirement without signing.
+ * {@link RequirementSignature}; `action` describes the requirement without signing and carries the
+ * EIP-712 `typedData` payload so an integrator can inspect or display it before signing.
  *
  * Generic over the signature it produces so permit encoders narrow to
  * {@link PermitRequirementSignature} and the authorization encoder to
  * {@link AuthorizationRequirementSignature}; the non-generic {@link isRequirementSignature}
  * overload keeps the broad union for mixed arrays.
+ *
+ * @example
+ * ```ts
+ * const requirement = requirements.find(isRequirementSignature);
+ * if (requirement == null) return; // nothing to sign (only on-chain approvals, or none)
+ *
+ * const typedData = requirement.action.typedData; // exact EIP-712 payload `sign()` will sign
+ * const signed = await requirement.sign(walletClient, owner);
+ * ```
  */
 export interface Requirement<TSignature extends RequirementSignature = RequirementSignature> {
-  sign: (client: WalletClient, userAddress: Address) => Promise<TSignature>;
-  action: TSignature["action"];
+  /** Signs `action.typedData` with `client`, verifies the signature recovers `userAddress`, and returns the signed requirement. */
+  readonly sign: (client: WalletClient, userAddress: Address) => Promise<TSignature>;
+  /** Requirement metadata; `typedData` is always populated on SDK-built requirements. */
+  readonly action: TSignature["action"] & { readonly typedData: RequirementTypedData };
 }
 
 export interface PermitAction extends BaseAction<
   "permit",
   { spender: Address; amount: bigint; deadline: bigint }
-> {}
+> {
+  /**
+   * EIP-712 payload `sign()` signs for this permit, exposed so it can be inspected or displayed
+   * before signing. Required on {@link Requirement.action}; optional here only so hand-built action
+   * metadata (e.g. test fixtures) need not supply it. The payload is deep-frozen and `sign()` signs
+   * this exact payload.
+   */
+  readonly typedData?: RequirementTypedData;
+}
 
 export interface Permit2Action extends BaseAction<
   "permit2",
   { spender: Address; amount: bigint; deadline: bigint; expiration: bigint }
-> {}
+> {
+  /** EIP-712 payload to sign for this Permit2 AllowanceTransfer. See {@link PermitAction.typedData}. */
+  readonly typedData?: RequirementTypedData;
+}
 
 /**
  * Signable Iris authorization requirement. Emitted by the entity layer when a bundled path
@@ -200,7 +226,10 @@ export interface Permit2Action extends BaseAction<
 export interface AuthorizationAction extends BaseAction<
   "authorization",
   { authorized: Address; isAuthorized: boolean; deadline: bigint }
-> {}
+> {
+  /** EIP-712 payload to sign for this Iris authorization. See {@link PermitAction.typedData}. */
+  readonly typedData?: RequirementTypedData;
+}
 
 /** A signed ERC-2612 permit or Permit2 approval requirement. */
 export interface PermitRequirementSignature {

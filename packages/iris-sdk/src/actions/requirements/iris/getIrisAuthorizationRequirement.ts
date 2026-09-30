@@ -94,6 +94,7 @@ export const getIrisAuthorizationRequirement = async (params: {
     }
 
     return encodeIrisSignatureAuthorization(viemClient, {
+      owner: userAddress,
       authorized: generalAdapter1,
       chainId,
       nonce,

@@ -4,6 +4,7 @@ import type {
   IrisAuthorizationAction,
   PermitRequirementSignature,
   Requirement,
+  RequirementTypedData,
   Transaction,
 } from "./actions.js";
 
@@ -54,8 +55,15 @@ const irisAuthorizationTransaction: Transaction<IrisAuthorizationAction> = {
   },
 };
 
+// Stub payload: these tests exercise the type guards, not the EIP-712 content.
+const typedData: RequirementTypedData = {
+  types: { Mock: [] },
+  primaryType: "Mock",
+  message: {},
+};
+
 const permitRequirement = {
-  action: permit.action,
+  action: { ...permit.action, typedData },
   sign: async () => permit,
 };
 
@@ -148,7 +156,7 @@ describe("isRequirementSignature", () => {
   // one cannot infer.
   test("behavior: narrows a mixed transaction / requirement union", () => {
     const authorizationRequirement = {
-      action: authorization.action,
+      action: { ...authorization.action, typedData },
       sign: async () => authorization,
     };
     const requirements: (

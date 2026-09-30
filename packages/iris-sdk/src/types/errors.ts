@@ -125,6 +125,15 @@ export class UnsupportedErc20ApprovalSpenderError extends Error {
   }
 }
 
+/** Thrown when an authorization encoder targets an operator other than the chain's GeneralAdapter1. */
+export class UnsupportedAuthorizationOperatorError extends Error {
+  constructor(authorized: Address, chainId: number) {
+    super(
+      `Authorization operator "${authorized}" is not supported on chain "${chainId}". Pass the chain's registered GeneralAdapter1 address.`,
+    );
+  }
+}
+
 /** Thrown when a deposit's amount differs from the amount the supplied permit / permit2 signature was issued for. */
 export class DepositAmountMismatchError extends Error {
   constructor(depositAmount: bigint, signatureAmount: bigint) {

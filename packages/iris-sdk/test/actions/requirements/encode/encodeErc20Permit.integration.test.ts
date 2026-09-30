@@ -1,5 +1,6 @@
-import { isHex } from "viem";
+import { isHex, verifyTypedData } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { signTypedData } from "viem/actions";
 import { afterEach, describe, expect, vi } from "vitest";
 import { getChainAddresses } from "@iris-credit/core-sdk";
 import { Time } from "@iris-credit/iris-ts";
@@ -33,6 +34,7 @@ describe("encodeErc20Permit", () => {
       await expect(
         encodeErc20Permit(client, {
           token: USDC,
+          owner: client.account.address,
           spender: generalAdapter1,
           amount: mockAmount,
           chainId: UNSUPPORTED_CHAIN_ID,
@@ -47,6 +49,7 @@ describe("encodeErc20Permit", () => {
       await expect(
         encodeErc20Permit(client, {
           token: USDC,
+          owner: client.account.address,
           spender: ROGUE,
           amount: mockAmount,
           chainId: CHAIN_ID,
@@ -60,6 +63,7 @@ describe("encodeErc20Permit", () => {
 
       const permit = await encodeErc20Permit(client, {
         token: USDC,
+        owner: client.account.address,
         spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
@@ -78,15 +82,14 @@ describe("encodeErc20Permit", () => {
     }) => {
       const permit = await encodeErc20Permit(client, {
         token: USDC,
+        owner: client.account.address,
         spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
         nonce: mockNonce,
       });
 
-      await expect(permit.sign(client, USER_A)).rejects.toThrow(
-        new AddressMismatchError(client.account.address, USER_A),
-      );
+      await expect(permit.sign(client, USER_A)).rejects.toBeInstanceOf(AddressMismatchError);
     });
 
     test("should throw InvalidSignatureError when signature verification fails", async ({
@@ -105,6 +108,7 @@ describe("encodeErc20Permit", () => {
       };
       const permit = await encodeErc20Permit(client, {
         token: USDC,
+        owner: client.account.address,
         spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
@@ -121,6 +125,7 @@ describe("encodeErc20Permit", () => {
 
       const permit = await encodeErc20Permit(client, {
         token: USDC,
+        owner: client.account.address,
         spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
@@ -147,6 +152,7 @@ describe("encodeErc20Permit", () => {
 
       const permit = await encodeErc20Permit(client, {
         token: USDC,
+        owner: client.account.address,
         spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
@@ -170,6 +176,7 @@ describe("encodeErc20Permit", () => {
     test("should have correct action structure", async ({ client }) => {
       const permit = await encodeErc20Permit(client, {
         token: USDC,
+        owner: client.account.address,
         spender: generalAdapter1,
         amount: mockAmount,
         chainId: CHAIN_ID,
@@ -182,6 +189,65 @@ describe("encodeErc20Permit", () => {
       expect(permit.action.args).toHaveProperty("deadline");
       expect(permit.action.args.spender).toEqual(generalAdapter1);
       expect(permit.action.args.amount).toEqual(mockAmount);
+    });
+  });
+
+  describe("action.typedData", () => {
+    test("default", async ({ client }) => {
+      const userAddress = client.account.address;
+      const permit = await encodeErc20Permit(client, {
+        token: USDC,
+        owner: userAddress,
+        spender: generalAdapter1,
+        amount: mockAmount,
+        chainId: CHAIN_ID,
+        nonce: mockNonce,
+      });
+
+      const typedData = permit.action.typedData;
+
+      expect(typedData.primaryType).toBe("Permit");
+      expect(typedData.domain).toMatchObject({
+        chainId: CHAIN_ID,
+        verifyingContract: USDC,
+      });
+      expect(typedData.message).toMatchObject({
+        owner: userAddress,
+        spender: generalAdapter1,
+        value: mockAmount,
+        nonce: mockNonce,
+      });
+      expect(Object.isFrozen(typedData)).toBe(true);
+      expect(Object.isFrozen(typedData.message)).toBe(true);
+      expect(Object.isFrozen(typedData.domain)).toBe(true);
+    });
+
+    test("behavior: signing action.typedData externally matches sign()", async ({ client }) => {
+      const userAddress = client.account.address;
+      const permit = await encodeErc20Permit(client, {
+        token: USDC,
+        owner: userAddress,
+        spender: generalAdapter1,
+        amount: mockAmount,
+        chainId: CHAIN_ID,
+        nonce: mockNonce,
+      });
+
+      const typedData = permit.action.typedData;
+      const externalSignature = await signTypedData(client, {
+        ...typedData,
+        account: client.account,
+      });
+      const signed = await permit.sign(client, userAddress);
+
+      expect(externalSignature).toEqual(signed.args.signature);
+      expect(
+        await verifyTypedData({
+          ...typedData,
+          address: userAddress,
+          signature: externalSignature,
+        }),
+      ).toBe(true);
     });
   });
 });
