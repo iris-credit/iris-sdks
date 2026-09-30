@@ -1,5 +1,20 @@
 # @iris-credit/iris-sdk
 
+## 0.5.0
+
+### Minor Changes
+
+- [#149](https://github.com/iris-credit/iris-sdks/pull/149) [`22c401a`](https://github.com/iris-credit/iris-sdks/commit/22c401afd34e2113736e353c4142f78b70fce229) Thanks [@u-zzam](https://github.com/u-zzam)! - Mirror the audited Iris close gates: `repay` and `close` throw `LoanResolvedError` only once the loan is resolved (bond requirement zero and debt, fixed leg and surplus all zero), so a loan whose bond requirement a venue liquidation zeroed with surplus outstanding can still be repaid, as `Iris.repay` allows. `escape` throws `LoanNotResolvedError` until the loan is resolved, matching `Iris.escape`, where it previously checked the bond requirement alone. Error messages and docs reserve resolved for that full condition; a zero bond requirement alone means the solver's bond obligation is over.
+
+- [#143](https://github.com/iris-credit/iris-sdks/pull/143) [`039d7ae`](https://github.com/iris-credit/iris-sdks/commit/039d7ae7114bc28e267ed46fcd65c2ecc32b4dcb) Thanks [@u-zzam](https://github.com/u-zzam)! - Mirror the audited Iris's sequential authorization nonce. `encodeIrisSignatureAuthorization` now requires `nonce` — the signer's current `Iris.nonce(authorizer)` — instead of defaulting to a random value, and `getIrisAuthorizationRequirement` fetches the user's authorization state and nonce through core-sdk's `fetchUser`, so the signable requirement carries the onchain nonce. Only one outstanding signed authorization per account is valid at a time.
+
+- [#145](https://github.com/iris-credit/iris-sdks/pull/145) [`3d0f5e3`](https://github.com/iris-credit/iris-sdks/commit/3d0f5e3a96e45d653f85141d07bbfaec9f951179) Thanks [@u-zzam](https://github.com/u-zzam)! - `iris.withdrawCollateral` throws `IrisCoreErrors.LiquidatableLoan` when `positionData` is liquidatable (past `maturity + overduePeriod`), before sizing the ceiling, matching the contract's new gate instead of surfacing it as a zero ceiling through `UnhealthyCollateralError`.
+
+### Patch Changes
+
+- Updated dependencies [[`43c8c79`](https://github.com/iris-credit/iris-sdks/commit/43c8c793ab0350934175d4c7c36794e797560087), [`1441024`](https://github.com/iris-credit/iris-sdks/commit/144102458f9ccde7de164b44d503a2e6c2ec118d), [`feb94e3`](https://github.com/iris-credit/iris-sdks/commit/feb94e387cf1f1495d9511e29e0430ad5400940c), [`1dacc22`](https://github.com/iris-credit/iris-sdks/commit/1dacc2204b0349ba0cd448af0867a0165eee1f3c), [`cb8e641`](https://github.com/iris-credit/iris-sdks/commit/cb8e6411167a611bc836c7b6bdda88de00d66848), [`3d0f5e3`](https://github.com/iris-credit/iris-sdks/commit/3d0f5e3a96e45d653f85141d07bbfaec9f951179)]:
+  - @iris-credit/core-sdk@0.6.0
+
 ## 0.4.1
 
 ### Patch Changes
