@@ -1131,7 +1131,7 @@ describe("Iris.escape", () => {
 
   // `Iris.escape` requires the loan resolved: bond requirement zero and debt, fixed leg and surplus
   // zero.
-  test("error: LoanNotResolvedError while the loan is open", () => {
+  test("error: LoanNotResolvedError while the loan is bonded", () => {
     expect(() =>
       makeIris().escape({
         userAddress: BORROWER,

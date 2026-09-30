@@ -124,7 +124,7 @@ describe("PositionUtils", () => {
       ).toBe(0n);
     });
 
-    test("should accrue the surplus only while the loan is open", () => {
+    test("should accrue the surplus only while the loan is bonded", () => {
       const position = {
         collateral: 2n * MathLib.WAD,
         debt: 0n,
