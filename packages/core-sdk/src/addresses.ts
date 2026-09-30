@@ -76,16 +76,16 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
   },
   [ChainId.VNet]: {
     // Iris protocol contracts.
-    iris: "0x47e50Fa62E3562EF90Aa578Fb7328C4c85E2D522",
-    blm: "0x8657794828D7660A335ABDF2b21DAea4fE369e97",
+    iris: "0x45440Ce3eC49946758288a5B4302FeB105572B30",
+    blm: "0xe7BEc20F1fe83fc706ab48DD9A59E7d7713df299",
     podImpl: "0xf8B1Fd75826549DFe0db83deF6d0663C574fa349",
-    whitelistBlm: "0x03fB4ACaa91261b4af463cEB21027A203aCEeb42",
+    whitelistBlm: "0x9f1799312fdBf67609A4D318b5fBC30428d11e33",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
       bundler3: "0x3F9bE653328b2610a4028aFC537F191D4d9c9c24",
-      generalAdapter1: "0x2bF8D2f82fb24839fd35CF952A7Eafe96A1Ac394",
+      generalAdapter1: "0x0bF401524510A8aCc1A7622B68aFd37012808fbb",
     },
     // Protocol integrations.
     aaveV3Adapter: "0x7f1bFABb584935e97143631A3b19816853F40bD7",
