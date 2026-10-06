@@ -1,5 +1,11 @@
 # @iris-credit/core-sdk
 
+## 0.6.1
+
+### Patch Changes
+
+- [#158](https://github.com/iris-credit/iris-sdks/pull/158) [`ec10c21`](https://github.com/iris-credit/iris-sdks/commit/ec10c2139d9db01b6055b4e8d6a9b75f5fcb9931) Thanks [@u-zzam](https://github.com/u-zzam)! - Require `@iris-credit/iris-ts` ^0.1.1 as the peer dependency. The registry helpers import `isHexEqual`, which 0.1.0 does not export, so a consumer that pinned 0.1.0 crashed at module link time without any install-time warning.
+
 ## 0.6.0
 
 ### Minor Changes
