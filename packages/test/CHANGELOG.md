@@ -1,5 +1,11 @@
 # @iris-credit/test
 
+## 0.3.1
+
+### Patch Changes
+
+- [#160](https://github.com/iris-credit/iris-sdks/pull/160) [`e0cae05`](https://github.com/iris-credit/iris-sdks/commit/e0cae05525238dccf06ce8d22bfb7fbe50b1125a) Thanks [@madiha-right](https://github.com/madiha-right)! - Poll local Anvil test clients every 50 ms so transaction receipt waits return as soon as automined transactions are available instead of waiting for viem's default polling interval. When called with only `hash` and `timeout`, the test client's `waitForTransactionReceipt` now polls `eth_getTransactionReceipt` directly. viem only re-fetches a missing receipt when a new block appears, so a transaction mined while that fetch was in flight could hang the wait forever under automine. Calls that pass any other option still use viem's implementation.
+
 ## 0.3.0
 
 ### Minor Changes
