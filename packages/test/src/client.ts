@@ -120,7 +120,7 @@ export type DepositParameters<
  *
  * `waitForTransactionReceipt` called with only `hash` and `timeout` polls
  * `eth_getTransactionReceipt` until the receipt exists or `timeout` (default
- * 180 s) expires; any other option falls back to viem's implementation. Under
+ * 180 s, `0` for none) expires; any other option falls back to viem's implementation. Under
  * automine, `sendTransaction`, `sendRawTransaction` and `writeContract` wait
  * for the receipt before returning the hash.
  *
@@ -190,6 +190,9 @@ export const createAnvilTestClient = <chain extends Chain>(
           return await Promise.race([
             poll(),
             new Promise<never>((_, reject) => {
+              // Like viem, a zero timeout waits indefinitely.
+              if (!timeout) return;
+
               timer = setTimeout(() => {
                 timedOut = true;
                 reject(new WaitForTransactionReceiptTimeoutError({ hash }));

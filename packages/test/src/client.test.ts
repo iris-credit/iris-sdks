@@ -111,6 +111,24 @@ describe("createAnvilTestClient", () => {
     }
   });
 
+  test("waits indefinitely when timeout is 0", async () => {
+    let mined = false;
+    setTimeout(() => {
+      mined = true;
+    }, 150);
+
+    const node = await startNode(async (method) => ({
+      result: method === "eth_getTransactionReceipt" && mined ? receipt : null,
+    }));
+    try {
+      await expect(
+        node.client.waitForTransactionReceipt({ hash, timeout: 0 }),
+      ).resolves.toMatchObject({ transactionHash: hash });
+    } finally {
+      node.close();
+    }
+  });
+
   test("times out while a receipt fetch hangs", async () => {
     const node = await startNode(async () => {
       await sleep(2_000);
