@@ -6,7 +6,7 @@ This monorepo contains the TypeScript SDK packages used to interact with the Iri
 
 ### Prerequisites
 
-- Node.js `>=22`, declared by the root `engines` field; [`.nvmrc`](./.nvmrc) pins `v22.18.0`, which is what CI uses
+- Node.js `>=22`, declared by the root `engines` field; [`.nvmrc`](./.nvmrc) pins `v22.23.4`, which is what CI uses
 - pnpm `11`, declared by the root `packageManager` field
 - Git
 - [Foundry](https://book.getfoundry.sh/getting-started/installation) — `anvil` must be on `PATH`, since the fork-backed suites spawn it as a child process
