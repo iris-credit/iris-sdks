@@ -14,6 +14,20 @@ describe("CHAIN_METADATA", () => {
       expect(ChainUtils.CHAIN_METADATA[chainId]).toBeDefined();
     }
   });
+
+  test("should root every explorer at an https URL without a trailing slash", () => {
+    for (const chainId of ChainUtils.supportedChainIds) {
+      const explorerUrl = ChainUtils.getExplorerUrl(chainId);
+      if (explorerUrl == null) continue;
+
+      expect(explorerUrl).toMatch(/^https:\/\//);
+      expect(explorerUrl).not.toMatch(/\/$/);
+    }
+  });
+
+  test("should leave VNet without an explorer", () => {
+    expect(ChainUtils.CHAIN_METADATA[ChainId.VNet]).not.toHaveProperty("explorerUrl");
+  });
 });
 
 describe("toHexChainId", () => {
@@ -41,6 +55,14 @@ describe("explorer URL helpers", () => {
     expect(ChainUtils.getExplorerTransactionUrl(ChainId.EthMainnet, "0xabc")).toBe(
       "https://etherscan.io/tx/0xabc",
     );
+  });
+
+  test("should return undefined for a chain without an explorer", () => {
+    expect(ChainUtils.getExplorerUrl(ChainId.VNet)).toBeUndefined();
+    expect(
+      ChainUtils.getExplorerAddressUrl(ChainId.VNet, "0x0000000000000000000000000000000000000001"),
+    ).toBeUndefined();
+    expect(ChainUtils.getExplorerTransactionUrl(ChainId.VNet, "0xabc")).toBeUndefined();
   });
 });
 

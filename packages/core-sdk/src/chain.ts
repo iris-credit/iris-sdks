@@ -11,7 +11,8 @@ export type ChainId = (typeof ChainId)[keyof typeof ChainId];
 export interface ChainMetadata {
   readonly name: string;
   readonly id: ChainId;
-  readonly explorerUrl: string;
+  /** Block explorer root, without a trailing slash; omitted when the chain has no explorer. */
+  readonly explorerUrl?: string;
   readonly nativeCurrency: {
     readonly name: string;
     readonly symbol: string;
@@ -25,16 +26,70 @@ export namespace ChainUtils {
     return `0x${chainId.toString(16)}`;
   };
 
-  export const getExplorerUrl = (chainId: ChainId) => {
-    return ChainUtils.CHAIN_METADATA[chainId].explorerUrl;
+  /**
+   * Returns the chain's block explorer root, or `undefined` when the chain has none (e.g. the
+   * VNet devnet), so callers can render plain text instead of a dead link.
+   *
+   * @param chainId - Chain whose explorer to resolve.
+   * @returns The explorer root URL, or `undefined` if the chain has no explorer.
+   * @example
+   * ```ts
+   * import { ChainId, ChainUtils } from "@iris-credit/core-sdk";
+   *
+   * ChainUtils.getExplorerUrl(ChainId.EthMainnet); // "https://etherscan.io"
+   * ChainUtils.getExplorerUrl(ChainId.VNet); // undefined
+   * ```
+   */
+  export const getExplorerUrl = (chainId: ChainId): string | undefined => {
+    // Widened lookup: a chain without an explorer omits the key from its entry.
+    const metadata: ChainMetadata = ChainUtils.CHAIN_METADATA[chainId];
+
+    return metadata.explorerUrl;
   };
 
-  export const getExplorerAddressUrl = (chainId: ChainId, address: string) => {
-    return `${getExplorerUrl(chainId)}/address/${address}`;
+  /**
+   * Returns the explorer page for `address` on `chainId`, or `undefined` when the chain has no
+   * explorer.
+   *
+   * @param chainId - Chain whose explorer to link.
+   * @param address - Account or contract address to link.
+   * @returns The address page URL, or `undefined` if the chain has no explorer.
+   * @example
+   * ```ts
+   * import { ChainId, ChainUtils } from "@iris-credit/core-sdk";
+   *
+   * ChainUtils.getExplorerAddressUrl(
+   *   ChainId.EthMainnet,
+   *   "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+   * ); // "https://etherscan.io/address/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+   * ```
+   */
+  export const getExplorerAddressUrl = (chainId: ChainId, address: string): string | undefined => {
+    const explorerUrl = getExplorerUrl(chainId);
+    if (explorerUrl == null) return;
+
+    return `${explorerUrl}/address/${address}`;
   };
 
-  export const getExplorerTransactionUrl = (chainId: ChainId, tx: string) => {
-    return `${getExplorerUrl(chainId)}/tx/${tx}`;
+  /**
+   * Returns the explorer page for transaction `tx` on `chainId`, or `undefined` when the chain
+   * has no explorer.
+   *
+   * @param chainId - Chain whose explorer to link.
+   * @param tx - Transaction hash to link.
+   * @returns The transaction page URL, or `undefined` if the chain has no explorer.
+   * @example
+   * ```ts
+   * import { ChainId, ChainUtils } from "@iris-credit/core-sdk";
+   *
+   * ChainUtils.getExplorerTransactionUrl(ChainId.EthMainnet, "0xabc"); // "https://etherscan.io/tx/0xabc"
+   * ```
+   */
+  export const getExplorerTransactionUrl = (chainId: ChainId, tx: string): string | undefined => {
+    const explorerUrl = getExplorerUrl(chainId);
+    if (explorerUrl == null) return;
+
+    return `${explorerUrl}/tx/${tx}`;
   };
 
   export const supportedChainIds = values(ChainId);
@@ -57,9 +112,7 @@ export namespace ChainUtils {
       name: "VNet",
       id: ChainId.VNet,
       nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-      // Explorer root, so `/tx/<hash>` resolves; the vnet explorer has no address route.
-      explorerUrl:
-        "https://dashboard.tenderly.co/explorer/vnet/1d48b36f-5ce7-4b0d-b742-1a279b04aebf",
+      // No `explorerUrl`: the devnet is a self-hosted anvil mainnet fork with no block explorer.
       identifier: "vnet",
     },
     // [ChainId.BaseMainnet]: {
