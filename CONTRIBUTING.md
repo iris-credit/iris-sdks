@@ -130,6 +130,8 @@ Update `ChainUtils.CHAIN_METADATA` in `packages/core-sdk/src/chain.ts`:
 },
 ```
 
+`explorerUrl` is the explorer root without a trailing slash. Omit it when the chain has no block explorer (as on `VNet`); the `ChainUtils.getExplorer*` helpers then return `undefined` rather than a dead link.
+
 ### 3. Add Contract Addresses
 
 Update `CHAIN_ADDRESSES` in `packages/core-sdk/src/addresses.ts`:
@@ -203,7 +205,7 @@ Key this entry off `wNative`, never off a `tokens` symbol. The two alias on main
 - Contract addresses are valid and checksummed (`pnpm lint:address`).
 - `deploymentBlock` is accurate — it is the lower bound for config event scans.
 - Native currency metadata is correct.
-- The explorer URL is functional, including the paths built by `ChainUtils.getExplorerAddressUrl`.
+- The explorer URL, if the chain has one, is functional, including the paths built by `ChainUtils.getExplorerAddressUrl` and `ChainUtils.getExplorerTransactionUrl`.
 - Every required base field is present, and each omitted integration is genuinely absent on the chain.
 - The wrapped native token mapping is correct.
 - `pnpm build` and `pnpm test` pass; the registry and address suites (`src/addresses.test.ts`, `src/chain.test.ts`, `src/registries.test.ts`) cover the new chain.
