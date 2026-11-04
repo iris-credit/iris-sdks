@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 
-import { getAddress } from "viem";
+import { getAddress, zeroAddress } from "viem";
 import { ChainId } from "./chain.js";
 import {
   UnsupportedAaveV3TokenError,
@@ -64,6 +64,9 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
     aaveV3Oracle: "0x54586bE62E3c3580375aE3723C145253060Ca0C2",
+    // Not deployed yet. The zero address never matches: `fetchVenue` rejects an unregistered
+    // venue id, whose adapter reads as zero, before it dispatches.
+    sparkLendAdapter: zeroAddress,
     sparkLendPool: "0xC13e21B648A5Ee794902342038FF3aDAB66BE987",
     sparkLendOracle: "0x8105f69D9C41644c6A0803fDA7D03Aa70996cFD9",
     morphoBlueAdapter: "0x5fE09E7eA6F46296B42146D77f1Eb88F088Bdf8E",
@@ -97,6 +100,8 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     aaveV3Adapter: "0x7f1bFABb584935e97143631A3b19816853F40bD7",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
     aaveV3Oracle: "0x54586bE62E3c3580375aE3723C145253060Ca0C2",
+    // The Aave V3 adapter deployed again with SparkLend's pool.
+    sparkLendAdapter: "0x225a3cf65f2D7Ade3787ee656b3aa0af716E4a0C",
     sparkLendPool: "0xC13e21B648A5Ee794902342038FF3aDAB66BE987",
     sparkLendOracle: "0x8105f69D9C41644c6A0803fDA7D03Aa70996cFD9",
     morphoBlueAdapter: "0x26927E53bbfeE9C3401FFBE838B739dDe08d5Cba",

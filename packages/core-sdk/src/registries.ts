@@ -30,8 +30,12 @@ export type VenueName = (typeof VenueName)[keyof typeof VenueName];
 
 /** A market data payload enabled on Iris. */
 export interface MarketData {
-  /** Name of the venue the payload targets; a key of the chain registry's `venues`. */
-  readonly venue: VenueName;
+  /**
+   * Names of the registered venues whose adapters take the payload; keys of the chain
+   * registry's `venues`. Enablement is per payload, not per venue, so one payload can serve
+   * several: the Aave V3 and SparkLend adapters both ignore it, and `0x` serves both.
+   */
+  readonly venues: readonly VenueName[];
   /** Raw `quote.data` bytes; the contract enables `keccak256(data)`. */
   readonly data: Hex;
 }
@@ -71,22 +75,22 @@ export const CHAIN_REGISTRIES = defineChainRegistries({
     marketDatas: {
       // The Aave v3 adapter ignores the payload; the enabled hash is `keccak256("0x")`.
       "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470": {
-        venue: "aaveV3",
+        venues: ["aaveV3"],
         data: "0x",
       },
       // WBTC/USDC (adaptive curve IRM, 86% lltv).
       "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49": {
-        venue: "morphoBlue",
+        venues: ["morphoBlue"],
         data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000dddd770badd886df3864029e4b377b5f6a2b6b83000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
       },
       // cbBTC/USDC (adaptive curve IRM, 86% lltv).
       "0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64": {
-        venue: "morphoBlue",
+        venues: ["morphoBlue"],
         data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbb7c0000ab88b473b1f5afd9ef808440eed33bf000000000000000000000000a6d6950c9f177f1de7f7757fb33539e3ec60182a000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
       },
       // wstETH/USDT (adaptive curve IRM, 86% lltv).
       "0xe7e9694b754c4d4f7e21faf7223f6fa71abaeb10296a4c43a54a7977149687d2": {
-        venue: "morphoBlue",
+        venues: ["morphoBlue"],
         data: "0x000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec70000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca000000000000000000000000095db30fab9a3754e42423000df27732cb2396992000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
       },
     },
@@ -98,25 +102,27 @@ export const CHAIN_REGISTRIES = defineChainRegistries({
     bondLltvs: [800_000_000_000_000_000n],
     // `whitelistBlm` is deployed but not enabled yet.
     blms: { blm: CHAIN_ADDRESSES[ChainId.VNet].blm },
-    venues: { aaveV3: 0n, morphoBlue: 1n },
+    venues: { aaveV3: 0n, morphoBlue: 1n, sparkLend: 2n },
     marketDatas: {
+      // The Aave v3 and SparkLend adapters ignore the payload; the enabled hash is
+      // `keccak256("0x")`.
       "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470": {
-        venue: "aaveV3",
+        venues: ["aaveV3", "sparkLend"],
         data: "0x",
       },
       // WBTC/USDC (adaptive curve IRM, 86% lltv).
       "0x3a85e619751152991742810df6ec69ce473daef99e28a64ab2340d7b7ccfee49": {
-        venue: "morphoBlue",
+        venues: ["morphoBlue"],
         data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb480000000000000000000000002260fac5e5542a773aa44fbcfedf7c193bc2c599000000000000000000000000dddd770badd886df3864029e4b377b5f6a2b6b83000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
       },
       // cbBTC/USDC (adaptive curve IRM, 86% lltv).
       "0x64d65c9a2d91c36d56fbc42d69e979335320169b3df63bf92789e2c8883fcc64": {
-        venue: "morphoBlue",
+        venues: ["morphoBlue"],
         data: "0x000000000000000000000000a0b86991c6218b36c1d19d4a2e9eb0ce3606eb48000000000000000000000000cbb7c0000ab88b473b1f5afd9ef808440eed33bf000000000000000000000000a6d6950c9f177f1de7f7757fb33539e3ec60182a000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
       },
       // wstETH/USDT (adaptive curve IRM, 86% lltv).
       "0xe7e9694b754c4d4f7e21faf7223f6fa71abaeb10296a4c43a54a7977149687d2": {
-        venue: "morphoBlue",
+        venues: ["morphoBlue"],
         data: "0x000000000000000000000000dac17f958d2ee523a2206206994597c13d831ec70000000000000000000000007f39c581f595b53c5cb19bd0b3f8da6c935e2ca000000000000000000000000095db30fab9a3754e42423000df27732cb2396992000000000000000000000000870ac11d48b15db9a138cf899d20f13f79ba00bc0000000000000000000000000000000000000000000000000bef55718ad60000",
       },
     },

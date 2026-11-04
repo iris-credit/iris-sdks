@@ -21,8 +21,20 @@ describe("CHAIN_REGISTRIES", () => {
   test.each(registries)(
     "should reference registered venues from market datas on chain %s",
     (_, registry) => {
-      for (const { venue } of Object.values(registry.marketDatas))
-        expect(registry.venues).toHaveProperty(venue);
+      for (const { venues } of Object.values(registry.marketDatas)) {
+        expect(venues.length).toBeGreaterThan(0);
+        for (const venue of venues) expect(registry.venues).toHaveProperty(venue);
+      }
+    },
+  );
+
+  test.each(registries)(
+    "should serve every registered data-less venue from the empty payload on chain %s",
+    (chainId, registry) => {
+      // The Aave V3 and SparkLend adapters ignore `quote.data`, so `0x` reaches each of them.
+      const { venues } = getMarketData(Number(chainId) as ChainId, keccak256("0x"));
+      for (const venue of ["aaveV3", "sparkLend"] as const)
+        if (venue in registry.venues) expect(venues).toContain(venue);
     },
   );
 
@@ -65,7 +77,7 @@ describe("getChainRegistry", () => {
 describe("getMarketData", () => {
   test("should index an enabled payload by a runtime hash", () => {
     expect(getMarketData(ChainId.EthMainnet, keccak256("0x"))).toEqual({
-      venue: "aaveV3",
+      venues: ["aaveV3"],
       data: "0x",
     });
   });
@@ -73,7 +85,14 @@ describe("getMarketData", () => {
   test("should ignore the case of the looked-up hash", () => {
     expect(
       getMarketData(ChainId.EthMainnet, `0x${keccak256("0x").slice(2).toUpperCase()}`),
-    ).toEqual({ venue: "aaveV3", data: "0x" });
+    ).toEqual({ venues: ["aaveV3"], data: "0x" });
+  });
+
+  test("should list every venue an enabled payload serves", () => {
+    expect(getMarketData(ChainId.VNet, keccak256("0x"))).toEqual({
+      venues: ["aaveV3", "sparkLend"],
+      data: "0x",
+    });
   });
 
   test("should throw for a hash that is not enabled", () => {

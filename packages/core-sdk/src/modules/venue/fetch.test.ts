@@ -18,14 +18,22 @@ import {
   morphoBlueAbi,
   morphoMarketParamsAbi,
 } from "../../abis/morphoBlue.js";
+import { sparkLendPoolAbi } from "../../abis/sparkLend.js";
 import { venueAdapterAbi } from "../../abis/venueAdapter.js";
-import { getAToken, getChainAddresses, getVToken } from "../../addresses.js";
+import {
+  getAToken,
+  getChainAddresses,
+  getSparkLendSpToken,
+  getSparkLendVToken,
+  getVToken,
+} from "../../addresses.js";
 import { ChainId } from "../../chain.js";
 import { ORACLE_PRICE_SCALE } from "../../constants.js";
 import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
 import { AaveV3Venue } from "./aaveV3/AaveV3Venue.js";
 import { fetchVenue } from "./fetch.js";
 import { MorphoBlueVenue } from "./morphoBlue/MorphoBlueVenue.js";
+import { SparkLendVenue } from "./sparkLend/SparkLendVenue.js";
 
 const {
   iris,
@@ -78,10 +86,10 @@ const mockBlock = (handle: ReturnType<typeof createMockClient>) => {
 const mockAdapter = (
   handle: ReturnType<typeof createMockClient>,
   adapter: Address,
-  { register = true }: { register?: boolean } = {},
+  { register = true, irisAddress = iris }: { register?: boolean; irisAddress?: Address } = {},
 ) => {
   mockRead(handle, {
-    address: iris,
+    address: irisAddress,
     abi: irisAbi,
     functionName: "venueAdapter",
     result: adapter,
@@ -221,6 +229,52 @@ const mockAaveClient = () => {
   return handle;
 };
 
+/** SparkLend is registered on VNet only, so its client answers at VNet's addresses. */
+const vnet = getChainAddresses(ChainId.VNet);
+
+const mockSparkLendClient = () => {
+  const handle = createMockClient(mainnet);
+  mockAdapter(handle, vnet.sparkLendAdapter, { irisAddress: vnet.iris });
+  mockRead(handle, {
+    address: vnet.sparkLendPool,
+    abi: sparkLendPoolAbi,
+    functionName: "getReserveData",
+    result: reserve,
+  });
+  mockRead(handle, {
+    address: vnet.sparkLendOracle,
+    abi: aaveV3OracleAbi,
+    functionName: "getAssetPrice",
+    result: 200_000_000_000n,
+  });
+  mockRead(handle, {
+    address: getSparkLendSpToken(tokens.cbBTC, ChainId.VNet),
+    abi: aaveV3ATokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 5_000n,
+  });
+  mockRead(handle, {
+    address: getSparkLendVToken(tokens.cbBTC, ChainId.VNet),
+    abi: aaveV3VariableDebtTokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 5_100n,
+  });
+  mockRead(handle, {
+    address: getSparkLendVToken(tokens.USDC, ChainId.VNet),
+    abi: aaveV3VariableDebtTokenAbi,
+    functionName: "scaledTotalSupply",
+    result: 5_200n,
+  });
+  mockRead(handle, {
+    address: tokens.USDC,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    result: 4_000n,
+  });
+
+  return handle;
+};
+
 describe("fetchVenue", () => {
   test("default", async () => {
     const { handle } = mockMorphoClient();
@@ -325,6 +379,26 @@ describe("fetchVenue", () => {
         functionName: "getAssetPrice",
       }).map(({ args: callArgs }) => callArgs),
     ).toStrictEqual([[tokens.cbBTC], [tokens.USDC]]);
+  });
+
+  test("behavior: dispatches to the SparkLend adapter on a chain that records one", async () => {
+    const handle = mockSparkLendClient();
+    const venue = (await fetchVenue({ ...args, venueId: 2n, data: "0x" }, handle.client, {
+      chainId: ChainId.VNet,
+    })) as SparkLendVenue;
+
+    expect(venue).toBeInstanceOf(SparkLendVenue);
+    expect(venue.id).toBe(2n);
+    expect(venue.collateralData).toStrictEqual({
+      price: 200_000_000_000n,
+      spTokenScaledTotalSupply: 5_000n,
+      vTokenScaledTotalSupply: 5_100n,
+    });
+    expect(venue.debtData).toStrictEqual({
+      price: 200_000_000_000n,
+      vTokenScaledTotalSupply: 5_200n,
+      underlyingBalance: 4_000n,
+    });
   });
 
   test("behavior: leaves caller-owned parameters untouched", async () => {
