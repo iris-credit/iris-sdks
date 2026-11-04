@@ -28,6 +28,16 @@ export class UnsupportedAaveV3TokenError extends Error {
   }
 }
 
+/** Error thrown when a token has no SparkLend reserve tokens registered in the SDK. */
+export class UnsupportedSparkLendTokenError extends Error {
+  constructor(
+    public readonly token: Address,
+    public readonly chainId: ChainId,
+  ) {
+    super(`unsupported SparkLend token ${token} on chain ${chainId}`);
+  }
+}
+
 /**
  * Error thrown when interest projection is requested for a venue market whose nonzero
  * interest-rate model the SDK cannot model offline.

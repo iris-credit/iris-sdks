@@ -4,11 +4,13 @@ import { describe, expect, test } from "vitest";
 import {
   CHAIN_ADDRESSES,
   getChainAddresses,
+  getSparkLendSpToken,
+  getSparkLendVToken,
   getUnwrappedToken,
   NATIVE_ADDRESS,
 } from "./addresses.js";
 import { ChainId } from "./chain.js";
-import { UnsupportedChainIdError } from "./errors.js";
+import { UnsupportedChainIdError, UnsupportedSparkLendTokenError } from "./errors.js";
 
 const { USDC, WETH, wstETH, stETH } = CHAIN_ADDRESSES[ChainId.EthMainnet].tokens;
 
@@ -52,5 +54,39 @@ describe("getUnwrappedToken", () => {
 
   test("should throw for an unsupported chain id", () => {
     expect(() => getUnwrappedToken(WETH, 999 as ChainId)).toThrow(UnsupportedChainIdError);
+  });
+});
+
+describe("getSparkLendSpToken / getSparkLendVToken", () => {
+  test("should return the pinned SparkLend reserve tokens", () => {
+    expect(getSparkLendSpToken(USDC, ChainId.EthMainnet)).toBe(
+      "0x377C3bd93f2a2984E1E7bE6A5C22c525eD4A4815",
+    );
+    expect(getSparkLendVToken(USDC, ChainId.EthMainnet)).toBe(
+      "0x7B70D04099CB9cfb1Db7B6820baDAfB4C5C70A67",
+    );
+    // VNet forks mainnet, so it shares the pinned tokens.
+    expect(getSparkLendSpToken(USDC, ChainId.VNet)).toBe(
+      getSparkLendSpToken(USDC, ChainId.EthMainnet),
+    );
+  });
+
+  test("should normalize the token casing", () => {
+    expect(getSparkLendSpToken(USDC.toLowerCase() as Address, ChainId.EthMainnet)).toBe(
+      getSparkLendSpToken(USDC, ChainId.EthMainnet),
+    );
+  });
+
+  test("should throw for a token without a pinned SparkLend reserve", () => {
+    expect(() => getSparkLendSpToken(stETH, ChainId.EthMainnet)).toThrow(
+      UnsupportedSparkLendTokenError,
+    );
+    expect(() => getSparkLendVToken(stETH, ChainId.EthMainnet)).toThrow(
+      UnsupportedSparkLendTokenError,
+    );
+  });
+
+  test("should throw for an unsupported chain id", () => {
+    expect(() => getSparkLendSpToken(USDC, 999 as ChainId)).toThrow(UnsupportedChainIdError);
   });
 });

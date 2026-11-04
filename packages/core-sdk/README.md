@@ -28,7 +28,7 @@ Package that defines Iris-related entity classes, together with the viem-based f
 - [**`Loan`**](./src/modules/loan/Loan.ts): represents the immutable terms of a loan on Iris
 - [**`Position`**](./src/modules/position/Position.ts): represents the stored state of a loan's position, as of its `lastUpdate`
 - [**`AccrualPosition`**](./src/modules/position/Position.ts): represents a position paired with its loan and its venue, for derived and accrued values
-- [**`Venue`**](./src/modules/venue/Venue.ts): represents a venue's view of a pod — indices, price, LLTV and the pod's assets — implemented by [`MorphoBlueVenue`](./src/modules/venue/morphoBlue/MorphoBlueVenue.ts) and [`AaveV3Venue`](./src/modules/venue/aaveV3/AaveV3Venue.ts)
+- [**`Venue`**](./src/modules/venue/Venue.ts): represents a venue's view of a pod — indices, price, LLTV and the pod's assets — implemented by [`MorphoBlueVenue`](./src/modules/venue/morphoBlue/MorphoBlueVenue.ts), [`AaveV3Venue`](./src/modules/venue/aaveV3/AaveV3Venue.ts) and [`SparkLendVenue`](./src/modules/venue/sparkLend/SparkLendVenue.ts)
 - [**`Blm`**](./src/modules/blm/Blm.ts): represents a BLM's bond parameters for one debt token
 - [**`Config`**](./src/modules/config/Config.ts): represents the mutable protocol-level Iris configuration
 - [**`Token`**](./src/modules/token/Token.ts): represents an ERC20 token
