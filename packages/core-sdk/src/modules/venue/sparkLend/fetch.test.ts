@@ -11,7 +11,11 @@ import {
 import { sparkLendPoolAbi } from "../../../abis/sparkLend.js";
 import { getChainAddresses, getSparkLendSpToken, getSparkLendVToken } from "../../../addresses.js";
 import { ChainId } from "../../../chain.js";
-import { UnsupportedChainIdError, UnsupportedSparkLendTokenError } from "../../../errors.js";
+import {
+  SparkLendStableBorrowingError,
+  UnsupportedChainIdError,
+  UnsupportedSparkLendTokenError,
+} from "../../../errors.js";
 import { MathLib } from "../../../math/index.js";
 import { fetchSparkLendVenue } from "./fetch.js";
 import { SparkLendVenue } from "./SparkLendVenue.js";
@@ -181,6 +185,21 @@ describe("fetchSparkLendVenue", () => {
     await expect(
       fetchSparkLendVenue(view, { ...args, collateralToken: tokens.stETH }, handle.client),
     ).rejects.toBeInstanceOf(UnsupportedSparkLendTokenError);
+  });
+
+  test("error: SparkLendStableBorrowingError on a reserve with stable-rate borrowing", async () => {
+    const handle = mockSparkLendClient();
+    // Bit 59 of the configuration word: stable-rate borrowing enabled.
+    mockRead(handle, {
+      address: sparkLendPool,
+      abi: sparkLendPoolAbi,
+      functionName: "getReserveData",
+      result: { ...reserve, configuration: { data: reserve.configuration.data | (1n << 59n) } },
+    });
+
+    await expect(fetchSparkLendVenue(view, args, handle.client)).rejects.toBeInstanceOf(
+      SparkLendStableBorrowingError,
+    );
   });
 
   test("error: UnsupportedChainIdError", async () => {

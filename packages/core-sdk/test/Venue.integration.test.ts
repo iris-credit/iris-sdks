@@ -993,6 +993,86 @@ describe("venue parity (mainnet fork)", () => {
   );
 
   test(
+    "sparkLend: projected pod balances match the spToken and vToken balances",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      // Odd amounts, so SparkLend's half-up scaling rounds on both legs.
+      const collateral = 1_234_567_890_123_456_789n; // WETH
+      const borrowed = 1_000_000_001n; // USDC
+      const timestamp = await client.timestamp();
+      const account = client.account.address;
+
+      await client.deal({ erc20: tokens.WETH, account, amount: collateral });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [sparkLendPool, collateral] });
+      const statuses = await mineTogether(client, timestamp + 2n, sparkLendPool, [
+        sparkLendSupply(tokens.WETH, collateral, account),
+        sparkLendBorrow(tokens.USDC, borrowed, account),
+      ]);
+      expect(statuses).toStrictEqual(["success", "success"]);
+
+      const balances = () =>
+        Promise.all([
+          readContract(client, {
+            address: getSparkLendSpToken(tokens.WETH, ChainId.EthMainnet),
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [account],
+          }),
+          readContract(client, {
+            address: getSparkLendVToken(tokens.USDC, ChainId.EthMainnet),
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [account],
+          }),
+        ]);
+      const [[venueCollateral, venueDebt], collateralIndex, debtIndex] = await Promise.all([
+        balances(),
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveNormalizedIncome",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveNormalizedVariableDebt",
+          args: [tokens.USDC],
+        }),
+      ]);
+
+      // The account stands in for a pod: Iris records its venue balances with the indices they
+      // were read at.
+      const venue = await fetchSparkLendVenue(
+        {
+          ...sparkLendView(timestamp + 2n),
+          pod: account,
+          collateral: venueCollateral,
+          debt: venueDebt,
+          collateralIndex,
+          debtIndex,
+        },
+        { collateralToken: tokens.WETH, debtToken: tokens.USDC },
+        client,
+      );
+
+      // With nothing else touching either reserve, the projections land on the tokens' own balances
+      // to the wei at every step over a year. A single step can round the same way half up and
+      // floored or ceiled; several make the half-up rounding show.
+      for (const days of [1n, 7n, 30n, 90n, 365n]) {
+        const later = timestamp + 2n + days * 86_400n;
+        await client.setNextBlockTimestamp({ timestamp: later });
+        await client.mine({ blocks: 1 });
+
+        const [laterCollateral, laterDebt] = await balances();
+        expect(venue.getAccrualCollateral(later)).toBe(laterCollateral);
+        expect(venue.getAccrualDebt(later)).toBe(laterDebt);
+      }
+    },
+  );
+
+  test(
     "sparkLend: getMaxBorrowAmount matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {

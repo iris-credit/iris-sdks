@@ -258,9 +258,9 @@ const MAINNET_SPARK_LEND_TOKENS = {
   },
 } as const satisfies Readonly<Record<Address, SparkLendTokens>>;
 
-/* Per-chain mapping of SparkLend reserve underlyings to their spToken and variable debt token,
- * pinned so `fetchSparkLendVenue` fires every read in a single round instead of resolving the token
- * addresses from `getReserveData` first. */
+/* Per-chain mapping of SparkLend reserve underlyings to their spToken and variable debt
+ * token, pinned so `fetchSparkLendVenue` fires every read in a single round instead of
+ * resolving the token addresses from `getReserveData` first. */
 const sparkLendTokensMapping = {
   [ChainId.EthMainnet]: MAINNET_SPARK_LEND_TOKENS,
   [ChainId.VNet]: MAINNET_SPARK_LEND_TOKENS,
@@ -277,12 +277,12 @@ const getSparkLendTokens = (token: Address, chainId: ChainId): SparkLendTokens =
   return tokens;
 };
 
-/** Returns the SparkLend reserve's spToken (e.g. spUSDC) for `token` on `chainId` (any casing), throwing when
- * the token has no registered reserve. */
+/** Returns the SparkLend reserve's spToken (e.g. spUSDC) for `token` on `chainId` (any
+ * casing), throwing when the token has no registered reserve. */
 export const getSparkLendSpToken = (token: Address, chainId: ChainId) =>
   getSparkLendTokens(token, chainId).spToken;
 
-/** Returns the SparkLend reserve's variable debt token for `token` on `chainId` (any casing),
- * throwing when the token has no registered reserve. */
+/** Returns the SparkLend reserve's variable debt token for `token` on `chainId` (any
+ * casing), throwing when the token has no registered reserve. */
 export const getSparkLendVToken = (token: Address, chainId: ChainId) =>
   getSparkLendTokens(token, chainId).variableDebtToken;

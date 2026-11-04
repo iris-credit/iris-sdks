@@ -63,7 +63,7 @@ export interface ISparkLendDebtData {
  * with the older core's math: half-up token rounding, the binomial borrow-index compounding, and
  * cap checks without virtual accounting (see {@link SparkLendMath}). SparkLend has never enabled
  * stable-rate borrowing, so the stable debt terms of its cap and treasury math are zero and
- * dropped.
+ * dropped; `fetchSparkLendVenue` refuses a reserve that enables it.
  */
 export class SparkLendVenue extends Venue {
   /**
@@ -263,6 +263,10 @@ export class SparkLendVenue extends Venue {
    * else: the debt valued in base currency (floored), divided by the LTV with SparkLend's half-up
    * `percentDiv`, must not exceed the collateral's floored base value. A tighter `maxLtv` bounds
    * that floored debt value by the collateral value at `maxLtv` instead.
+   *
+   * Iris pods never enter eMode, and the bound leaves out isolation mode, siloed borrowing and
+   * debt ceilings: it is exact only while the collateral reserve has no debt ceiling and the debt
+   * reserve is not siloed.
    */
   public getMaxBorrowAmount(
     collateral: bigint,

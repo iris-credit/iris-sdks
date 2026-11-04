@@ -12,8 +12,11 @@ import {
 import { sparkLendPoolAbi } from "../../../abis/sparkLend.js";
 import { getChainAddresses, getSparkLendSpToken, getSparkLendVToken } from "../../../addresses.js";
 import { ChainUtils } from "../../../chain.js";
-import { UnsupportedChainIdError } from "../../../errors.js";
+import { SparkLendStableBorrowingError, UnsupportedChainIdError } from "../../../errors.js";
 import { SparkLendVenue } from "./SparkLendVenue.js";
+
+/** Bit 59 of a SparkLend (Aave V3.0) reserve configuration: stable-rate borrowing enabled. */
+const STABLE_BORROWING_ENABLED_BIT = 59n;
 
 /** Parameters identifying the loan's SparkLend reserves. */
 export interface FetchSparkLendVenueArgs {
@@ -39,6 +42,8 @@ export interface FetchSparkLendVenueArgs {
  * @returns The hydrated `SparkLendVenue` entity.
  * @throws {UnsupportedChainIdError} when the chain has no registered addresses.
  * @throws {UnsupportedSparkLendTokenError} when a loan token has no registered SparkLend reserve.
+ * @throws {SparkLendStableBorrowingError} when either reserve has stable-rate borrowing enabled,
+ *   which the venue's cap and treasury math leaves out.
  * @example
  * ```ts
  * import { fetchSparkLendVenue } from "@iris-credit/core-sdk";
@@ -123,6 +128,18 @@ export async function fetchSparkLendVenue(
       args: [getSparkLendSpToken(debtToken, chainId)],
     }),
   ]);
+
+  // SparkLend's core still carries stable-rate debt in its borrow cap and treasury accrual. No
+  // reserve has ever enabled it, so the venue leaves those terms out; refuse a reserve that turns
+  // it on rather than return bounds the pool no longer enforces.
+  for (const [token, { configuration }] of [
+    [collateralToken, collateralReserve],
+    [debtToken, debtReserve],
+  ] as const) {
+    if (((configuration.data >> STABLE_BORROWING_ENABLED_BIT) & 1n) !== 0n) {
+      throw new SparkLendStableBorrowingError(token);
+    }
+  }
 
   return new SparkLendVenue(
     venue,
