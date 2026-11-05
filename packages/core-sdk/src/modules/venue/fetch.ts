@@ -11,6 +11,7 @@ import { ChainUtils } from "../../chain.js";
 import { UnsupportedChainIdError, UnsupportedVenueAdapterError } from "../../errors.js";
 import { fetchAaveV3Venue } from "./aaveV3/fetch.js";
 import { fetchMorphoBlueVenue } from "./morphoBlue/fetch.js";
+import { fetchSparkLendVenue } from "./sparkLend/fetch.js";
 
 /** Parameters identifying the venue backing a loan (all read from its position and loan). */
 export interface FetchVenueArgs {
@@ -36,6 +37,8 @@ export interface FetchVenueArgs {
  * - **Morpho Blue adapter** — delegates to {@link fetchMorphoBlueVenue} for the market
  *   state, the pod's position primitives and the IRM's `rateAtTarget`.
  * - **Aave V3 adapter** — delegates to {@link fetchAaveV3Venue} for the collateral and
+ *   debt reserves.
+ * - **SparkLend adapter** — delegates to {@link fetchSparkLendVenue} for the collateral and
  *   debt reserves.
  *
  * @param args - See {@link FetchVenueArgs}.
@@ -74,7 +77,7 @@ export async function fetchVenue(
   const chainId = parameters.chainId ?? (await getChainId(client));
   if (!ChainUtils.isSupportedChainId(chainId)) throw new UnsupportedChainIdError(chainId);
 
-  const { iris, morphoBlueAdapter, aaveV3Adapter } = getChainAddresses(chainId);
+  const { iris, morphoBlueAdapter, aaveV3Adapter, sparkLendAdapter } = getChainAddresses(chainId);
 
   const adapter = await readContract(client, {
     ...parameters,
@@ -143,6 +146,11 @@ export async function fetchVenue(
       return fetchMorphoBlueVenue(venue, { pod, data }, client, { ...parameters, chainId });
     case aaveV3Adapter:
       return fetchAaveV3Venue(venue, { collateralToken, debtToken }, client, {
+        ...parameters,
+        chainId,
+      });
+    case sparkLendAdapter:
+      return fetchSparkLendVenue(venue, { collateralToken, debtToken }, client, {
         ...parameters,
         chainId,
       });
