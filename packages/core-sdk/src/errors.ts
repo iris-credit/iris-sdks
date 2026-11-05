@@ -28,6 +28,28 @@ export class UnsupportedAaveV3TokenError extends Error {
   }
 }
 
+/** Error thrown when a token has no SparkLend reserve tokens registered in the SDK. */
+export class UnsupportedSparkLendTokenError extends Error {
+  constructor(
+    public readonly token: Address,
+    public readonly chainId: ChainId,
+  ) {
+    super(`unsupported SparkLend token ${token} on chain ${chainId}`);
+  }
+}
+
+/**
+ * Error thrown when a SparkLend reserve has stable-rate borrowing enabled. The SDK's cap and
+ * treasury math leaves stable debt out, since SparkLend has never enabled it.
+ */
+export class SparkLendStableBorrowingError extends Error {
+  constructor(public readonly token: Address) {
+    super(
+      `SparkLend reserve ${token} has stable-rate borrowing enabled, which the SDK does not model`,
+    );
+  }
+}
+
 /**
  * Error thrown when interest projection is requested for a venue market whose nonzero
  * interest-rate model the SDK cannot model offline.

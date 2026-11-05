@@ -1,4 +1,8 @@
-import { encodeAbiParameters, erc20Abi, keccak256 } from "viem";
+import type { Address, Hex } from "viem";
+import type { mainnet } from "viem/chains";
+import type { AnvilTestClient } from "@iris-credit/test";
+
+import { encodeAbiParameters, encodeFunctionData, erc20Abi, keccak256 } from "viem";
 import { getBlock, readContract, simulateContract } from "viem/actions";
 import { describe, expect } from "vitest";
 import {
@@ -13,6 +17,7 @@ import {
   morphoIrmAbi,
   morphoMarketParamsAbi,
 } from "../src/abis/morphoBlue.js";
+import { sparkLendPoolAbi } from "../src/abis/sparkLend.js";
 import {
   AaveV3Venue,
   AdaptiveCurveIrmLib,
@@ -20,10 +25,14 @@ import {
   MathLib,
   MorphoBlueVenue,
   ReserveConfigurationLib,
+  SparkLendVenue,
   UnsupportedVenueAdapterError,
+  fetchSparkLendVenue,
   fetchVenue,
   getAToken,
   getChainAddresses,
+  getSparkLendSpToken,
+  getSparkLendVToken,
   getVToken,
 } from "../src/index.js";
 import { test } from "./setup.js";
@@ -35,6 +44,8 @@ const {
   aaveV3Adapter,
   aaveV3Pool,
   aaveV3Oracle,
+  sparkLendPool,
+  sparkLendOracle,
   tokens,
 } = getChainAddresses(ChainId.EthMainnet);
 
@@ -65,6 +76,84 @@ const venueAdapterIndicesAbi = [
     stateMutability: "view",
   },
 ] as const;
+
+/** No pod holds a SparkLend position on the fork: the live view reads as zeroed. */
+const sparkLendView = (lastUpdate: bigint) => ({
+  id: 2n,
+  data: "0x" as const,
+  pod: "0x000000000000000000000000000000000000dEaD" as const,
+  collateral: 0n,
+  debt: 0n,
+  collateralIndex: MathLib.RAY,
+  debtIndex: MathLib.RAY,
+  lltv: 0n,
+  lastUpdate,
+});
+
+const sparkLendSupply = (asset: Address, amount: bigint, onBehalfOf: Address) =>
+  encodeFunctionData({
+    abi: sparkLendPoolAbi,
+    functionName: "supply",
+    args: [asset, amount, onBehalfOf, 0],
+  });
+
+const sparkLendBorrow = (asset: Address, amount: bigint, onBehalfOf: Address) =>
+  encodeFunctionData({
+    abi: sparkLendPoolAbi,
+    functionName: "borrow",
+    args: [asset, amount, 2n, 0, onBehalfOf],
+  });
+
+/**
+ * Mines `calls` to `to` in one block at `timestamp`, in order, and returns each receipt's status.
+ * Iris's adapters supply and borrow inside one transaction, so venue bounds are checked the same
+ * way: every call sees the same reserve indices, and a reverted call leaves the next one the
+ * state it found.
+ */
+const mineTogether = async (
+  client: AnvilTestClient<typeof mainnet>,
+  timestamp: bigint,
+  to: Address,
+  calls: readonly Hex[],
+) => {
+  await client.setAutomine(false);
+
+  try {
+    const hashes: Hex[] = [];
+    // Locally signed raw transactions: the fixture's send actions and its tracing transport both
+    // wait for a receipt, which never comes while automine is off. The explicit gas limit and
+    // nonces skip estimation, which would run before the earlier calls land.
+    const { account } = client;
+    let nonce = await client.getTransactionCount({
+      address: account.address,
+      blockTag: "pending",
+    });
+    for (const data of calls) {
+      const serializedTransaction = await account.signTransaction({
+        chainId: client.chain.id,
+        type: "legacy",
+        to,
+        data,
+        gas: 2_000_000n,
+        gasPrice: 0n,
+        nonce: nonce++,
+      });
+
+      hashes.push(
+        await client.request({ method: "eth_sendRawTransaction", params: [serializedTransaction] }),
+      );
+    }
+
+    await client.setNextBlockTimestamp({ timestamp });
+    await client.mine({ blocks: 1 });
+
+    return await Promise.all(
+      hashes.map(async (hash) => (await client.getTransactionReceipt({ hash })).status),
+    );
+  } finally {
+    await client.setAutomine(true);
+  }
+};
 
 describe("venue parity (mainnet fork)", () => {
   test(
@@ -706,6 +795,422 @@ describe("venue parity (mainnet fork)", () => {
           args: [marketParams, 1n, 0n, client.account.address, client.account.address],
         }),
       ).rejects.toThrow();
+    },
+  );
+
+  test(
+    "sparkLend: pinned reserve tokens match the pool's onchain reserve tokens",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      const { DAI, USDC, USDT, WBTC, cbBTC, WETH, wstETH } = tokens;
+
+      await Promise.all(
+        [DAI, USDC, USDT, WBTC, cbBTC, WETH, wstETH].map(async (token) => {
+          const reserve = await readContract(client, {
+            address: sparkLendPool,
+            abi: sparkLendPoolAbi,
+            functionName: "getReserveData",
+            args: [token],
+          });
+
+          expect(getSparkLendSpToken(token, ChainId.EthMainnet)).toBe(reserve.aTokenAddress);
+          expect(getSparkLendVToken(token, ChainId.EthMainnet)).toBe(
+            reserve.variableDebtTokenAddress,
+          );
+        }),
+      );
+    },
+  );
+
+  test(
+    "sparkLend: fetchSparkLendVenue hydrates the reserves the pool reports",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      const block = await getBlock(client);
+      const venue = await fetchSparkLendVenue(
+        sparkLendView(block.timestamp),
+        { collateralToken: tokens.WETH, debtToken: tokens.USDC },
+        client,
+      );
+
+      const [collateralPool, debtPool, collateralPrice, debtPrice] = await Promise.all([
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveData",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveData",
+          args: [tokens.USDC],
+        }),
+        readContract(client, {
+          address: sparkLendOracle,
+          abi: aaveV3OracleAbi,
+          functionName: "getAssetPrice",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: sparkLendOracle,
+          abi: aaveV3OracleAbi,
+          functionName: "getAssetPrice",
+          args: [tokens.USDC],
+        }),
+      ]);
+      const [collateralScaledSupply, collateralScaledDebt, debtScaledDebt, debtHeldLiquidity] =
+        await Promise.all([
+          readContract(client, {
+            address: collateralPool.aTokenAddress,
+            abi: aaveV3ATokenAbi,
+            functionName: "scaledTotalSupply",
+          }),
+          readContract(client, {
+            address: collateralPool.variableDebtTokenAddress,
+            abi: aaveV3VariableDebtTokenAbi,
+            functionName: "scaledTotalSupply",
+          }),
+          readContract(client, {
+            address: debtPool.variableDebtTokenAddress,
+            abi: aaveV3VariableDebtTokenAbi,
+            functionName: "scaledTotalSupply",
+          }),
+          readContract(client, {
+            address: tokens.USDC,
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [debtPool.aTokenAddress],
+          }),
+        ]);
+
+      expect(venue.collateralReserve).toStrictEqual({
+        configuration: collateralPool.configuration.data,
+        liquidityIndex: collateralPool.liquidityIndex,
+        currentLiquidityRate: collateralPool.currentLiquidityRate,
+        variableBorrowIndex: collateralPool.variableBorrowIndex,
+        currentVariableBorrowRate: collateralPool.currentVariableBorrowRate,
+        lastUpdateTimestamp: BigInt(collateralPool.lastUpdateTimestamp),
+        accruedToTreasury: collateralPool.accruedToTreasury,
+      });
+      expect(venue.debtReserve).toStrictEqual({
+        configuration: debtPool.configuration.data,
+        liquidityIndex: debtPool.liquidityIndex,
+        currentLiquidityRate: debtPool.currentLiquidityRate,
+        variableBorrowIndex: debtPool.variableBorrowIndex,
+        currentVariableBorrowRate: debtPool.currentVariableBorrowRate,
+        lastUpdateTimestamp: BigInt(debtPool.lastUpdateTimestamp),
+        accruedToTreasury: debtPool.accruedToTreasury,
+      });
+      expect(venue.collateralData).toStrictEqual({
+        price: collateralPrice,
+        spTokenScaledTotalSupply: collateralScaledSupply,
+        vTokenScaledTotalSupply: collateralScaledDebt,
+      });
+      expect(venue.debtData).toStrictEqual({
+        price: debtPrice,
+        vTokenScaledTotalSupply: debtScaledDebt,
+        underlyingBalance: debtHeldLiquidity,
+      });
+    },
+  );
+
+  test(
+    "sparkLend: projected indices match the pool's normalized indices",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      const [collateralReserve, debtReserve, block] = await Promise.all([
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveData",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveData",
+          args: [tokens.USDC],
+        }),
+        getBlock(client),
+      ]);
+
+      // Live view placeholders — this test exercises the accrual model only.
+      const venue = new SparkLendVenue(
+        sparkLendView(block.timestamp),
+        {
+          configuration: collateralReserve.configuration.data,
+          liquidityIndex: collateralReserve.liquidityIndex,
+          currentLiquidityRate: collateralReserve.currentLiquidityRate,
+          variableBorrowIndex: collateralReserve.variableBorrowIndex,
+          currentVariableBorrowRate: collateralReserve.currentVariableBorrowRate,
+          lastUpdateTimestamp: BigInt(collateralReserve.lastUpdateTimestamp),
+          accruedToTreasury: collateralReserve.accruedToTreasury,
+        },
+        {
+          configuration: debtReserve.configuration.data,
+          liquidityIndex: debtReserve.liquidityIndex,
+          currentLiquidityRate: debtReserve.currentLiquidityRate,
+          variableBorrowIndex: debtReserve.variableBorrowIndex,
+          currentVariableBorrowRate: debtReserve.currentVariableBorrowRate,
+          lastUpdateTimestamp: BigInt(debtReserve.lastUpdateTimestamp),
+          accruedToTreasury: debtReserve.accruedToTreasury,
+        },
+      );
+
+      // The pool's views are what the adapter's `indices` returns.
+      const normalizedIndices = () =>
+        Promise.all([
+          readContract(client, {
+            address: sparkLendPool,
+            abi: sparkLendPoolAbi,
+            functionName: "getReserveNormalizedIncome",
+            args: [tokens.WETH],
+          }),
+          readContract(client, {
+            address: sparkLendPool,
+            abi: sparkLendPoolAbi,
+            functionName: "getReserveNormalizedVariableDebt",
+            args: [tokens.USDC],
+          }),
+        ]);
+
+      const [collateralIndex, debtIndex] = await normalizedIndices();
+      const accrued = venue.accrueInterest(block.timestamp);
+      expect(accrued.collateralIndex).toBe(collateralIndex);
+      expect(accrued.debtIndex).toBe(debtIndex);
+
+      // Thirty days on, with nothing touching either reserve, the binomial compounding still
+      // matches to the wei.
+      const later = block.timestamp + 30n * 86_400n;
+      await client.setNextBlockTimestamp({ timestamp: later });
+      await client.mine({ blocks: 1 });
+
+      const [laterCollateralIndex, laterDebtIndex] = await normalizedIndices();
+      expect(venue.getAccrualCollateralIndex(later)).toBe(laterCollateralIndex);
+      expect(venue.getAccrualDebtIndex(later)).toBe(laterDebtIndex);
+    },
+  );
+
+  test(
+    "sparkLend: projected pod balances match the spToken and vToken balances",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      // Odd amounts, so SparkLend's half-up scaling rounds on both legs.
+      const collateral = 1_234_567_890_123_456_789n; // WETH
+      const borrowed = 1_000_000_001n; // USDC
+      const timestamp = await client.timestamp();
+      const account = client.account.address;
+
+      await client.deal({ erc20: tokens.WETH, account, amount: collateral });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [sparkLendPool, collateral] });
+      const statuses = await mineTogether(client, timestamp + 2n, sparkLendPool, [
+        sparkLendSupply(tokens.WETH, collateral, account),
+        sparkLendBorrow(tokens.USDC, borrowed, account),
+      ]);
+      expect(statuses).toStrictEqual(["success", "success"]);
+
+      const balances = () =>
+        Promise.all([
+          readContract(client, {
+            address: getSparkLendSpToken(tokens.WETH, ChainId.EthMainnet),
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [account],
+          }),
+          readContract(client, {
+            address: getSparkLendVToken(tokens.USDC, ChainId.EthMainnet),
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [account],
+          }),
+        ]);
+      const [[venueCollateral, venueDebt], collateralIndex, debtIndex] = await Promise.all([
+        balances(),
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveNormalizedIncome",
+          args: [tokens.WETH],
+        }),
+        readContract(client, {
+          address: sparkLendPool,
+          abi: sparkLendPoolAbi,
+          functionName: "getReserveNormalizedVariableDebt",
+          args: [tokens.USDC],
+        }),
+      ]);
+
+      // The account stands in for a pod: Iris records its venue balances with the indices they
+      // were read at.
+      const venue = await fetchSparkLendVenue(
+        {
+          ...sparkLendView(timestamp + 2n),
+          pod: account,
+          collateral: venueCollateral,
+          debt: venueDebt,
+          collateralIndex,
+          debtIndex,
+        },
+        { collateralToken: tokens.WETH, debtToken: tokens.USDC },
+        client,
+      );
+
+      // With nothing else touching either reserve, the projections land on the tokens' own balances
+      // to the wei at every step over a year. A single step can round the same way half up and
+      // floored or ceiled; several make the half-up rounding show.
+      for (const days of [1n, 7n, 30n, 90n, 365n]) {
+        const later = timestamp + 2n + days * 86_400n;
+        await client.setNextBlockTimestamp({ timestamp: later });
+        await client.mine({ blocks: 1 });
+
+        const [laterCollateral, laterDebt] = await balances();
+        expect(venue.getAccrualCollateral(later)).toBe(laterCollateral);
+        expect(venue.getAccrualDebt(later)).toBe(laterDebt);
+      }
+    },
+  );
+
+  test(
+    "sparkLend: getMaxBorrowAmount matches the onchain borrow bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const collateral = MathLib.WAD; // 1 WETH into USDC debt.
+      const timestamp = await client.timestamp();
+      const account = client.account.address;
+
+      const venue = await fetchSparkLendVenue(
+        sparkLendView(timestamp),
+        { collateralToken: tokens.WETH, debtToken: tokens.USDC },
+        client,
+      );
+      const maxBorrow = venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 2n }) ?? 0n;
+      expect(maxBorrow).toBeGreaterThan(0n);
+
+      await client.deal({ erc20: tokens.WETH, account, amount: collateral });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [sparkLendPool, collateral] });
+
+      // A wei past the bound fails and the bound itself fits, on the freshly supplied collateral.
+      const statuses = await mineTogether(client, timestamp + 2n, sparkLendPool, [
+        sparkLendSupply(tokens.WETH, collateral, account),
+        sparkLendBorrow(tokens.USDC, maxBorrow + 1n, account),
+        sparkLendBorrow(tokens.USDC, maxBorrow, account),
+      ]);
+
+      expect(statuses).toStrictEqual(["success", "reverted", "success"]);
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(maxBorrow);
+    },
+  );
+
+  test(
+    "sparkLend: getMaxBorrowCapacity matches the onchain liquidity bound",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const timestamp = await client.timestamp();
+      const account = client.account.address;
+
+      const venue = await fetchSparkLendVenue(
+        sparkLendView(timestamp),
+        { collateralToken: tokens.WETH, debtToken: tokens.USDC },
+        client,
+      );
+
+      // USDC carries no effective borrow cap on SparkLend: the spToken's held USDC binds.
+      const capacity = venue.getMaxBorrowCapacity(timestamp + 2n) ?? 0n;
+      expect(capacity).toBeGreaterThan(0n);
+      expect(capacity).toBe(venue.debtData?.underlyingBalance);
+      // Enough collateral that the capacity is the binding term of the borrow bound.
+      const collateral = MathLib.min(
+        venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n,
+        2_000n * MathLib.WAD,
+      );
+      expect(venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 2n })).toBe(capacity);
+
+      await client.deal({ erc20: tokens.WETH, account, amount: collateral });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [sparkLendPool, collateral] });
+
+      // The reserve lends out exactly its liquidity, and not a wei more.
+      const statuses = await mineTogether(client, timestamp + 2n, sparkLendPool, [
+        sparkLendSupply(tokens.WETH, collateral, account),
+        sparkLendBorrow(tokens.USDC, capacity + 1n, account),
+        sparkLendBorrow(tokens.USDC, capacity, account),
+      ]);
+
+      expect(statuses).toStrictEqual(["success", "reverted", "success"]);
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(capacity);
+    },
+  );
+
+  test(
+    "sparkLend: getMaxBorrowCapacity matches the onchain borrow cap",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const timestamp = await client.timestamp();
+      const account = client.account.address;
+
+      const venue = await fetchSparkLendVenue(
+        sparkLendView(timestamp),
+        { collateralToken: tokens.wstETH, debtToken: tokens.WETH },
+        client,
+      );
+
+      // The WETH reserve's borrow cap binds before its liquidity does.
+      const capacity = venue.getMaxBorrowCapacity(timestamp + 2n) ?? 0n;
+      expect(capacity).toBeGreaterThan(0n);
+      expect(capacity).toBeLessThan(venue.debtData?.underlyingBalance ?? 0n);
+      const collateral = MathLib.min(
+        venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n,
+        30_000n * MathLib.WAD,
+      );
+      expect(venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 2n })).toBe(capacity);
+
+      await client.deal({ erc20: tokens.wstETH, account, amount: collateral });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.wstETH, args: [sparkLendPool, collateral] });
+
+      const statuses = await mineTogether(client, timestamp + 2n, sparkLendPool, [
+        sparkLendSupply(tokens.wstETH, collateral, account),
+        sparkLendBorrow(tokens.WETH, capacity + 1n, account),
+        sparkLendBorrow(tokens.WETH, capacity, account),
+      ]);
+
+      expect(statuses).toStrictEqual(["success", "reverted", "success"]);
+      expect(await client.balanceOf({ erc20: tokens.WETH })).toBe(capacity);
+    },
+  );
+
+  test(
+    "sparkLend: getMaxSupplyCapacity matches the onchain supply cap",
+    { timeout: 60_000 },
+    async ({ client }) => {
+      const timestamp = await client.timestamp();
+      const account = client.account.address;
+
+      const venue = await fetchSparkLendVenue(
+        sparkLendView(timestamp),
+        { collateralToken: tokens.WETH, debtToken: tokens.USDC },
+        client,
+      );
+
+      const capacity = venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n;
+      expect(capacity).toBeGreaterThan(0n);
+      expect(capacity).toBeLessThan(MathLib.MAX_UINT_256);
+
+      await client.deal({ erc20: tokens.WETH, account, amount: capacity + 1n });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [sparkLendPool, capacity + 1n] });
+
+      // The cap admits exactly the capacity, and not a wei more.
+      const statuses = await mineTogether(client, timestamp + 2n, sparkLendPool, [
+        sparkLendSupply(tokens.WETH, capacity + 1n, account),
+        sparkLendSupply(tokens.WETH, capacity, account),
+      ]);
+
+      expect(statuses).toStrictEqual(["reverted", "success"]);
+      expect(await client.balanceOf({ erc20: tokens.WETH })).toBe(1n);
     },
   );
 });

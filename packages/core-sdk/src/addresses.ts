@@ -2,7 +2,11 @@ import type { Address } from "viem";
 
 import { getAddress } from "viem";
 import { ChainId } from "./chain.js";
-import { UnsupportedAaveV3TokenError, UnsupportedChainIdError } from "./errors.js";
+import {
+  UnsupportedAaveV3TokenError,
+  UnsupportedChainIdError,
+  UnsupportedSparkLendTokenError,
+} from "./errors.js";
 
 /** Address used to replicate an erc20-behaviour for native token.
  *
@@ -60,6 +64,8 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
     aaveV3Oracle: "0x54586bE62E3c3580375aE3723C145253060Ca0C2",
+    sparkLendPool: "0xC13e21B648A5Ee794902342038FF3aDAB66BE987",
+    sparkLendOracle: "0x8105f69D9C41644c6A0803fDA7D03Aa70996cFD9",
     morphoBlueAdapter: "0x5fE09E7eA6F46296B42146D77f1Eb88F088Bdf8E",
     morphoBlue: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
     adaptiveCurveIrm: "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
@@ -91,6 +97,8 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     aaveV3Adapter: "0x7f1bFABb584935e97143631A3b19816853F40bD7",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
     aaveV3Oracle: "0x54586bE62E3c3580375aE3723C145253060Ca0C2",
+    sparkLendPool: "0xC13e21B648A5Ee794902342038FF3aDAB66BE987",
+    sparkLendOracle: "0x8105f69D9C41644c6A0803fDA7D03Aa70996cFD9",
     morphoBlueAdapter: "0x26927E53bbfeE9C3401FFBE838B739dDe08d5Cba",
     morphoBlue: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
     adaptiveCurveIrm: "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
@@ -212,3 +220,69 @@ export const getAToken = (token: Address, chainId: ChainId) =>
  * casing), throwing when the token has no registered reserve. */
 export const getVToken = (token: Address, chainId: ChainId) =>
   getAaveV3Tokens(token, chainId).variableDebtToken;
+
+/** A SparkLend reserve's spToken (its aToken, e.g. spUSDC) and variable debt token. */
+interface SparkLendTokens {
+  readonly spToken: Address;
+  readonly variableDebtToken: Address;
+}
+
+const MAINNET_SPARK_LEND_TOKENS = {
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.DAI]: {
+    spToken: "0x4DEDf26112B3Ec8eC46e7E31EA5e123490B05B8B",
+    variableDebtToken: "0xf705d2B7e92B3F38e6ae7afaDAA2fEE110fE5914",
+  },
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDC]: {
+    spToken: "0x377C3bd93f2a2984E1E7bE6A5C22c525eD4A4815",
+    variableDebtToken: "0x7B70D04099CB9cfb1Db7B6820baDAfB4C5C70A67",
+  },
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.USDT]: {
+    spToken: "0xe7dF13b8e3d6740fe17CBE928C7334243d86c92f",
+    variableDebtToken: "0x529b6158d1D2992E3129F7C69E81a7c677dc3B12",
+  },
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WBTC]: {
+    spToken: "0x4197ba364AE6698015AE5c1468f54087602715b2",
+    variableDebtToken: "0xf6fEe3A8aC8040C3d6d81d9A4a168516Ec9B51D2",
+  },
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.cbBTC]: {
+    spToken: "0xb3973D459df38ae57797811F2A1fd061DA1BC123",
+    variableDebtToken: "0x661fE667D2103eb52d3632a3eB2cAbd123F27938",
+  },
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.WETH]: {
+    spToken: "0x59cD1C87501baa753d0B5B5Ab5D8416A45cD71DB",
+    variableDebtToken: "0x2e7576042566f8D6990e07A1B61Ad1efd86Ae70d",
+  },
+  [CHAIN_ADDRESSES[ChainId.EthMainnet].tokens.wstETH]: {
+    spToken: "0x12B54025C112Aa61fAce2CDB7118740875A566E9",
+    variableDebtToken: "0xd5c3E3B566a42A6110513Ac7670C1a86D76E13E6",
+  },
+} as const satisfies Readonly<Record<Address, SparkLendTokens>>;
+
+/* Per-chain mapping of SparkLend reserve underlyings to their spToken and variable debt
+ * token, pinned so `fetchSparkLendVenue` fires every read in a single round instead of
+ * resolving the token addresses from `getReserveData` first. */
+const sparkLendTokensMapping = {
+  [ChainId.EthMainnet]: MAINNET_SPARK_LEND_TOKENS,
+  [ChainId.VNet]: MAINNET_SPARK_LEND_TOKENS,
+} as const satisfies Record<ChainId, Readonly<Record<Address, SparkLendTokens>>>;
+
+const getSparkLendTokens = (token: Address, chainId: ChainId): SparkLendTokens => {
+  const mapping: Readonly<Record<Address, SparkLendTokens>> = sparkLendTokensMapping[chainId];
+  if (mapping == null) throw new UnsupportedChainIdError(chainId);
+
+  // Normalize casing to match the checksummed mapping keys.
+  const tokens = mapping[getAddress(token)];
+  if (tokens == null) throw new UnsupportedSparkLendTokenError(token, chainId);
+
+  return tokens;
+};
+
+/** Returns the SparkLend reserve's spToken (e.g. spUSDC) for `token` on `chainId` (any
+ * casing), throwing when the token has no registered reserve. */
+export const getSparkLendSpToken = (token: Address, chainId: ChainId) =>
+  getSparkLendTokens(token, chainId).spToken;
+
+/** Returns the SparkLend reserve's variable debt token for `token` on `chainId` (any
+ * casing), throwing when the token has no registered reserve. */
+export const getSparkLendVToken = (token: Address, chainId: ChainId) =>
+  getSparkLendTokens(token, chainId).variableDebtToken;

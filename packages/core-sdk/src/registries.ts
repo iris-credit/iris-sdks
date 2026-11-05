@@ -23,6 +23,7 @@ import { UnknownDataHashError, UnsupportedChainIdError } from "./errors.js";
 export const VenueName = {
   AaveV3: "aaveV3",
   MorphoBlue: "morphoBlue",
+  SparkLend: "sparkLend",
 } as const;
 
 export type VenueName = (typeof VenueName)[keyof typeof VenueName];
