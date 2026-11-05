@@ -1,6 +1,6 @@
 import type { Address } from "viem";
 
-import { getAddress, zeroAddress } from "viem";
+import { getAddress } from "viem";
 import { ChainId } from "./chain.js";
 import {
   UnsupportedAaveV3TokenError,
@@ -49,27 +49,26 @@ const defineChainAddresses = <const T extends Record<ChainId, ChainAddressesBase
 export const CHAIN_ADDRESSES = defineChainAddresses({
   [ChainId.EthMainnet]: {
     // Iris protocol contracts.
-    iris: "0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c",
-    blm: "0x8cc058689674f0b54820a04b47618df45d04cBcb",
-    podImpl: "0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA",
-    whitelistBlm: "0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B",
+    iris: "0x77310475712D7a127D694B3e9D186d9f4a423bd9",
+    blm: "0xB0ffB27D9D7f160d588c669329F807e58aDd4eeF",
+    podImpl: "0x31737b24DfE3eb77ee12a6eA764980dE36E03811",
+    whitelistBlm: "0xA5eaa1F8124bf8BD66e9E08FfB757B9bf936581a",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
     bundler3: {
-      bundler3: "0xB99B3D119B5c5334136b0CE4491210C385298014",
-      generalAdapter1: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
+      bundler3: "0x0Da86735035c5ffC94E87D4ECFfbd49cE5952924",
+      generalAdapter1: "0x51a068Af81de4cd7D34D99a43ce7FBCfcEF7C49F",
     },
     // Protocol integrations.
-    aaveV3Adapter: "0x9eB235E787e9Ef2FC107A8d5951e97d19A3e8B7B",
+    aaveV3Adapter: "0xe6bb75633eeb251c44569fc8cad3916f5F2cEC2A",
     aaveV3Pool: "0x87870Bca3F3fD6335C3F4ce8392D69350B4fA4E2",
     aaveV3Oracle: "0x54586bE62E3c3580375aE3723C145253060Ca0C2",
-    // Not deployed yet. The zero address never matches: `fetchVenue` rejects an unregistered
-    // venue id, whose adapter reads as zero, before it dispatches.
-    sparkLendAdapter: zeroAddress,
+    // The Aave V3 adapter deployed again with SparkLend's pool.
+    sparkLendAdapter: "0xc3B4fA92abE5522B2cf28Ce2a0a3B388626f9cfD",
     sparkLendPool: "0xC13e21B648A5Ee794902342038FF3aDAB66BE987",
     sparkLendOracle: "0x8105f69D9C41644c6A0803fDA7D03Aa70996cFD9",
-    morphoBlueAdapter: "0x5fE09E7eA6F46296B42146D77f1Eb88F088Bdf8E",
+    morphoBlueAdapter: "0xD64667D3162c49149cF455780d1e002664232F67",
     morphoBlue: "0xBBBBBbbBBb9cC5e90e3b3Af64bdAF62C37EEFFCb",
     adaptiveCurveIrm: "0x870aC11D48B15DB9a138Cf899d20F13F79Ba00BC",
     tokens: {

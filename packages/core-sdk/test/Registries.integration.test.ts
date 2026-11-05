@@ -9,7 +9,7 @@ import {
   getChainAddresses,
   getChainRegistry,
 } from "../src/index.js";
-import { test } from "./setup.js";
+import { configuredTest as test } from "./setup.js";
 
 const { iris } = getChainAddresses(ChainId.EthMainnet);
 const registry = getChainRegistry(ChainId.EthMainnet);
@@ -17,6 +17,10 @@ const registry = getChainRegistry(ChainId.EthMainnet);
 // Soundness of the shipped registry: every entry must be enabled onchain at the pinned block.
 // Completeness (nothing enabled onchain is missing here) is checked release-side against
 // api.iris.credit instead, since it cannot be read from point getters.
+//
+// TODO(launch-config): the launch config is not onchain yet, so this checks the registry against
+// the launch config simulated on the fork (`helpers/launchConfig.ts`). Once it is live, re-pin
+// the fork past it and switch back to the plain `test`, so this checks the real chain again.
 describe("CHAIN_REGISTRIES", () => {
   test("should record enabled bond lltvs", { timeout: 30_000 }, async ({ client }) => {
     for (const lltv of registry.bondLltvs)

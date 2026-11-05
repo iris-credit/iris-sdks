@@ -35,7 +35,7 @@ import {
   getSparkLendVToken,
   getVToken,
 } from "../src/index.js";
-import { test } from "./setup.js";
+import { configuredTest, test } from "./setup.js";
 
 const {
   morphoBlue,
@@ -251,7 +251,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "morpho: fetchVenue hydrates the adaptive rate model",
     { timeout: 30_000 },
     async ({ client }) => {
@@ -272,7 +272,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "aave: fetchVenue dispatches on the registered adapter",
     { timeout: 30_000 },
     async ({ client }) => {
@@ -422,15 +422,16 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "fetchVenue rejects a venue id with no registered adapter",
     { timeout: 30_000 },
     async ({ client }) => {
+      // The launch config registers venue ids 0 through 2 only.
       await expect(
         fetchVenue(
           {
             pod: "0x000000000000000000000000000000000000dEaD",
-            venueId: 2n,
+            venueId: 3n,
             data: "0x",
             collateralToken: tokens.WETH,
             debtToken: tokens.USDC,
@@ -506,12 +507,13 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "aave: getMaxBorrowAmount matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
       const collateral = MathLib.WAD; // 1 WETH into USDC debt.
       const timestamp = await client.timestamp();
+      const account = client.account.address;
 
       const venue = await fetchVenue(
         {
@@ -523,48 +525,38 @@ describe("venue parity (mainnet fork)", () => {
         },
         client,
       );
-
-      // Anvil stamps blocks with wall-clock time — pin them so projection and chain agree.
-      await client.deal({
-        erc20: tokens.WETH,
-        account: client.account.address,
-        amount: collateral,
-      });
-      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
-      await client.approve({ address: tokens.WETH, args: [aaveV3Pool, collateral] });
-      await client.setNextBlockTimestamp({ timestamp: timestamp + 2n });
-      await client.writeContract({
-        address: aaveV3Pool,
-        abi: aaveV3PoolAbi,
-        functionName: "supply",
-        args: [tokens.WETH, collateral, client.account.address, 0],
-      });
-
-      const maxBorrow = venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 3n }) ?? 0n;
+      const maxBorrow = venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 2n }) ?? 0n;
       expect(maxBorrow).toBeGreaterThan(0n);
 
-      await client.setNextBlockTimestamp({ timestamp: timestamp + 3n });
-      await client.writeContract({
-        address: aaveV3Pool,
-        abi: aaveV3PoolAbi,
-        functionName: "borrow",
-        args: [tokens.USDC, maxBorrow, 2n, 0, client.account.address],
-      });
-      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(maxBorrow);
+      await client.deal({ erc20: tokens.WETH, account, amount: collateral });
+      await client.setNextBlockTimestamp({ timestamp: timestamp + 1n });
+      await client.approve({ address: tokens.WETH, args: [aaveV3Pool, collateral] });
 
-      // One more wei on top of the maxed position does not fit.
-      await expect(
-        simulateContract(client, {
-          address: aaveV3Pool,
+      // A wei past the bound fails and the bound itself fits, on the freshly supplied collateral.
+      const statuses = await mineTogether(client, timestamp + 2n, aaveV3Pool, [
+        encodeFunctionData({
+          abi: aaveV3PoolAbi,
+          functionName: "supply",
+          args: [tokens.WETH, collateral, account, 0],
+        }),
+        encodeFunctionData({
           abi: aaveV3PoolAbi,
           functionName: "borrow",
-          args: [tokens.USDC, 1n, 2n, 0, client.account.address],
+          args: [tokens.USDC, maxBorrow + 1n, 2n, 0, account],
         }),
-      ).rejects.toThrow();
+        encodeFunctionData({
+          abi: aaveV3PoolAbi,
+          functionName: "borrow",
+          args: [tokens.USDC, maxBorrow, 2n, 0, account],
+        }),
+      ]);
+
+      expect(statuses).toStrictEqual(["success", "reverted", "success"]);
+      expect(await client.balanceOf({ erc20: tokens.USDC })).toBe(maxBorrow);
     },
   );
 
-  test(
+  configuredTest(
     "morpho: getMaxBorrowAmount matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -622,7 +614,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "aave: getMaxSupplyCapacity matches the onchain supply bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -673,7 +665,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "aave: getMaxBorrowCapacity matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -737,7 +729,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  test(
+  configuredTest(
     "morpho: getMaxBorrowCapacity matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -912,6 +904,30 @@ describe("venue parity (mainnet fork)", () => {
         vTokenScaledTotalSupply: debtScaledDebt,
         underlyingBalance: debtHeldLiquidity,
       });
+    },
+  );
+
+  configuredTest(
+    "sparkLend: fetchVenue dispatches on the registered adapter",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      // Venue 2 is the SparkLend adapter; like Aave V3, its reserves carry no market data.
+      const venue = await fetchVenue(
+        {
+          // No pod holds a position on the fork: the live view reads as zeroed.
+          pod: "0x000000000000000000000000000000000000dEaD",
+          venueId: 2n,
+          data: "0x",
+          collateralToken: tokens.WETH,
+          debtToken: tokens.USDC,
+        },
+        client,
+      );
+
+      expect(venue).toBeInstanceOf(SparkLendVenue);
+      // The adapter reads SparkLend's pool for the pair's LLTV and price.
+      expect(venue.lltv).toBeGreaterThan(0n);
+      expect(venue.price).toBeGreaterThan(0n);
     },
   );
 
@@ -1124,7 +1140,7 @@ describe("venue parity (mainnet fork)", () => {
       // Enough collateral that the capacity is the binding term of the borrow bound.
       const collateral = MathLib.min(
         venue.getMaxSupplyCapacity(timestamp + 2n) ?? 0n,
-        2_000n * MathLib.WAD,
+        3_000n * MathLib.WAD,
       );
       expect(venue.getMaxBorrowAmount(collateral, { timestamp: timestamp + 2n })).toBe(capacity);
 

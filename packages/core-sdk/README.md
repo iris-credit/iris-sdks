@@ -259,7 +259,7 @@ import { Blm } from "@iris-credit/core-sdk/augment";
 import { Time } from "@iris-credit/iris-ts";
 
 const blm = await Blm.fetch(
-  "0x8cc058689674f0b54820a04b47618df45d04cBcb", // e.g. quote.blm.
+  "0xB0ffB27D9D7f160d588c669329F807e58aDd4eeF", // e.g. quote.blm.
   "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", // USDC, the quote's debt token.
   client, // viem client.
 );

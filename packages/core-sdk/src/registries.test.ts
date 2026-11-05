@@ -77,7 +77,7 @@ describe("getChainRegistry", () => {
 describe("getMarketData", () => {
   test("should index an enabled payload by a runtime hash", () => {
     expect(getMarketData(ChainId.EthMainnet, keccak256("0x"))).toEqual({
-      venues: ["aaveV3"],
+      venues: ["aaveV3", "sparkLend"],
       data: "0x",
     });
   });
@@ -85,7 +85,7 @@ describe("getMarketData", () => {
   test("should ignore the case of the looked-up hash", () => {
     expect(
       getMarketData(ChainId.EthMainnet, `0x${keccak256("0x").slice(2).toUpperCase()}`),
-    ).toEqual({ venues: ["aaveV3"], data: "0x" });
+    ).toEqual({ venues: ["aaveV3", "sparkLend"], data: "0x" });
   });
 
   test("should list every venue an enabled payload serves", () => {

@@ -67,15 +67,19 @@ const defineChainRegistries = <const T extends Record<ChainId, ChainRegistryBase
 
 export const CHAIN_REGISTRIES = defineChainRegistries({
   [ChainId.EthMainnet]: {
-    deploymentBlock: 25_442_833n,
+    deploymentBlock: 26_348_673n,
+    // TODO(launch-config): placeholder carried over from the previous deployment; the launch
+    // bond LLTVs are undecided. Replace with the enabled values before release.
     bondLltvs: [900_000_000_000_000_000n],
-    // `whitelistBlm` is deployed but not enabled yet.
+    // TODO(launch-config): add `whitelistBlm` if the launch config gives it params (Iris enables
+    // exactly the BLMs that have params). Until then it is deployed but not enabled.
     blms: { blm: CHAIN_ADDRESSES[ChainId.EthMainnet].blm },
-    venues: { aaveV3: 0n, morphoBlue: 1n },
+    venues: { aaveV3: 0n, morphoBlue: 1n, sparkLend: 2n },
     marketDatas: {
-      // The Aave v3 adapter ignores the payload; the enabled hash is `keccak256("0x")`.
+      // The Aave v3 and SparkLend adapters ignore the payload; the enabled hash is
+      // `keccak256("0x")`.
       "0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470": {
-        venues: ["aaveV3"],
+        venues: ["aaveV3", "sparkLend"],
         data: "0x",
       },
       // WBTC/USDC (adaptive curve IRM, 86% lltv).
