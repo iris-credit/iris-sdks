@@ -1,5 +1,17 @@
 # @iris-credit/core-sdk
 
+## 0.8.0
+
+### Minor Changes
+
+- [#167](https://github.com/iris-credit/iris-sdks/pull/167) [`7082435`](https://github.com/iris-credit/iris-sdks/commit/7082435dad2a2ef8b64759a8821152377a518ede) Thanks [@u-zzam](https://github.com/u-zzam)! - `CHAIN_ADDRESSES` gains `sparkLendAdapter`, and `fetchVenue` dispatches it to `fetchSparkLendVenue`. VNet records the adapter the devnet registers as venue 2, and its registry lists `venues.sparkLend`. Mainnet holds the zero address until its adapter is deployed; `fetchVenue` rejects a zero adapter before it dispatches, so the placeholder never matches.
+
+  `MarketData.venue` becomes `MarketData.venues`, the venues whose adapters take the payload. Enablement is per payload, not per venue, so one payload can serve several: the Aave V3 and SparkLend adapters both ignore it, and `0x` serves both. Replace `marketData.venue === name` with `marketData.venues.includes(name)`.
+
+- [#166](https://github.com/iris-credit/iris-sdks/pull/166) [`85b589c`](https://github.com/iris-credit/iris-sdks/commit/85b589c055726a596d41e7e58668833128a237f6) Thanks [@u-zzam](https://github.com/u-zzam)! - Model SparkLend as a venue. `SparkLendVenue`, `SparkLendMath` and `fetchSparkLendVenue` mirror SparkLend's Aave V3.0 core bit for bit: token balances, mints and burns round half up, the variable borrow index compounds with the v3.0 binomial approximation, and the borrow and supply bounds follow its cap checks, with no virtual accounting. `sparkLendPoolAbi`, the `sparkLendPool` and `sparkLendOracle` addresses and `getSparkLendSpToken`/`getSparkLendVToken` come with it. `fetchSparkLendVenue` throws `SparkLendStableBorrowingError` for a reserve with stable-rate borrowing enabled, since the math leaves stable debt out.
+
+  `VenueName` gains `sparkLend`. Code that handles `VenueName` exhaustively, such as a `switch` or a `Record<VenueName, …>`, needs a SparkLend case.
+
 ## 0.7.0
 
 ### Minor Changes
