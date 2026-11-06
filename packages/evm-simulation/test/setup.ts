@@ -10,7 +10,7 @@ import { createViemTest } from "@iris-credit/test/vitest";
  */
 export const test = createViemTest(mainnet, {
   forkUrl: process.env.MAINNET_RPC_URL || "https://eth.drpc.org",
-  forkBlockNumber: 26_348_709,
+  forkBlockNumber: 26_354_500,
 }).extend<{ client: AnvilTestClient<typeof mainnet> }>({
   client: async ({ client }, use) => {
     // The well-known test account may carry EIP-7702 delegation code on mainnet (its

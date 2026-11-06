@@ -35,7 +35,7 @@ import {
   getSparkLendVToken,
   getVToken,
 } from "../src/index.js";
-import { configuredTest, test } from "./setup.js";
+import { test } from "./setup.js";
 
 const {
   morphoBlue,
@@ -251,7 +251,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "morpho: fetchVenue hydrates the adaptive rate model",
     { timeout: 30_000 },
     async ({ client }) => {
@@ -272,7 +272,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "aave: fetchVenue dispatches on the registered adapter",
     { timeout: 30_000 },
     async ({ client }) => {
@@ -422,11 +422,11 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "fetchVenue rejects a venue id with no registered adapter",
     { timeout: 30_000 },
     async ({ client }) => {
-      // The launch config registers venue ids 0 through 2 only.
+      // Only venue ids 0 through 2 are registered at the pinned block.
       await expect(
         fetchVenue(
           {
@@ -507,7 +507,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "aave: getMaxBorrowAmount matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -556,7 +556,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "morpho: getMaxBorrowAmount matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -614,7 +614,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "aave: getMaxSupplyCapacity matches the onchain supply bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -665,7 +665,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "aave: getMaxBorrowCapacity matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -729,7 +729,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "morpho: getMaxBorrowCapacity matches the onchain borrow bound",
     { timeout: 60_000 },
     async ({ client }) => {
@@ -907,7 +907,7 @@ describe("venue parity (mainnet fork)", () => {
     },
   );
 
-  configuredTest(
+  test(
     "sparkLend: fetchVenue dispatches on the registered adapter",
     { timeout: 30_000 },
     async ({ client }) => {

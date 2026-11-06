@@ -1,11 +1,6 @@
-import type { Address } from "viem";
-import type { mainnet } from "viem/chains";
-import type { AnvilTestClient } from "@iris-credit/test";
-
 import { parseEther } from "viem";
 import { describe, expect } from "vitest";
 import { randomAddress } from "@iris-credit/test";
-import { blmAbi } from "../src/abis/blm.js";
 import { irisAbi } from "../src/abis/iris.js";
 import { whitelistBlmAbi } from "../src/abis/whitelistBlm.js";
 import { Blm } from "../src/augment/Blm.js";
@@ -14,32 +9,13 @@ import { test } from "./setup.js";
 
 const { iris, blm, whitelistBlm, tokens } = getChainAddresses(ChainId.EthMainnet);
 
-/**
- * Sets the USDC params of the BLM at `address` as the Iris owner. The launch BLM params are
- * undecided and unset at the pinned block, so the tests set their own: 0.01 WAD/day slope,
- * 0.005 WAD intercept.
- */
-const setUsdcParams = async (client: AnvilTestClient<typeof mainnet>, address: Address) => {
-  const owner = await client.readContract({ address: iris, abi: irisAbi, functionName: "owner" });
-  await client.impersonateAccount({ address: owner });
-  await client.setBalance({ address: owner, value: parseEther("1") });
-  await client.writeContract({
-    account: owner,
-    address,
-    abi: blmAbi,
-    functionName: "setParams",
-    args: [tokens.USDC, 10_000_000_000_000_000n, 5_000_000_000_000_000n],
-  });
-};
-
 describe("augment/Blm", () => {
   test("should fetch blm data", { timeout: 30_000 }, async ({ client }) => {
-    await setUsdcParams(client, blm);
     const expectedData = new Blm({
       address: blm,
       token: tokens.USDC,
-      slope: 10_000_000_000_000_000n,
-      intercept: 5_000_000_000_000_000n,
+      slope: 83_460_000_000_000n,
+      intercept: 0n,
     });
 
     const value = await Blm.fetch(blm, tokens.USDC, client);
@@ -59,13 +35,10 @@ describe("augment/Blm", () => {
   });
 
   test("should compute the bond requirement", { timeout: 30_000 }, async ({ client }) => {
-    await setUsdcParams(client, blm);
     const value = await Blm.fetch(blm, tokens.USDC, client);
 
-    // ratio = 0.01 WAD/day * 30 days + 0.005 WAD; bond = 1_000e6 * ratio.
-    expect(value.bondRequirement({ debt: 1_000_000_000n, duration: 2_592_000n })).toBe(
-      305_000_000n,
-    );
+    // ratio = 0.00008346 WAD/day * 30 days + 0 WAD; bond = 1_000e6 * ratio.
+    expect(value.bondRequirement({ debt: 1_000_000_000n, duration: 2_592_000n })).toBe(2_503_800n);
   });
 });
 

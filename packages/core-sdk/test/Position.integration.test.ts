@@ -2,7 +2,7 @@ import { describe, expect } from "vitest";
 import { randomAddress } from "@iris-credit/test";
 import { Position } from "../src/augment/Position.js";
 import { fetchAccrualPosition, fetchPosition } from "../src/index.js";
-import { configuredTest, test } from "./setup.js";
+import { test } from "./setup.js";
 
 /** A pod holding no loan: every field of the `Position` struct reads as zero. */
 const zeroedPosition = (pod: `0x${string}`) =>
@@ -46,9 +46,9 @@ describe("fetchPosition (mainnet fork)", () => {
 });
 
 describe("fetchAccrualPosition (mainnet fork)", () => {
-  // The launch config registers venue 0, so the failure comes from its adapter rather than
+  // Venue 0 is registered at the pinned block, so the failure comes from its adapter rather than
   // from an unregistered venue id.
-  configuredTest("should fail on a pod with no loan", { timeout: 30_000 }, async ({ client }) => {
+  test("should fail on a pod with no loan", { timeout: 30_000 }, async ({ client }) => {
     // A zeroed position points at venue 0 with empty data and zero tokens; the venue
     // adapter reverts rather than reporting an empty position, so no accrual-ready
     // entity exists for a pod that never took a loan.

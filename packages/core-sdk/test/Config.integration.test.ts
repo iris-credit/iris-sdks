@@ -10,18 +10,23 @@ import {
   fetchIsDataEnabled,
   getChainAddresses,
 } from "../src/index.js";
-import { configuredTest, test } from "./setup.js";
+import { test } from "./setup.js";
 
-const { iris, blm } = getChainAddresses(ChainId.EthMainnet);
+const { iris, blm, whitelistBlm } = getChainAddresses(ChainId.EthMainnet);
+
+/** The protocol Safe, set as the fee recipient at the pinned block. */
+const feeRecipient = "0x6811c4463C3B725fa1314e50855405a241028c49";
 
 describe("augment/Config", () => {
   test("should fetch config", { timeout: 30_000 }, async ({ client }) => {
-    // The launch fee and fee recipient are undecided and unset at the pinned block, so the test
-    // sets its own: nonzero values pin the decoding, including the fee's BP scaling.
-    const expectedData = new Config({
-      fee: 100_000_000_000_000_000n,
-      feeRecipient: randomAddress(),
-    });
+    const value = await Config.fetch(client);
+
+    expect(value).toStrictEqual(new Config({ fee: 0n, feeRecipient }));
+  });
+
+  test("should scale a set fee back to WAD", { timeout: 30_000 }, async ({ client }) => {
+    // The contract stores the fee in BP, so a nonzero fee pins the scaling.
+    const fee = 100_000_000_000_000_000n;
     const owner = await client.readContract({ address: iris, abi: irisAbi, functionName: "owner" });
     await client.impersonateAccount({ address: owner });
     await client.setBalance({ address: owner, value: parseEther("1") });
@@ -29,31 +34,25 @@ describe("augment/Config", () => {
       account: owner,
       address: iris,
       abi: irisAbi,
-      functionName: "setFeeRecipient",
-      args: [expectedData.feeRecipient],
-    });
-    await client.writeContract({
-      account: owner,
-      address: iris,
-      abi: irisAbi,
       functionName: "setFee",
-      args: [expectedData.fee],
+      args: [fee],
     });
 
     const value = await Config.fetch(client);
 
-    expect(value).toStrictEqual(expectedData);
+    expect(value).toStrictEqual(new Config({ fee, feeRecipient }));
   });
 });
 
 describe("fetchIsBlmEnabled", () => {
-  configuredTest("should fetch an enabled blm", { timeout: 30_000 }, async ({ client }) => {
+  test("should fetch an enabled blm", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsBlmEnabled(blm, client)).toBe(true);
-    // TODO(launch-config): assert `whitelistBlm` too if the launch config enables it.
   });
 
   test("should fetch a non-enabled blm", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsBlmEnabled(randomAddress(), client)).toBe(false);
+    // Deployed but not enabled at the pinned block.
+    expect(await fetchIsBlmEnabled(whitelistBlm, client)).toBe(false);
   });
 
   test("should fetch a newly enabled blm", { timeout: 30_000 }, async ({ client }) => {
@@ -74,7 +73,7 @@ describe("fetchIsBlmEnabled", () => {
 });
 
 describe("fetchIsBondLltvEnabled", () => {
-  configuredTest("should fetch an enabled bond lltv", { timeout: 30_000 }, async ({ client }) => {
+  test("should fetch an enabled bond lltv", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsBondLltvEnabled(900_000_000_000_000_000n, client)).toBe(true);
   });
 
@@ -99,7 +98,7 @@ describe("fetchIsBondLltvEnabled", () => {
 });
 
 describe("fetchIsDataEnabled", () => {
-  configuredTest("should fetch enabled market data", { timeout: 30_000 }, async ({ client }) => {
+  test("should fetch enabled market data", { timeout: 30_000 }, async ({ client }) => {
     // The Aave v3 and SparkLend venues' enabled payload is empty bytes.
     expect(await fetchIsDataEnabled("0x", client)).toBe(true);
   });

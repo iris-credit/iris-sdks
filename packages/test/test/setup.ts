@@ -2,11 +2,11 @@ import { mainnet } from "viem/chains";
 import { createViemTest } from "../src/vitest.js";
 
 /**
- * This test will run on `mainnet` forked at block `26_348_709`. `MAINNET_RPC_URL` overrides
+ * This test will run on `mainnet` forked at block `26_354_500`. `MAINNET_RPC_URL` overrides
  * the fork RPC; defaults to a public archive endpoint (viem's default RPC bot-blocks anvil's
  * requests).
  */
 export const test = createViemTest(mainnet, {
   forkUrl: process.env.MAINNET_RPC_URL || "https://eth.drpc.org",
-  forkBlockNumber: 26_348_709,
+  forkBlockNumber: 26_354_500,
 });
