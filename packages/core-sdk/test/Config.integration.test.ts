@@ -14,27 +14,45 @@ import { test } from "./setup.js";
 
 const { iris, blm, whitelistBlm } = getChainAddresses(ChainId.EthMainnet);
 
+/** The protocol Safe, set as the fee recipient at the pinned block. */
+const feeRecipient = "0x6811c4463C3B725fa1314e50855405a241028c49";
+
 describe("augment/Config", () => {
   test("should fetch config", { timeout: 30_000 }, async ({ client }) => {
-    const expectedData = new Config({
-      fee: 100_000_000_000_000_000n,
-      feeRecipient: "0xC114D3109A8Cc85B40BA231cDA11c1d815654C7d",
+    const value = await Config.fetch(client);
+
+    expect(value).toStrictEqual(new Config({ fee: 0n, feeRecipient }));
+  });
+
+  test("should scale a set fee back to WAD", { timeout: 30_000 }, async ({ client }) => {
+    // The contract stores the fee in BP, so a nonzero fee pins the scaling.
+    const fee = 100_000_000_000_000_000n;
+    const owner = await client.readContract({ address: iris, abi: irisAbi, functionName: "owner" });
+    await client.impersonateAccount({ address: owner });
+    await client.setBalance({ address: owner, value: parseEther("1") });
+    await client.writeContract({
+      account: owner,
+      address: iris,
+      abi: irisAbi,
+      functionName: "setFee",
+      args: [fee],
     });
 
     const value = await Config.fetch(client);
 
-    expect(value).toStrictEqual(expectedData);
+    expect(value).toStrictEqual(new Config({ fee, feeRecipient }));
   });
 });
 
 describe("fetchIsBlmEnabled", () => {
   test("should fetch an enabled blm", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsBlmEnabled(blm, client)).toBe(true);
-    expect(await fetchIsBlmEnabled(whitelistBlm, client)).toBe(true);
   });
 
   test("should fetch a non-enabled blm", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsBlmEnabled(randomAddress(), client)).toBe(false);
+    // Deployed but not enabled at the pinned block.
+    expect(await fetchIsBlmEnabled(whitelistBlm, client)).toBe(false);
   });
 
   test("should fetch a newly enabled blm", { timeout: 30_000 }, async ({ client }) => {
@@ -81,7 +99,7 @@ describe("fetchIsBondLltvEnabled", () => {
 
 describe("fetchIsDataEnabled", () => {
   test("should fetch enabled market data", { timeout: 30_000 }, async ({ client }) => {
-    // The Aave v3 venue's enabled payload is empty bytes.
+    // The Aave v3 and SparkLend venues' enabled payload is empty bytes.
     expect(await fetchIsDataEnabled("0x", client)).toBe(true);
   });
 

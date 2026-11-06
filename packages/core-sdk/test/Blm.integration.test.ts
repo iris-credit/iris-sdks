@@ -14,8 +14,8 @@ describe("augment/Blm", () => {
     const expectedData = new Blm({
       address: blm,
       token: tokens.USDC,
-      slope: 10_000_000_000_000_000n,
-      intercept: 5_000_000_000_000_000n,
+      slope: 83_460_000_000_000n,
+      intercept: 0n,
     });
 
     const value = await Blm.fetch(blm, tokens.USDC, client);
@@ -37,10 +37,8 @@ describe("augment/Blm", () => {
   test("should compute the bond requirement", { timeout: 30_000 }, async ({ client }) => {
     const value = await Blm.fetch(blm, tokens.USDC, client);
 
-    // ratio = 0.01 WAD/day * 30 days + 0.005 WAD; bond = 1_000e6 * ratio.
-    expect(value.bondRequirement({ debt: 1_000_000_000n, duration: 2_592_000n })).toBe(
-      305_000_000n,
-    );
+    // ratio = 0.00008346 WAD/day * 30 days + 0 WAD; bond = 1_000e6 * ratio.
+    expect(value.bondRequirement({ debt: 1_000_000_000n, duration: 2_592_000n })).toBe(2_503_800n);
   });
 });
 

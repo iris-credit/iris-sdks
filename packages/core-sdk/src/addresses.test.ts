@@ -24,10 +24,10 @@ describe("getChainAddresses", () => {
   test("should expose the deployed Iris contracts", () => {
     const { iris, blm, whitelistBlm, podImpl } = getChainAddresses(ChainId.EthMainnet);
 
-    expect(iris).toBe("0x758cD1Bd54715B8DCc5D33968800fC8e87C8695c");
-    expect(blm).toBe("0x8cc058689674f0b54820a04b47618df45d04cBcb");
-    expect(whitelistBlm).toBe("0xe0Ae439c391D8dCf870a3045f09Fe901fE8Ef07B");
-    expect(podImpl).toBe("0xDdAE7326DBeEBfD4E3C1e16b9333e795861cEABA");
+    expect(iris).toBe("0x77310475712D7a127D694B3e9D186d9f4a423bd9");
+    expect(blm).toBe("0xB0ffB27D9D7f160d588c669329F807e58aDd4eeF");
+    expect(whitelistBlm).toBe("0xA5eaa1F8124bf8BD66e9E08FfB757B9bf936581a");
+    expect(podImpl).toBe("0x31737b24DfE3eb77ee12a6eA764980dE36E03811");
   });
 
   test("should throw for an unsupported chain id", () => {

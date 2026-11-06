@@ -14,9 +14,7 @@ import { test } from "./setup.js";
 const { iris, bundler3 } = getChainAddresses(ChainId.EthMainnet);
 
 describe("fetchUser", () => {
-  // Skipped until the guardian-audit Iris is deployed: the mainnet Iris at the fork block predates
-  // `nonce` and reverts on the new selector. Re-enable with the address/fork-block update.
-  test.skip("should report an unauthorized user", { timeout: 30_000 }, async ({ client }) => {
+  test("should report an unauthorized user", { timeout: 30_000 }, async ({ client }) => {
     const address = randomAddress();
 
     expect(await fetchUser(address, client)).toStrictEqual(
@@ -24,7 +22,7 @@ describe("fetchUser", () => {
     );
   });
 
-  test.skip(
+  test(
     "should report a user who authorized the general adapter",
     { timeout: 30_000 },
     async ({ client }) => {
@@ -52,7 +50,7 @@ describe("fetchUser", () => {
     },
   );
 
-  test.skip(
+  test(
     "should expose the same read through the augmented static",
     { timeout: 30_000 },
     async ({ client }) => {
@@ -66,9 +64,7 @@ describe("fetchUser", () => {
 });
 
 describe("fetchIsQuoteNonceUsed", () => {
-  // Skipped until the guardian-audit Iris is deployed: the mainnet Iris at the fork block predates
-  // `isQuoteNonceUsed` and reverts on the new selector. Re-enable with the address/fork-block update.
-  test.skip("should fetch an unused nonce", { timeout: 30_000 }, async ({ client }) => {
+  test("should fetch an unused nonce", { timeout: 30_000 }, async ({ client }) => {
     expect(await fetchIsQuoteNonceUsed(randomAddress(), 0n, client)).toBe(false);
   });
 });

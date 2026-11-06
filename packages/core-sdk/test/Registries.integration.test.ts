@@ -1,5 +1,5 @@
-import { zeroAddress } from "viem";
 import { describe, expect } from "vitest";
+import { entries } from "@iris-credit/iris-ts";
 import { irisAbi } from "../src/abis/iris.js";
 import {
   ChainId,
@@ -11,7 +11,7 @@ import {
 } from "../src/index.js";
 import { test } from "./setup.js";
 
-const { iris } = getChainAddresses(ChainId.EthMainnet);
+const addresses = getChainAddresses(ChainId.EthMainnet);
 const registry = getChainRegistry(ChainId.EthMainnet);
 
 // Soundness of the shipped registry: every entry must be enabled onchain at the pinned block.
@@ -33,16 +33,20 @@ describe("CHAIN_REGISTRIES", () => {
       expect(await fetchIsDataEnabled(data, client)).toBe(true);
   });
 
-  test("should record registered venues", { timeout: 30_000 }, async ({ client }) => {
-    for (const venueId of Object.values(registry.venues)) {
-      const adapter = await client.readContract({
-        address: iris,
-        abi: irisAbi,
-        functionName: "venueAdapter",
-        args: [venueId],
-      });
+  test(
+    "should record each venue id under its registered adapter",
+    { timeout: 30_000 },
+    async ({ client }) => {
+      for (const [name, venueId] of entries(registry.venues)) {
+        const adapter = await client.readContract({
+          address: addresses.iris,
+          abi: irisAbi,
+          functionName: "venueAdapter",
+          args: [venueId],
+        });
 
-      expect(adapter).not.toBe(zeroAddress);
-    }
-  });
+        expect(adapter).toBe(addresses[`${name}Adapter`]);
+      }
+    },
+  );
 });

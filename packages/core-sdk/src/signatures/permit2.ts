@@ -53,7 +53,7 @@ const permit2PermitTypes = {
  *     allowance: 1_000_000n,
  *     nonce: 0,
  *     deadline: 1_900_000_000n,
- *     spender: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
+ *     spender: "0x51a068Af81de4cd7D34D99a43ce7FBCfcEF7C49F",
  *   },
  *   ChainId.EthMainnet,
  * );
@@ -113,7 +113,7 @@ const permit2TransferFromTypes = {
  *   {
  *     erc20: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
  *     allowance: 1_000_000n,
- *     spender: "0x1837d3D1A0F8AFB33b137A4133c9A3C494d90876",
+ *     spender: "0x51a068Af81de4cd7D34D99a43ce7FBCfcEF7C49F",
  *     nonce: 0n,
  *     deadline: 1_900_000_000n,
  *   },

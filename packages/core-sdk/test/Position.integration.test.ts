@@ -46,6 +46,8 @@ describe("fetchPosition (mainnet fork)", () => {
 });
 
 describe("fetchAccrualPosition (mainnet fork)", () => {
+  // Venue 0 is registered at the pinned block, so the failure comes from its adapter rather than
+  // from an unregistered venue id.
   test("should fail on a pod with no loan", { timeout: 30_000 }, async ({ client }) => {
     // A zeroed position points at venue 0 with empty data and zero tokens; the venue
     // adapter reverts rather than reporting an empty position, so no accrual-ready
