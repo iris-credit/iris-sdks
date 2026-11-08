@@ -6,5 +6,6 @@ export * from "./iris.js";
 export * from "./morphoBlue.js";
 export * from "./permit2.js";
 export * from "./sparkLend.js";
+export * from "./timelock.js";
 export * from "./venueAdapter.js";
 export * from "./whitelistBlm.js";

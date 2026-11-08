@@ -53,6 +53,8 @@ export const CHAIN_ADDRESSES = defineChainAddresses({
     blm: "0xB0ffB27D9D7f160d588c669329F807e58aDd4eeF",
     podImpl: "0x31737b24DfE3eb77ee12a6eA764980dE36E03811",
     whitelistBlm: "0xA5eaa1F8124bf8BD66e9E08FfB757B9bf936581a",
+    // Iris's owner since block 26_354_479: an OpenZeppelin TimelockController (48h delay).
+    timelock: "0x75E7B524FCb597946E60e90A569a443D502a638c",
     permit2: PERMIT2_ADDRESS,
     multicall3: MULTICALL3_ADDRESS,
     wNative: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2", // WETH
