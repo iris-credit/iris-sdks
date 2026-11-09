@@ -1,0 +1,88 @@
+// OpenZeppelin TimelockController v5.1.0: the operation events and the views that read an operation.
+export const timelockAbi = [
+  {
+    type: "function",
+    name: "getMinDelay",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getOperationState",
+    inputs: [{ name: "id", type: "bytes32", internalType: "bytes32" }],
+    outputs: [{ name: "", type: "uint8", internalType: "enum TimelockController.OperationState" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getTimestamp",
+    inputs: [{ name: "id", type: "bytes32", internalType: "bytes32" }],
+    outputs: [{ name: "", type: "uint256", internalType: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hashOperation",
+    inputs: [
+      { name: "target", type: "address", internalType: "address" },
+      { name: "value", type: "uint256", internalType: "uint256" },
+      { name: "data", type: "bytes", internalType: "bytes" },
+      { name: "predecessor", type: "bytes32", internalType: "bytes32" },
+      { name: "salt", type: "bytes32", internalType: "bytes32" },
+    ],
+    outputs: [{ name: "", type: "bytes32", internalType: "bytes32" }],
+    stateMutability: "pure",
+  },
+  {
+    type: "function",
+    name: "hasRole",
+    inputs: [
+      { name: "role", type: "bytes32", internalType: "bytes32" },
+      { name: "account", type: "address", internalType: "address" },
+    ],
+    outputs: [{ name: "", type: "bool", internalType: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "CallExecuted",
+    inputs: [
+      { name: "id", type: "bytes32", indexed: true, internalType: "bytes32" },
+      { name: "index", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "target", type: "address", indexed: false, internalType: "address" },
+      { name: "value", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "data", type: "bytes", indexed: false, internalType: "bytes" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CallSalt",
+    inputs: [
+      { name: "id", type: "bytes32", indexed: true, internalType: "bytes32" },
+      { name: "salt", type: "bytes32", indexed: false, internalType: "bytes32" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "CallScheduled",
+    inputs: [
+      { name: "id", type: "bytes32", indexed: true, internalType: "bytes32" },
+      { name: "index", type: "uint256", indexed: true, internalType: "uint256" },
+      { name: "target", type: "address", indexed: false, internalType: "address" },
+      { name: "value", type: "uint256", indexed: false, internalType: "uint256" },
+      { name: "data", type: "bytes", indexed: false, internalType: "bytes" },
+      { name: "predecessor", type: "bytes32", indexed: false, internalType: "bytes32" },
+      { name: "delay", type: "uint256", indexed: false, internalType: "uint256" },
+    ],
+    anonymous: false,
+  },
+  {
+    type: "event",
+    name: "Cancelled",
+    inputs: [{ name: "id", type: "bytes32", indexed: true, internalType: "bytes32" }],
+    anonymous: false,
+  },
+] as const;

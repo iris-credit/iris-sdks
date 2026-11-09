@@ -30,6 +30,12 @@ describe("getChainAddresses", () => {
     expect(podImpl).toBe("0x31737b24DfE3eb77ee12a6eA764980dE36E03811");
   });
 
+  test("should expose the mainnet Timelock that owns Iris", () => {
+    expect(getChainAddresses(ChainId.EthMainnet).timelock).toBe(
+      "0x75E7B524FCb597946E60e90A569a443D502a638c",
+    );
+  });
+
   test("should throw for an unsupported chain id", () => {
     expect(() => getChainAddresses(999 as ChainId)).toThrow(UnsupportedChainIdError);
   });
