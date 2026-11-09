@@ -1,5 +1,11 @@
 # @iris-credit/core-sdk
 
+## 0.10.0
+
+### Minor Changes
+
+- [#171](https://github.com/iris-credit/iris-sdks/pull/171) [`47aa130`](https://github.com/iris-credit/iris-sdks/commit/47aa13002f78237c5feb3640479fd3ec73b8ec3c) Thanks [@madiha-right](https://github.com/madiha-right)! - Add the mainnet Timelock address (`timelock`) and `timelockAbi`.
+
 ## 0.9.0
 
 ### Minor Changes
